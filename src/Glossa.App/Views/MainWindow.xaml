@@ -186,6 +186,16 @@
                         <TextBlock Text="Glossa" FontSize="18" FontWeight="ExtraBold" VerticalAlignment="Center" Margin="24,0,40,0" />
                         <RadioButton x:Name="NavHome" Style="{StaticResource NavTab}" Content="Главная" GroupName="Nav" IsChecked="True" Checked="OnNav" />
                         <RadioButton x:Name="NavWords" Style="{StaticResource NavTab}" Content="Словарь" GroupName="Nav" Checked="OnNav" />
+                        <RadioButton x:Name="NavStudy" Style="{StaticResource NavTab}" GroupName="Nav" Checked="OnNav">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Учёба" VerticalAlignment="Center" />
+                                <!-- Cards for today, as in the mockup «Учёба». -->
+                                <Border x:Name="StudyBadge" CornerRadius="9" Padding="7,1,7,2" Margin="7,0,0,0" Background="{DynamicResource Well}"
+                                        VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock x:Name="StudyCount" FontSize="12" FontWeight="SemiBold" />
+                                </Border>
+                            </StackPanel>
+                        </RadioButton>
                         <RadioButton x:Name="NavSettings" Style="{StaticResource NavTab}" Content="Настройки" GroupName="Nav" Checked="OnNav" />
                     </StackPanel>
                 </DockPanel>
@@ -624,6 +634,9 @@
                 </Grid>
 
                 <!-- ============ Настройки ============ -->
+                <!-- ============ Учёба ============ -->
+                <v:StudyPage x:Name="StudyPage" Visibility="Collapsed" />
+
                 <vs:SettingsPage x:Name="SettingsPage" Visibility="Collapsed" />
             </Grid>
         </DockPanel>

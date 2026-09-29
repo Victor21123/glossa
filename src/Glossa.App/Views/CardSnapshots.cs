@@ -89,6 +89,29 @@ internal static class CardSnapshots
         library.CreateCollection("Сленг и мат", new Glossa.Core.Library.SmartFilter { Language = "en", Register = null, MinLookups = null });
         library.CreateCollection("Искал 2+ раза", new Glossa.Core.Library.SmartFilter { MinLookups = 2 });
 
+        // Study: two words learned earlier and due now (one overdue), answers on the last days for the footer.
+        var studyNow = DateTime.UtcNow;
+        var studyToday = Glossa.Core.Study.StudyClock.Local.Day(studyNow);
+        foreach (var (head, late, interval) in new[] { ("reconsider", 2, 3), ("tsundere", 0, 8) })
+        {
+            if (library.List().FirstOrDefault(w => w.Headword == head) is not { } learned) continue;
+            for (var back = interval + late; back >= 0; back -= interval + late)
+            {
+                var at = studyNow.AddDays(-back - 1);
+                library.SaveAnswer(
+                    new Glossa.Core.Study.ReviewState
+                    {
+                        WordId = learned.Id, Queue = Glossa.Core.Study.CardQueue.Review, IntervalDays = interval, Ease = 2.5f, Reps = 4,
+                        DueDay = studyToday.AddDays(-late), AnsweredUtc = at,
+                    },
+                    new Glossa.Core.Study.ReviewAnswer
+                    {
+                        WordId = learned.Id, AnsweredUtc = at, Rating = Glossa.Core.Study.Rating.Good, QueueBefore = Glossa.Core.Study.CardQueue.Review,
+                        IntervalBefore = 1, IntervalAfter = interval, Ease = 2.5f, TakenMs = 9000,
+                    });
+            }
+        }
+
         // «Открыть кадр»: the copy the viewer gets, with the word outlined.
         if (library.List().FirstOrDefault(w => w.ShotFile is not null && w.WordBox is not null) is { } framed)
             File.Copy(FrameExport.Outlined(Path.Combine(data, framed.ShotFile!), framed.WordBox!.Value, Path.Combine(data, "tmp", "frames")),
@@ -131,6 +154,17 @@ internal static class CardSnapshots
             window.CollectionKind.SelectedIndex = 1;
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}-collection.png"));
             window.CloseModal();
+            // «Учёба»: today's session, then the first card before and after Space.
+            window.ShowTab(MainTab.Study);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}.png"));
+            // English only: the first card is then the word with a game frame.
+            window.StudyPage.LanguageFilter.SelectedItem = window.StudyPage.LanguageFilter.Items.OfType<System.Windows.Controls.ListBoxItem>()
+                .First(i => i.Tag as string == "en");
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-front.png"));
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back.png"));
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
             foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "speech", "games", "load", "app" })
             {
                 window.ShowTab(MainTab.Settings);

@@ -409,6 +409,7 @@ public partial class App : Application
         {
             var menu = _trayMenu = new TrayMenu();
             menu.OpenRequested += () => ShowMain(MainTab.Words); // «Открыть словарь» («Главная» in «Только перевод»)
+            menu.StudyRequested += () => ShowMain(MainTab.Study);
             menu.SettingsRequested += () => ShowMain(MainTab.Settings);
             menu.ExitRequested += Shutdown;
             menu.LookupToggled += SetLookup;

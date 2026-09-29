@@ -1,0 +1,172 @@
+<UserControl x:Class="Glossa.App.Views.StudyPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- «Учёба» (mockups «Учёба» and «Учёба, карточка»): today's session and its three queues; then the review itself,
+         one word at a time. The scheduling is Anki's (Glossa.Core.Study); this page only shows it. -->
+    <UserControl.Resources>
+        <Style x:Key="Figure" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="27" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="QueueNote" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Margin" Value="4,6,4,0" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- ============ Start: today's session ============ -->
+        <ScrollViewer x:Name="StartView" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="40,30,40,40">
+                <TextBlock Text="Учёба" Style="{StaticResource PageTitle}" />
+                <TextBlock Style="{StaticResource SectionDescription}"
+                           Text="Слова из твоего словаря по расписанию повторений, как в Anki. Скачанные справочники сюда не попадают." />
+
+                <!-- What the last session came to. -->
+                <Border x:Name="DoneBanner" Style="{StaticResource SidePanel}" Margin="0,22,0,0" Padding="24,16" Visibility="Collapsed">
+                    <TextBlock x:Name="DoneText" FontSize="14.5" TextWrapping="Wrap" />
+                </Border>
+
+                <Border Style="{StaticResource SidePanel}" Margin="0,22,0,0" Padding="30,26">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="40,0,0,0">
+                            <Button x:Name="StartButton" Content="Начать" Style="{StaticResource PrimaryButton}" FontSize="17" FontWeight="Bold"
+                                    Height="58" Padding="40,0" Click="OnStart" />
+                            <TextBlock x:Name="StartHint" Text="или Пробел" FontSize="12.5" Foreground="{DynamicResource Muted}"
+                                       HorizontalAlignment="Center" Margin="0,8,0,0" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="СЕССИЯ НА СЕГОДНЯ" Style="{StaticResource SectionCaption}" />
+                            <TextBlock x:Name="SessionTitle" Style="{StaticResource Figure}" Margin="0,12,0,0" />
+                            <TextBlock x:Name="SessionCounts" FontSize="14.5" Foreground="{DynamicResource InkSoft}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                            <WrapPanel Margin="0,16,0,0">
+                                <ListBox x:Name="LanguageFilter" Style="{StaticResource Segmented}" SelectionChanged="OnFilter" Margin="0,0,12,6" />
+                                <ComboBox x:Name="GameFilter" Width="240" Margin="0,0,12,6" SelectionChanged="OnFilter" />
+                                <ComboBox x:Name="SizeFilter" Width="160" Margin="0,0,0,6" SelectionChanged="OnFilter" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Grid x:Name="Queues" Margin="0,28,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition /><ColumnDefinition Width="28" /><ColumnDefinition /><ColumnDefinition Width="28" /><ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="PinnedTitle" Style="{StaticResource SectionCaption}" Margin="4,0,4,8" />
+                        <StackPanel x:Name="PinnedRows" />
+                        <TextBlock Style="{StaticResource QueueNote}"
+                                   Text="Идут в каждую сессию, пока не снимешь пометку. После 3 верных ответов в разные дни Glossa предложит её снять." />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock x:Name="DueTitle" Style="{StaticResource SectionCaption}" Margin="4,0,4,8" />
+                        <StackPanel x:Name="DueRows" />
+                        <TextBlock Style="{StaticResource QueueNote}" Text="Первыми те, у которых срок наступил раньше." />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock x:Name="NewTitle" Style="{StaticResource SectionCaption}" Margin="4,0,4,8" />
+                        <StackPanel x:Name="NewRows" />
+                        <TextBlock x:Name="NewNote" Style="{StaticResource QueueNote}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Height="1" Background="{DynamicResource Rule}" Margin="0,24,0,14" />
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" x:Name="ScheduleNote" FontSize="13.5" Foreground="{DynamicResource Muted}" />
+                    <TextBlock x:Name="WeekLine" FontSize="13.5" Foreground="{DynamicResource Muted}" />
+                </DockPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ============ Review: one word ============ -->
+        <ScrollViewer x:Name="ReviewView" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+            <StackPanel MaxWidth="1100" Margin="40,26,40,40">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,0,0,0">
+                        <Border Style="{StaticResource KbdBox}"><TextBlock Text="Esc" FontSize="11" Foreground="{DynamicResource InkSoft}" /></Border>
+                        <TextBlock Text="закончить" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Left" x:Name="ProgressText" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                               Margin="0,0,16,0" />
+                    <ProgressBar x:Name="Progress" VerticalAlignment="Center" />
+                </DockPanel>
+
+                <Border Margin="0,18,0,0" CornerRadius="14" BorderThickness="1" BorderBrush="{DynamicResource Rule}" Background="{DynamicResource Surface}">
+                    <StackPanel>
+                        <!-- The game frame around the word, the word ringed. -->
+                        <Grid x:Name="Frame" Height="330" ClipToBounds="True" Background="{DynamicResource Well}" SizeChanged="OnFrameSized">
+                            <Canvas x:Name="FrameCanvas">
+                                <Image x:Name="FrameImage" Stretch="Fill" />
+                                <!-- Over the game picture the ring is white with a dark edge in any theme, as on the still frame. -->
+                                <Rectangle x:Name="FrameHalo" RadiusX="6" RadiusY="6" StrokeThickness="5" />
+                                <Rectangle x:Name="FrameRing" RadiusX="5" RadiusY="5" StrokeThickness="2" />
+                            </Canvas>
+                            <Border x:Name="GameChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14" Height="28" Padding="11,0"
+                                    CornerRadius="7" Background="{DynamicResource Surface}">
+                                <TextBlock x:Name="GameText" FontSize="12.5" Foreground="{DynamicResource InkSoft}" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
+
+                        <StackPanel HorizontalAlignment="Center" Margin="40,26,40,22">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock x:Name="Headword" FontSize="46" FontWeight="Bold" />
+                                <TextBlock x:Name="Reading" FontSize="19" Foreground="{DynamicResource InkSoft}" VerticalAlignment="Bottom" Margin="14,0,0,8" />
+                            </StackPanel>
+                            <TextBlock x:Name="Line" FontSize="17" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap" TextAlignment="Center"
+                                       MaxWidth="900" Margin="0,10,0,0" />
+                        </StackPanel>
+
+                        <!-- Before the answer is shown. -->
+                        <StackPanel x:Name="FlipHint" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4,0,28">
+                            <Border Style="{StaticResource KbdBox}"><TextBlock Text="Пробел" FontSize="11" Foreground="{DynamicResource InkSoft}" /></Border>
+                            <TextBlock Text="показать перевод" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        </StackPanel>
+
+                        <!-- The back. -->
+                        <Border x:Name="Back" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Rule}" Padding="40,22,40,26" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30" />
+                                    <ColumnDefinition Width="300" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock x:Name="Translation" FontSize="30" FontWeight="Bold" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="SceneNote" FontSize="15" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                    <TextBlock x:Name="LineTranslation" FontSize="15.5" LineHeight="22" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                    <TextBlock x:Name="WordMeta" FontSize="13.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,12,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <DockPanel>
+                                        <Button x:Name="SpeakButton" DockPanel.Dock="Left" Margin="0,0,6,0" Padding="14,0" Click="OnSpeak" ToolTip="Произнести (P)">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Data="M11,5 L6,9 H3 V15 H6 L11,19 Z M15.5,8.5 A5,5 0 0 1 15.5,15.5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      StrokeThickness="1.8" Width="15" Height="15" Stretch="Uniform" />
+                                                <TextBlock Text="P" Margin="6,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="PinButton" Click="OnPin">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Data="M9,4 H15 L14,10 L17,13 H7 L10,10 Z M12,16 V21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      StrokeThickness="1.8" Width="13" Height="13" Stretch="Uniform" />
+                                                <TextBlock x:Name="PinText" Margin="6,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DockPanel>
+                                    <TextBlock x:Name="UnpinHint" FontSize="12.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,10,0,0"
+                                               Visibility="Collapsed" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <UniformGrid x:Name="Answers" Columns="4" Margin="0,18,-12,0" Visibility="Hidden" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

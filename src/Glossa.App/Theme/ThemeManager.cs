@@ -90,6 +90,23 @@ public sealed class ThemeManager
 }
 
 /// <summary>
+/// The ring around a word drawn over a game picture (the dictionary's frame, the study card): white with a dark edge in
+/// every theme, like the still frame's marks, so it reads on any game.
+/// </summary>
+public static class GameRing
+{
+    public static readonly Brush Ink = Frozen(Colors.White);
+    public static readonly Brush Edge = Frozen(Color.FromArgb(0xB0, 0x12, 0x14, 0x18));
+
+    private static Brush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+}
+
+/// <summary>
 /// Onest for the interface and Literata for the card's serif translation are bundled (OFL, Assets/Fonts);
 /// Japanese and Chinese fall back to the Windows fonts, picked per language so Han characters get the right forms.
 /// </summary>

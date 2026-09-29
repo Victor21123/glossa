@@ -10,6 +10,7 @@ using Glossa.App.ViewModels;
 using Glossa.Core.Games;
 using Glossa.Core.Library;
 using Glossa.Core.Llm;
+using Glossa.Core.Study;
 
 namespace Glossa.App.Views;
 
@@ -30,6 +31,9 @@ public partial class HomePage : UserControl
 
     /// <summary>«Настройки ИИ», «Сменить режим»: a section of Настройки (its key).</summary>
     public event Action<string>? OpenSettings;
+
+    /// <summary>«Начать учёбу».</summary>
+    public event Action? OpenStudy;
 
     /// <summary>Follows the mode and «Статистика на главной» through the settings model Настройки uses.</summary>
     public void Attach(AppServices services, SettingsViewModel model)
@@ -65,7 +69,7 @@ public partial class HomePage : UserControl
         var translate = services.Settings.Purpose == "translate";
         WordsPanel.Visibility = Shown(!translate);
         TranslatePanel.Visibility = Shown(translate);
-        Lower.Visibility = Shown(!translate);
+        Lower.Visibility = StudyPanel.Visibility = Shown(!translate);
         if (translate)
         {
             Stats.Visibility = Visibility.Collapsed;
@@ -221,6 +225,23 @@ public partial class HomePage : UserControl
     private static Visibility Shown(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnOpenWords(object sender, RoutedEventArgs e) => OpenWords?.Invoke();
+
+    private void OnOpenStudy(object sender, RoutedEventArgs e) => OpenStudy?.Invoke();
+
+    /// <summary>Today's session as «Учёба» would start it, and the days in a row with answers.</summary>
+    public void ShowStudy(StudyPlan session, StudyStats stats)
+    {
+        var n = session.Cards.Count;
+        var minutes = Math.Max(1, (int)Math.Ceiling(n * stats.SecondsPerCard / 60.0));
+        StudyTotal.Text = n > 0 ? $"{n} {Plural(n, "карточка", "карточки", "карточек")} на сегодня, около {minutes} мин" : "На сегодня всё";
+        var parts = new List<string>();
+        if (session.Pinned.Count > 0) parts.Add($"{session.Pinned.Count} не могу запомнить");
+        if (session.Due.Count > 0) parts.Add($"{session.Due.Count} по расписанию");
+        if (session.New.Count > 0) parts.Add($"{session.New.Count} {Plural(session.New.Count, "новое", "новых", "новых")}");
+        if (stats.Streak > 0) parts.Add($"{StudyLabels.Days(stats.Streak)} подряд с учёбой");
+        StudyNote.Text = parts.Count > 0 ? string.Join(", ", parts) : "Слова для учёбы появятся после поиска в игре.";
+        StudyButton.Content = n > 0 ? "Начать учёбу" : "Открыть учёбу";
+    }
 
     private void OnOpenSettings(object sender, RoutedEventArgs e)
     {

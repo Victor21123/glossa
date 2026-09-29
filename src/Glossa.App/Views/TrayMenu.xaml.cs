@@ -20,6 +20,7 @@ public partial class TrayMenu : Window
     private bool _lookupOn;
 
     public event Action? OpenRequested;
+    public event Action? StudyRequested;
     public event Action? SettingsRequested;
     public event Action? ExitRequested;
     public event Action<string>? ModeChanged;
@@ -61,6 +62,7 @@ public partial class TrayMenu : Window
     {
         StateText.Text = state.Status;
         OpenItem.Content = state.TranslateOnly ? "Открыть Glossa" : "Открыть словарь";
+        StudyItem.Visibility = state.TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
         StateDot.SetResourceReference(Shape.FillProperty, state.AiLoaded ? "Good" : "Surface");
         StateDot.SetResourceReference(Shape.StrokeProperty, state.AiLoaded ? "Good" : "Muted");
         ModeAuto.IsChecked = state.Mode == "auto";
@@ -75,6 +77,12 @@ public partial class TrayMenu : Window
     {
         Hide();
         OpenRequested?.Invoke();
+    }
+
+    private void OnStudy(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        StudyRequested?.Invoke();
     }
 
     private void OnSettings(object sender, RoutedEventArgs e)

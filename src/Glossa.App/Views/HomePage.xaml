@@ -105,6 +105,19 @@
                 </Border>
             </Grid>
 
+            <!-- «Учёба»: today's session and the days in a row (hidden in «Только перевод»). -->
+            <Border x:Name="StudyPanel" Style="{StaticResource SidePanel}" Margin="0,20,0,0">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" x:Name="StudyButton" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center"
+                            Click="OnOpenStudy" />
+                    <StackPanel>
+                        <TextBlock Text="Учёба" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock x:Name="StudyTotal" Style="{StaticResource Figure}" Margin="0,6,0,0" />
+                        <TextBlock x:Name="StudyNote" Style="{StaticResource Note}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
             <!-- Статистика (Приложение → «Статистика на главной»): four tiles across the page. -->
             <StackPanel x:Name="Stats" Margin="0,30,0,0">
                 <TextBlock Text="Статистика" FontSize="18" FontWeight="Bold" />
@@ -174,7 +187,7 @@
                     <Rectangle RadiusX="12" RadiusY="12" Stroke="{DynamicResource Rule}" StrokeThickness="1.5" StrokeDashArray="4 3" />
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="28">
                         <TextBlock Text="Спутник" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock Text="Здесь будет твой спутник: он появится вместе с учёбой." Style="{StaticResource Note}"
+                        <TextBlock Text="Здесь будет твой спутник - награда за дни подряд с учёбой." Style="{StaticResource Note}"
                                    TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0" />
                     </StackPanel>
                 </Grid>

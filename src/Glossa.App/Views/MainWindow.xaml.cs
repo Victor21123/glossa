@@ -10,6 +10,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Glossa.App.Ai;
+using Glossa.App.Theme;
 using Glossa.App.ViewModels;
 using Microsoft.Win32;
 
@@ -44,6 +45,14 @@ public partial class MainWindow : Window
             NavSettings.IsChecked = true;
             SettingsPage.Show(section);
         };
+        StudyPage.TodayChanged += (session, all, stats) =>
+        {
+            StudyCount.Text = all.ToString(CultureInfo.InvariantCulture);
+            StudyBadge.Visibility = all > 0 ? Visibility.Visible : Visibility.Collapsed;
+            HomePage.ShowStudy(session, stats);
+        };
+        HomePage.OpenStudy += () => ShowTab(MainTab.Study);
+        StudyPage.Attach(services);
         PropertyChangedEventHandler purpose = (_, e) =>
         {
             if (e.PropertyName is nameof(SettingsViewModel.Purpose) or "") ApplyPurpose();
@@ -58,6 +67,7 @@ public partial class MainWindow : Window
         {
             _library.Reload();
             if (HomePage.IsVisible) HomePage.Refresh();
+            StudyPage.Refresh();
         });
         services.LibraryChanged += reload;
         // A game profile created or renamed: the catalogue names the game by its profile.
@@ -93,11 +103,11 @@ public partial class MainWindow : Window
     /// <summary>«Только перевод»: Glossa saves nothing, so the dictionary is out of sight.</summary>
     private bool TranslateOnly => _services.Settings.Purpose == "translate";
 
-    /// <summary>«Только перевод» hides «Словарь» (and «Учёба» with its stage); the window stays on «Главная».</summary>
+    /// <summary>«Только перевод» hides «Словарь» and «Учёба»; the window stays on «Главная».</summary>
     private void ApplyPurpose()
     {
-        NavWords.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
-        if (TranslateOnly && NavWords.IsChecked == true) NavHome.IsChecked = true;
+        NavWords.Visibility = NavStudy.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
+        if (TranslateOnly && (NavWords.IsChecked == true || NavStudy.IsChecked == true)) NavHome.IsChecked = true;
     }
 
     /// <summary>Главная, Словарь (Главная in «Только перевод»), Настройки → Справочники, or Настройки at the section last open.</summary>
@@ -108,11 +118,14 @@ public partial class MainWindow : Window
             case MainTab.Home:
                 NavHome.IsChecked = true;
                 break;
-            case MainTab.Words when TranslateOnly:
+            case MainTab.Words or MainTab.Study when TranslateOnly:
                 NavHome.IsChecked = true;
                 break;
             case MainTab.Words:
                 NavWords.IsChecked = true;
+                break;
+            case MainTab.Study:
+                NavStudy.IsChecked = true;
                 break;
             default:
                 NavSettings.IsChecked = true;
@@ -123,13 +136,16 @@ public partial class MainWindow : Window
 
     private void OnNav(object sender, RoutedEventArgs e)
     {
-        if (WordsPage is null || HomePage is null) return;
+        if (WordsPage is null || HomePage is null || StudyPage is null) return;
         var home = NavHome.IsChecked == true;
         var words = NavWords.IsChecked == true;
+        var study = NavStudy.IsChecked == true;
         HomePage.Visibility = home ? Visibility.Visible : Visibility.Collapsed;
         WordsPage.Visibility = words ? Visibility.Visible : Visibility.Collapsed;
-        SettingsPage.Visibility = home || words ? Visibility.Collapsed : Visibility.Visible;
+        StudyPage.Visibility = study ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = home || words || study ? Visibility.Collapsed : Visibility.Visible;
         if (home) HomePage.Refresh();
+        if (study) StudyPage.Refresh();
     }
 
     // ---- the selected word ----
@@ -181,15 +197,18 @@ public partial class MainWindow : Window
         if (entry!.WordBox is { } b)
         {
             var scale = Math.Max(1, img.PixelWidth / 1200.0);
-            var ring = new Rectangle
+            // White with a dark edge in any theme: it lies over the game picture, as on the still frame.
+            foreach (var (brush, thickness) in new[] { (GameRing.Edge, 6.0), (GameRing.Ink, 3.0) })
             {
-                Width = b.Width + 12 * scale, Height = b.Height + 8 * scale, RadiusX = 5 * scale, RadiusY = 5 * scale,
-                StrokeThickness = 3 * scale,
-            };
-            ring.SetResourceReference(Shape.StrokeProperty, "Accent");
-            Canvas.SetLeft(ring, b.Left - 6 * scale);
-            Canvas.SetTop(ring, b.Top - 4 * scale);
-            ShotOverlay.Children.Add(ring);
+                var ring = new Rectangle
+                {
+                    Width = b.Width + 12 * scale, Height = b.Height + 8 * scale, RadiusX = 5 * scale, RadiusY = 5 * scale,
+                    StrokeThickness = thickness * scale, Stroke = brush,
+                };
+                Canvas.SetLeft(ring, b.Left - 6 * scale);
+                Canvas.SetTop(ring, b.Top - 4 * scale);
+                ShotOverlay.Children.Add(ring);
+            }
         }
     }
 
@@ -258,6 +277,12 @@ public partial class MainWindow : Window
                 CloseModal();
                 e.Handled = true;
             }
+            return;
+        }
+        // A review owns its keys (Space, 1-4, P, Esc) while «Учёба» is open.
+        if (StudyPage.IsVisible && Keyboard.Modifiers == ModifierKeys.None && StudyPage.HandleKey(e.Key))
+        {
+            e.Handled = true;
             return;
         }
         var editing = _library.Selected?.IsEditing == true;
@@ -591,4 +616,4 @@ public partial class MainWindow : Window
 }
 
 /// <summary>The main window's pages.</summary>
-public enum MainTab { Home, Words, Sources, Settings }
+public enum MainTab { Home, Words, Study, Sources, Settings }
