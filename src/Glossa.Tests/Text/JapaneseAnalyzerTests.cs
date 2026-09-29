@@ -36,6 +36,27 @@ public class JapaneseAnalyzerTests
     }
 
     [Fact]
+    public void A_suru_noun_used_as_a_verb_gives_the_verb()
+    {
+        if (!Directory.Exists(DicDir)) return;
+
+        using var ja = new JapaneseAnalyzer(DicDir);
+        var headwords = new HashSet<string> { "合体", "音" };
+
+        // B-01: 合体していく gave "合体して", a Wiktionary inflected form taken for the dictionary form.
+        const string text = "みんなで合体していくぞ";
+        var word = ja.WordAt(text, text.IndexOf('合'), headwords.Contains);
+        Assert.NotNull(word);
+        Assert.Equal("合体する", word.DictionaryForm);
+        Assert.Equal("がったいする", word.Reading);
+        Assert.Equal(["合体する", "合体"], word.Candidates);
+
+        // A particle in between: the noun stays a noun.
+        const string sound = "変な音がする";
+        Assert.Equal("音", ja.WordAt(sound, sound.IndexOf('音'), headwords.Contains)!.DictionaryForm);
+    }
+
+    [Fact]
     public void Katakana_converts_to_hiragana()
     {
         Assert.Equal("うすぐらい", JapaneseAnalyzer.ToHiragana("ウスグライ"));

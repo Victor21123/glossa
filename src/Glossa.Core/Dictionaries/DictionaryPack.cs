@@ -36,7 +36,12 @@ public static class DictKeys
     }
 }
 
-public readonly record struct DictKey(string Text, int Rank = 0);
+/// <param name="Rank">0 - the headword, 1 (<see cref="Alias"/>) - a reading, synonym or link, 2 - an inflected form
+/// (Wiktionary's conjugation tables), 3 - a dated-only article.</param>
+public readonly record struct DictKey(string Text, int Rank = 0)
+{
+    public const int Alias = 1;
+}
 
 public sealed record DictEntry(long Id, string Headword, string? Reading, string Body, int Rank);
 
@@ -95,8 +100,9 @@ public sealed class DictionaryPack : IDisposable
             _find.Parameters.Add("$limit", SqliteType.Integer);
             _find.Prepare();
 
-            _has.CommandText = "SELECT 1 FROM keys WHERE key = $key LIMIT 1";
+            _has.CommandText = "SELECT 1 FROM keys WHERE key = $key AND rank <= $rank LIMIT 1";
             _has.Parameters.Add("$key", SqliteType.Text);
+            _has.Parameters.Add("$rank", SqliteType.Integer);
             _has.Prepare();
         }
         catch
@@ -123,11 +129,13 @@ public sealed class DictionaryPack : IDisposable
         return list;
     }
 
-    public bool HasKey(string key)
+    /// <param name="maxRank">Only keys up to this rank: <see cref="DictKey.Alias"/> leaves out inflected forms.</param>
+    public bool HasKey(string key, int maxRank = int.MaxValue)
     {
         lock (_gate)
         {
             _has.Parameters["$key"].Value = key;
+            _has.Parameters["$rank"].Value = maxRank;
             return _has.ExecuteScalar() is not null;
         }
     }

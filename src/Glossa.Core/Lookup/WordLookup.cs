@@ -47,7 +47,7 @@ public sealed class WordLookup(
 
     /// <summary>Word boundaries in Japanese and Chinese lines, as a lookup draws them (a still frame steps word by word).</summary>
     public ITermMatcher Matcher(string preferredCjk) =>
-        new CjkMatcher(japanese(), chinese(), preferredCjk, JapaneseExists, ChineseExists);
+        new CjkMatcher(japanese(), chinese(), preferredCjk, JapaneseHeadword, ChineseExists);
 
     /// <param name="language">The user's choice for a word typed in by hand; null detects it from the text.</param>
     public LookupPlan Plan(WordHit hit, string preferredCjk, string nativeLanguage, DictionarySettings ds, string? language = null)
@@ -101,7 +101,7 @@ public sealed class WordLookup(
         IReadOnlyList<string> candidates = [hit.Word];
         if (lang == "ja" && japanese() is { } ja && hit.ContextOffset >= 0)
         {
-            var word = ja.WordAt(hit.Context, hit.ContextOffset, JapaneseExists);
+            var word = ja.WordAt(hit.Context, hit.ContextOffset, JapaneseHeadword);
             if (word is not null && word.DictionaryForm.Length > 0)
             {
                 var hasKanji = word.DictionaryForm.Any(c => Scripts.Of(c) == Script.Han);
@@ -125,6 +125,12 @@ public sealed class WordLookup(
     }
 
     private bool JapaneseExists(string term) => dictionaries.HasKey("ja", term);
+
+    /// <summary>
+    /// A phrase or word as dictionaries head it: not one of Wiktionary's inflected forms, or 合体していく would stop at
+    /// the form 合体して and take it for the dictionary form (B-01).
+    /// </summary>
+    private bool JapaneseHeadword(string term) => dictionaries.HasKey("ja", term, DictKey.Alias);
 
     private bool ChineseExists(string term) => dictionaries.HasKey("zh", term) || chinese()?.Contains(term) == true;
 

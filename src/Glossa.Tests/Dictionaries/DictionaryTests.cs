@@ -284,6 +284,9 @@ public sealed class DictionaryTests : IDisposable
         Assert.Equal("go", service.Lookup("en", ["went"])[0].Entries[0].Headword);
         Assert.True(service.HasKey("en", "Look After"));
         Assert.False(service.HasKey("ja", "go"));
+        Assert.True(service.HasKey("en", "went"));
+        Assert.False(service.HasKey("en", "went", DictKey.Alias)); // an inflected form is not a headword
+        Assert.True(service.HasKey("en", "goes", DictKey.Alias));  // a link counts as an alias
 
         service.Reload(["a", "b"], ["b"]);
         var only = Assert.Single(service.Lookup("en", ["go"]));

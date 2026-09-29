@@ -71,14 +71,15 @@ public sealed class DictionaryService : IDisposable
     }
 
     /// <summary>True if any enabled pack for the language has this exact key (used to find set phrases).</summary>
-    public bool HasKey(string language, string term)
+    /// <param name="maxRank">Only keys up to this rank (<see cref="DictKey.Alias"/>: headwords, readings, synonyms).</param>
+    public bool HasKey(string language, string term, int maxRank = int.MaxValue)
     {
         var key = DictKeys.Normalize(term);
         if (key.Length == 0) return false;
         lock (_gate)
         {
             foreach (var p in _enabled)
-                if (p.Info.SourceLanguage == language && p.HasKey(key)) return true;
+                if (p.Info.SourceLanguage == language && p.HasKey(key, maxRank)) return true;
         }
         return false;
     }

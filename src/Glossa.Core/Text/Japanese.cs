@@ -5,6 +5,7 @@ namespace Glossa.Core.Text;
 
 /// <param name="Lemma">Dictionary form as written (UniDic orthBase): つけ → つける.</param>
 /// <param name="Lexeme">Standard lexeme spelling (UniDic lemma): つけ → 付ける.</param>
+/// <param name="Subclass">UniDic pos3: "サ変可能" marks a noun that takes する (合体 → 合体する).</param>
 public sealed record JaToken(
     string Surface,
     int Start,
@@ -12,7 +13,8 @@ public sealed record JaToken(
     string Reading,
     string LemmaReading,
     string PartOfSpeech,
-    string Lexeme = "")
+    string Lexeme = "",
+    string Subclass = "")
 {
     public int End => Start + Surface.Length;
 }
@@ -58,7 +60,8 @@ public sealed class JapaneseAnalyzer : ITermMatcher, IDisposable
                 ToHiragana(n.Kana ?? ""),
                 ToHiragana(n.KanaBase ?? ""),
                 n.Pos1 ?? "",
-                StripGloss(n.Lemma ?? lemma)));
+                StripGloss(n.Lemma ?? lemma),
+                n.Pos3 ?? ""));
         }
         return tokens;
     }
@@ -94,6 +97,15 @@ public sealed class JapaneseAnalyzer : ITermMatcher, IDisposable
                         Distinct(form, first.Lemma, first.Lexeme, first.Surface));
                 }
             }
+        }
+
+        // A する-noun used as a verb (合体していく): its dictionary form is the verb, 合体する, which dictionaries head as 合体.
+        if (first.PartOfSpeech == "名詞" && first.Subclass == "サ変可能" && i + 1 < tokens.Count
+            && tokens[i + 1].Lexeme == "為る" && Contiguous(tokens, i, i + 1))
+        {
+            var verb = first.Lemma + "する";
+            return new JaWord(first.Start, tokens[i + 1].End - first.Start, verb, first.Reading + "する", "動詞",
+                Distinct(verb, first.Lemma, first.Lexeme, first.Surface));
         }
 
         // The surface reading is exact for the form on screen; the lemma reading covers inflected words.
