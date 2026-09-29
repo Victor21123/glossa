@@ -122,9 +122,32 @@ public sealed class ExportTests : IDisposable
         Assert.DoesNotContain("deleteNotes", fake.Actions);
     }
 
+    [Fact]
+    public async Task A_word_deleted_from_the_library_is_tagged_in_anki_not_deleted()
+    {
+        // B-03: the whole path - "Словарь" deletes (soft), the next sync finds the note by GlossaId and tags it.
+        var db = Path.Combine(_temp.New(), "library.db");
+        using var store = new LibraryStore(db);
+        var keep = store.Record(new SavedWord { Language = "en", Word = "keep", Translation = "оставить" }, newLookup: true);
+        var gone = store.Record(new SavedWord { Language = "en", Word = "gone", Translation = "ушедший" }, newLookup: true);
+        var fake = new FakeAnki(existingGlossaId: keep);
+        fake.Existing[gone] = 77;
+
+        store.Delete(gone);
+        var result = await new AnkiConnectSync(new HttpClient(fake))
+            .SyncAsync(Path.GetDirectoryName(db)!, store.List(), store.ListDeleted(), new AnkiExportOptions(), null, CancellationToken.None);
+
+        Assert.Equal(new AnkiSyncResult(Added: 0, Updated: 1, Tagged: 1), result);
+        var tag = Assert.Single(fake.Requests, r => r["action"]!.GetValue<string>() == "addTags");
+        Assert.Equal(77, tag["params"]!["notes"]![0]!.GetValue<long>());
+        Assert.Equal(AnkiNoteType.RemovedTag, tag["params"]!["tags"]!.GetValue<string>());
+        Assert.DoesNotContain("deleteNotes", fake.Actions);
+    }
+
     private sealed class FakeAnki(string existingGlossaId) : HttpMessageHandler
     {
         public List<string> Actions { get; } = [];
+        public List<JsonNode> Requests { get; } = [];
         public Dictionary<string, long> Existing { get; } = new() { [existingGlossaId] = 42 };
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -132,6 +155,7 @@ public sealed class ExportTests : IDisposable
             var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
             var action = body["action"]!.GetValue<string>();
             Actions.Add(action);
+            Requests.Add(body);
             JsonNode? result = action switch
             {
                 "modelNames" => new JsonArray("Basic"),
