@@ -38,7 +38,14 @@ internal static class SelfTest
         var json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var cases = JsonSerializer.Deserialize<List<Case>>(await File.ReadAllTextAsync(casesPath), json)!
             .Where(c => c.Image is not null && File.Exists(c.Image)).Take(count).ToList();
-        log.Info($"selftest: {cases.Count} cases");
+        // GLOSSA_SELFTEST_MODE: line — «Только перевод → Реплика» instead of the word card; screen — «Весь экран».
+        var mode = Environment.GetEnvironmentVariable("GLOSSA_SELFTEST_MODE");
+        log.Info($"selftest: {cases.Count} cases, mode {mode ?? "card"}");
+        if (mode == "screen")
+        {
+            await ScreenAsync(cases, outDir, controller, log);
+            return;
+        }
 
         // Where each word is, found with a separate recognizer over the whole frame (the app itself reads only the
         // strip around the cursor); it is freed before measuring, so its memory does not count against the app.
@@ -84,7 +91,10 @@ internal static class SelfTest
             var before = LoadMeter.Sample(host);
             try
             {
-                await controller.RunAsync(frame, x, y, "selftest", "selftest.exe", Stopwatch.StartNew());
+                if (mode == "line")
+                    await controller.TranslateLineAsync(frame, x, y, new LookupContext("selftest", "selftest", "selftest.exe"), Stopwatch.StartNew());
+                else
+                    await controller.RunAsync(frame, x, y, "selftest", "selftest.exe", Stopwatch.StartNew());
             }
             catch (Exception ex)
             {
@@ -92,7 +102,9 @@ internal static class SelfTest
             }
             var after = LoadMeter.Sample(host);
             minFree = Math.Min(minFree, after.VramFreeMb);
-            results.Add(new Result(c.Id, c.Word, last?.Result ?? "нет отчёта", last?.Ok ?? false, last?.Stages,
+            var outcome = last?.Result ?? "нет отчёта";
+            if (mode == "line" && controller.LastTranslation is { } tr) outcome += $" | {tr.Original} => {tr.Translation}";
+            results.Add(new Result(c.Id, c.Word, outcome, last?.Ok ?? false, last?.Stages,
                 after.GlossaCpu - before.GlossaCpu, after.ServerCpu - before.ServerCpu, after.GlossaMb, after.ServerMb, after.VramFreeMb));
         }
         // The first words again: «Помнить готовые карточки» must open them at once, without the AI.
@@ -178,6 +190,55 @@ internal static class SelfTest
                 ? $"{r.Id,-22} {r.Word,-14} ocr {s.OcrMs,5}  dict {s.DictionariesMs - s.OcrMs,4}  card {s.CardMs,5}  first {s.FirstFieldMs,6}  ai {s.AiMs,6}  cpu {F(r.GlossaCpu, "0.00")}+{F(r.ServerCpu, "0.00")} с"
                 : $"{r.Id,-22} {r.Word,-14} {r.Outcome}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// «Весь экран» on each distinct screenshot: recognized whole, every paragraph worth it translated in turn, as the
+    /// still frame does; writes the times and texts (screen.txt) and the still with its plates (screen-N.png).
+    /// </summary>
+    private static async Task ScreenAsync(List<Case> cases, string outDir, LookupController controller, ILog log)
+    {
+        var sb = new StringBuilder();
+        using var ocr = new OcrEngine(Glossa.Core.Config.DataPaths.OcrModels);
+        var n = 0;
+        foreach (var image in cases.Select(c => c.Image!).Distinct())
+        {
+            var frame = Load(image);
+            var sw = Stopwatch.StartNew();
+            var page = await ocr.RecognizeAsync(frame.Bgra, frame.Width, frame.Height, frame.Stride, frame.Bounds, OcrModelFamily.CjkLatin,
+                CancellationToken.None);
+            var ocrMs = sw.ElapsedMilliseconds;
+            var blocks = Glossa.Core.Text.TextBlocks.Of(page)
+                .Select(b => (Block: b, Lang: Glossa.Core.Lookup.Languages.DetectText(b.Text, "zh")))
+                .Where(x => Glossa.Core.Text.TextBlocks.Translatable(x.Block, Glossa.Core.Lookup.Languages.TargetFor(x.Lang)))
+                .ToList();
+            var still = new Views.FrozenFrame();
+            var picture = new BitmapImage(new Uri(image));
+            still.Preview(picture, default, $"Переведено: {blocks.Count}");
+            still.Mark(null);
+            sb.AppendLine($"{Path.GetFileName(image)}: {page.Lines.Count} строк, распознавание {ocrMs} мс, абзацев для перевода {blocks.Count}");
+            foreach (var (block, lang) in blocks)
+            {
+                var t = Stopwatch.StartNew();
+                try
+                {
+                    var (text, _) = await controller.TranslateTextAsync(block.Text, lang, Glossa.Core.Lookup.Languages.TargetFor(lang), null, null,
+                        CancellationToken.None);
+                    still.AddTranslation(block.Box, block.Lines)(text);
+                    sb.AppendLine($"  [{lang}] {t.ElapsedMilliseconds,5} мс  {block.Text} => {text}");
+                }
+                catch (Exception ex)
+                {
+                    log.Error("selftest screen", ex);
+                    sb.AppendLine($"  [{lang}] ошибка: {ex.Message}");
+                }
+            }
+            sb.AppendLine($"  всего {sw.ElapsedMilliseconds} мс");
+            Views.CardSnapshots.SaveWindow(still, Path.Combine(outDir, $"screen-{++n}.png"), picture.PixelWidth, picture.PixelHeight);
+            still.Close();
+        }
+        await File.WriteAllTextAsync(Path.Combine(outDir, "screen.txt"), sb.ToString());
+        log.Info("selftest: screen done");
     }
 
     /// <summary>A screenshot as a captured frame whose screen position is its own pixel grid.</summary>

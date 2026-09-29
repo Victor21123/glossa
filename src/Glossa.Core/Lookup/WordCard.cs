@@ -99,6 +99,16 @@ public static class Languages
         _ => "en",
     };
 
+    /// <summary>The language of a whole line or block (screen translation), by its script, as <see cref="Detect"/> does for a word.</summary>
+    public static string DetectText(string text, string preferredCjk = "zh") => Scripts.Dominant(text) switch
+    {
+        Script.Kana => "ja",
+        Script.Han => text.Any(c => Scripts.Of(c) == Script.Kana) ? "ja" : preferredCjk,
+        Script.Hangul => "ko",
+        Script.Cyrillic => "ru",
+        _ => "en",
+    };
+
     /// <summary>Translations go to Russian, except Russian text which goes to English.</summary>
     public static string TargetFor(string source, string native = "ru") => source == native ? "en" : native;
 }

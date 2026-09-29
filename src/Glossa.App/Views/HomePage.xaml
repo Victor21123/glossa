@@ -4,6 +4,8 @@
     <!-- «Главная»: where the window opens. The dictionary and its numbers on the left; the model and the main settings on
          the right (the same settings model as Настройки, so a change shows in both). Study joins with its stage. -->
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
         <Style x:Key="Figure" TargetType="TextBlock">
             <Setter Property="FontSize" Value="26" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -129,6 +131,17 @@
                             <Button DockPanel.Dock="Right" Content="Изменить" Style="{StaticResource GhostButton}" Tag="keys" Click="OnOpenSettings" />
                             <TextBlock Text="{Binding Hotkey}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </DockPanel>
+                        <TextBlock Text="РЕЖИМ" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding Purpose}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Словарь и учёба" Tag="dictionary" />
+                            <ListBoxItem Content="Только перевод" Tag="translate" />
+                        </ListBox>
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding TranslateMode}" HorizontalAlignment="Left"
+                                 Margin="0,8,0,0" Visibility="{Binding IsTranslatePurpose, Converter={StaticResource BoolToVis}}">
+                            <ListBoxItem Content="Реплика" Tag="line" />
+                            <ListBoxItem Content="Весь экран" Tag="screen" />
+                            <ListBoxItem Content="Живой перевод" Tag="live" />
+                        </ListBox>
                         <TextBlock Text="КАРТОЧКА" Style="{StaticResource PanelCaption}" />
                         <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding Preset}" HorizontalAlignment="Left">
                             <ListBoxItem Content="Меньше" Tag="less" />

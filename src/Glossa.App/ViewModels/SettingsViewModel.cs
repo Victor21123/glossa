@@ -142,6 +142,37 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>none, frame or pause: what a lookup does to the game (a game's profile may choose otherwise).</summary>
     public string DuringLookup { get => S.DuringLookup; set => Set(() => S.DuringLookup = value); }
 
+    /// <summary>dictionary or translate: what the lookup keys do.</summary>
+    public string Purpose
+    {
+        get => S.Purpose;
+        set => Set(() => S.Purpose = value, also: nameof(IsTranslatePurpose));
+    }
+
+    public bool IsTranslatePurpose => S.Purpose == "translate";
+
+    public string PurposeNote => $"Словарь и учёба: {S.Hotkey} открывает карточку слова, слово попадает в словарь. Только перевод: " +
+                                 "Glossa переводит текст из игры и ничего не сохраняет — для тех, кому нужен просто перевод.";
+
+    /// <summary>line, screen or live: how «Только перевод» translates.</summary>
+    public string TranslateMode
+    {
+        get => S.TranslateMode;
+        set => Set(() => S.TranslateMode = value, also: nameof(TranslateModeNote));
+    }
+
+    public string TranslateModeNote => S.TranslateMode switch
+    {
+        "screen" => $"Весь экран: {S.Hotkey} останавливает кадр, и поверх каждого абзаца ложится его перевод; щелчок по переводу " +
+                    "показывает оригинал, Esc — назад в игру. Геймпад в этом режиме всегда переводит весь экран. Переводы идут по " +
+                    "одному, ~1 с на абзац.",
+        "live" => $"Живой перевод: {S.Hotkey} включает его в игре, повторное нажатие выключает. Glossa следит за экраном и " +
+                  "переводит каждую новую реплику субтитром над ней, пока игра впереди. Не включается в играх с античитом и не " +
+                  "виден в эксклюзивном полноэкранном режиме. Нагрузка: ~0,4 с распознавания при смене текста и ~1 с перевода на реплику.",
+        _ => $"Реплика: наведи курсор на текст и нажми {S.Hotkey} — рядом появится перевод всей реплики, ~1,5 с. Геймпад в этом " +
+             "режиме переводит весь экран.",
+    };
+
     /// <summary>Frames on the still frame around words already in the dictionary.</summary>
     public bool MarkKnownWords { get => S.MarkKnownWords; set => Set(() => S.MarkKnownWords = value); }
 

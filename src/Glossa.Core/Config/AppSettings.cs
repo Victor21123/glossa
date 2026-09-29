@@ -25,6 +25,16 @@ public sealed class AppSettings
     /// <summary>On a still frame, words already in the dictionary get a thin frame, «Не могу запомнить» ones a bold one.</summary>
     public bool MarkKnownWords { get; set; } = true;
 
+    /// <summary>dictionary (Alt+Q: the word card, saved to the dictionary) or translate (Alt+Q: translation only, <see cref="TranslateMode"/>).</summary>
+    public string Purpose { get; set; } = "dictionary";
+
+    /// <summary>
+    /// How «Только перевод» translates: line (the paragraph under the cursor, in a small card), screen (every paragraph
+    /// of a still of the screen, laid over it) or live (new dialogue lines as subtitles while the game runs; Alt+Q
+    /// switches it on and off).
+    /// </summary>
+    public string TranslateMode { get; set; } = "line";
+
     /// <summary>Настройки → Игры и профили: the programs words were looked up in, each created at its first lookup.</summary>
     public List<GameProfile> Games { get; set; } = [];
 

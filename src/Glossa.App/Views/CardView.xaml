@@ -190,6 +190,27 @@
 
         <Grid Visibility="{Binding HasMessage, Converter={StaticResource FalseToVis}}">
 
+            <!-- ============ Только перевод, «Реплика»: the line and its translation, nothing else ============ -->
+            <Border Width="{Binding TranslationWidth}" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}"
+                    BorderThickness="1" Padding="20,15,20,12" Effect="{StaticResource CardShadow}"
+                    Visibility="{Binding IsTranslation, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock x:Name="ContextOnly" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                               FontFamily="{Binding WordFont}" />
+                    <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontSize="17" LineHeight="25" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource Danger}"
+                               Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                    <DockPanel Margin="0,12,0,0" TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Muted}"
+                               Visibility="{Binding Show[footer], Converter={StaticResource BoolToVis}}">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Border Style="{StaticResource KbdBox}"><TextBlock Text="Esc" Style="{StaticResource KbdText}" /></Border>
+                            <TextBlock Text="закрыть" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Footer}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
             <!-- ============ Меньше: the translation is the headline ============ -->
             <Border Width="{Binding LessWidth}" CornerRadius="14" Background="{DynamicResource Surface}" Padding="20,16,18,13"
                     Effect="{StaticResource CardShadow}" Visibility="{Binding IsLess, Converter={StaticResource BoolToVis}}">

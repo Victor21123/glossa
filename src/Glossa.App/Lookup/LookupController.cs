@@ -314,6 +314,111 @@ public sealed class LookupController(
         }
     }
 
+    private readonly Dictionary<string, string> _translations = [];
+
+    /// <summary>The last «Реплика» translation, original and result (Glossa.exe --selftest reports it).</summary>
+    public (string Original, string Translation)? LastTranslation { get; private set; }
+
+    /// <summary>
+    /// Только перевод, «Реплика»: the paragraph under the point translated whole in a small card; no word card, nothing
+    /// saved. Errors go to the card and the check list.
+    /// </summary>
+    public async Task TranslateLineAsync(CapturedFrame frame, int x, int y, LookupContext context, Stopwatch sw)
+    {
+        try
+        {
+            await RunTranslationAsync(frame, x, y, context, sw);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (ex is not LlmException) log.Error("Translation failed", ex);
+            vm.Error = ex.Message;
+            vm.IsBusy = false;
+            Report(context.Trigger, "перевод: " + ex.Message, ok: false);
+        }
+    }
+
+    private async Task RunTranslationAsync(CapturedFrame frame, int x, int y, LookupContext context, Stopwatch sw)
+    {
+        _deferred = null;
+        _pending = null; // S has nothing to save here
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
+        var s = settings();
+        var screenLanguage = context.Choices?.Language ?? s.ScreenLanguage;
+        var roi = new PixelRect(x - RoiHalfWidth, y - RoiUp, x + RoiHalfWidth, y + RoiDown);
+        var crop = frame.Crop(roi);
+        var family = screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
+        var page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct);
+        ct.ThrowIfCancellationRequested();
+        var tOcr = sw.ElapsedMilliseconds;
+
+        if (TextBlocks.At(page, x, y) is not { } block)
+        {
+            vm.ShowMessage("Под курсором не найден текст");
+            popup.ShowNear(new PixelRect(x, y, x + 1, y + 1));
+            Report(context.Trigger, "под курсором нет текста", ok: false, stages: new LookupStages(0, tOcr, 0, 0, null, null));
+            return;
+        }
+        var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
+        var lang = forced ?? Languages.DetectText(block.Text, s.PreferredCjk);
+        var target = Languages.TargetFor(lang, s.NativeLanguage);
+        vm.BeginTranslation(block.Text, lang);
+        popup.ShowNear(block.Box);
+        var tCard = sw.ElapsedMilliseconds;
+        LastAppExe = context.Exe;
+        log.Info($"translate line [{lang}] {block.Text.Length} chars, ocr {tOcr} ms, card {tCard} ms");
+
+        if (ai.Current is null && context.Choices?.Ai != "off") vm.Status = "Загружаю модель…";
+        var (text, model) = await TranslateTextAsync(block.Text, lang, target, context.Choices?.Ai, t => vm.ContextTranslation = t, ct);
+        vm.ContextTranslation = text;
+        LastTranslation = (block.Text, text);
+        vm.IsBusy = false;
+        vm.Status = null;
+        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с · {1}", sw.Elapsed.TotalSeconds, model);
+        Report(context.Trigger, string.Format(Russian, "перевод реплики · {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
+            model, new LookupStages(0, tOcr, 0, tCard, null, sw.ElapsedMilliseconds));
+    }
+
+    /// <summary>
+    /// A text translated by the translator model (with its prompt, loop cut-off and length limit), streamed to
+    /// <paramref name="shown"/> on the caller's context; the same text again comes from memory at once. The three ways
+    /// of «Только перевод» share it. Throws <see cref="LlmException"/> when the AI is off or not there.
+    /// </summary>
+    public async Task<(string Text, string Model)> TranslateTextAsync(string text, string lang, string target, string? gameAi,
+        Action<string>? shown, CancellationToken ct)
+    {
+        var key = $"{target}|{TextBlocks.Key(text)}";
+        lock (_translations)
+        {
+            if (_translations.TryGetValue(key, out var known))
+            {
+                shown?.Invoke(known);
+                return (known, "готовый перевод");
+            }
+        }
+        if (gameAi == "off") throw new LlmException("ИИ в этой игре выключен — Игры и профили.");
+        using var busy = ai.Use();
+        var clients = await ai.GetAsync(ct, gameAi == "lowvram" ? "lowvram" : null);
+        if (clients.Translator is not { } llm) throw new LlmException("ИИ выключен: режим «Выключен» или мало видеопамяти.");
+        var result = "";
+        await foreach (var sofar in _translator.StreamAsync(llm, text, lang, target, ct))
+        {
+            result = sofar.Trim();
+            shown?.Invoke(result);
+        }
+        lock (_translations)
+        {
+            if (_translations.Count >= 500) _translations.Clear();
+            _translations[key] = result;
+        }
+        return (result, llm.Endpoint.IsLocal ? settings().LocalAi.Profile : llm.Endpoint.Name);
+    }
+
     /// <summary>Tab in the card: asks the AI when the card waits for it (AI on Tab), otherwise folds or unfolds as usual.</summary>
     public async void OnDetails()
     {

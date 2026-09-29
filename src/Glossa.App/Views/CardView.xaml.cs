@@ -60,6 +60,7 @@ public partial class CardView : UserControl
     {
         Render(ContextStandard);
         Render(ContextMore);
+        Render(ContextOnly);
     }
 
     private void Render(TextBlock target)

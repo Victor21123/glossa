@@ -44,7 +44,8 @@ public sealed class GameProfile
 /// <param name="DuringLookup">none, frame or pause.</param>
 /// <param name="Ai">default, lowvram or off.</param>
 /// <param name="PauseRefused">Why «Пауза игры» was asked for but a still frame is used instead, or null.</param>
-public sealed record GameChoices(string Language, string DuringLookup, string Ai, string? PauseRefused = null);
+/// <param name="IsProtected">The game is behind an anti-cheat: nothing stays over it (живой перевод is not started).</param>
+public sealed record GameChoices(string Language, string DuringLookup, string Ai, string? PauseRefused = null, bool IsProtected = false);
 
 public static class GameProfiles
 {
@@ -134,7 +135,7 @@ public static class GameProfiles
                 : null;
             if (refused is not null) during = "frame";
         }
-        return new GameChoices(language, during, ai, refused);
+        return new GameChoices(language, during, ai, refused, profile?.IsProtected == true);
     }
 
     /// <summary>False for Windows' own programs and Glossa: pausing them would freeze the desktop.</summary>

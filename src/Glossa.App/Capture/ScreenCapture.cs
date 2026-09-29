@@ -179,6 +179,72 @@ public sealed class ScreenCapture(ILog log) : IDisposable
         }
     }
 
+    /// <summary>
+    /// Живой перевод: the monitor under a point duplicated for as long as it runs. Opening a duplication per grab twice a
+    /// second would cost the game more, and a device of its own never races a lookup's capture on another thread. Null
+    /// when the monitor cannot be duplicated (HDR, a remote session).
+    /// </summary>
+    public WatchSession? Watch(int x, int y)
+    {
+        using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+        for (uint a = 0; factory.EnumAdapters1(a, out var adapter).Success; a++)
+        {
+            using (adapter)
+            {
+                for (uint o = 0; adapter.EnumOutputs(o, out var output).Success; o++)
+                {
+                    using (output)
+                    {
+                        var d = output.Description;
+                        var rc = d.DesktopCoordinates;
+                        if (!d.AttachedToDesktop || x < rc.Left || x >= rc.Right || y < rc.Top || y >= rc.Bottom) continue;
+                        D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport,
+                            [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0], out ID3D11Device device, out ID3D11DeviceContext context).CheckError();
+                        using var output1 = output.QueryInterface<IDXGIOutput1>();
+                        return new WatchSession(device, context, output1.DuplicateOutput(device), new PixelRect(rc.Left, rc.Top, rc.Right, rc.Bottom));
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>One monitor kept duplicated: <see cref="Grab"/> returns its newest frame, or null when nothing new was presented.</summary>
+    public sealed class WatchSession(ID3D11Device device, ID3D11DeviceContext context, IDXGIOutputDuplication dup, PixelRect bounds) : IDisposable
+    {
+        public PixelRect Bounds { get; } = bounds;
+
+        /// <summary>Throws when the duplication is lost (a mode switch, a full-screen change): open a new session then.</summary>
+        public CapturedFrame? Grab()
+        {
+            var result = dup.AcquireNextFrame(50, out var info, out var resource);
+            if (result.Failure)
+            {
+                if (result.Code == Vortice.DXGI.ResultCode.WaitTimeout.Code) return null;
+                result.CheckError();
+            }
+            try
+            {
+                if (info.LastPresentTime == 0) return null;
+                using var tex = resource!.QueryInterface<ID3D11Texture2D>();
+                var td = tex.Description;
+                return td.Format == Format.B8G8R8A8_UNorm ? Read(device, context, tex, (int)td.Width, (int)td.Height, Bounds) : null;
+            }
+            finally
+            {
+                resource?.Dispose();
+                dup.ReleaseFrame();
+            }
+        }
+
+        public void Dispose()
+        {
+            dup.Dispose();
+            context.Dispose();
+            device.Dispose();
+        }
+    }
+
     private void DropDevices()
     {
         foreach (var (d, c) in _devices.Values) { c.Dispose(); d.Dispose(); }

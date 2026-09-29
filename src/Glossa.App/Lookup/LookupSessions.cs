@@ -9,6 +9,7 @@ using Glossa.Core.Config;
 using Glossa.Core.Games;
 using Glossa.Core.Input;
 using Glossa.Core.Library;
+using Glossa.Core.Llm;
 using Glossa.Core.Logging;
 using Glossa.Core.Lookup;
 using Glossa.Core.Ocr;
@@ -38,6 +39,7 @@ public sealed class LookupSessions
     private readonly GamepadHub _pad;
     private readonly ILog _log;
     private readonly Func<IEnumerable<SavedWord>> _saved;
+    private readonly LiveTranslator _live;
     private readonly PadRepeat _repeat = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly DispatcherTimer _repeatTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
@@ -55,6 +57,11 @@ public sealed class LookupSessions
         public FrameWords? Words { get; set; }
         public bool Pad { get; init; }
         public bool Paused { get; set; }
+
+        /// <summary>Перевод экрана: clicks toggle plates instead of looking words up; closing stops the translations.</summary>
+        public bool Translating { get; init; }
+
+        public CancellationTokenSource Stop { get; } = new();
         public PadButtons Held { get; set; }
     }
 
@@ -62,6 +69,8 @@ public sealed class LookupSessions
         LookupController controller, LookupPopup popup, ResumeGuardClient guard, GamepadHub pad, ILog log, Func<IEnumerable<SavedWord>> saved)
     {
         _saved = saved;
+        _live = new LiveTranslator(settings, capture, ocr, controller, Dispatcher.CurrentDispatcher, log);
+        _live.Notice += text => Notice?.Invoke(text);
         _settings = settings;
         _games = games;
         _capture = capture;
@@ -90,6 +99,12 @@ public sealed class LookupSessions
             if (FrameOpen)
             {
                 End();
+                return;
+            }
+            var s = _settings();
+            if (s.Purpose == "translate")
+            {
+                await TranslateAsync(trigger, s.TranslateMode);
                 return;
             }
             var sw = Stopwatch.StartNew();
@@ -135,6 +150,12 @@ public sealed class LookupSessions
                 End();
                 return;
             }
+            // Только перевод: the gamepad has no cursor to point at a line, so it translates the whole screen.
+            if (_settings().Purpose == "translate")
+            {
+                await TranslateAsync(trigger, "screen");
+                return;
+            }
             var (game, context, cjk) = await BeginAsync(trigger);
             var frame = await Task.Run(() => _capture.CaptureMonitorAt((int)game.Bounds.CenterX, (int)game.Bounds.CenterY));
             // The still takes the focus first, then the game is paused: focus never moves away from a frozen window.
@@ -177,6 +198,7 @@ public sealed class LookupSessions
     {
         var s = _session;
         _session = null;
+        s?.Stop.Cancel();
         _repeatTimer.Stop();
         _pad.Steering = false;
         _controller.Cancel();
@@ -214,7 +236,8 @@ public sealed class LookupSessions
         return (game, new LookupContext(trigger, game.Title, game.ExeName, choices), cjk);
     }
 
-    private Session OpenFrame(GameWindow game, LookupContext context, string cjk, CapturedFrame still, bool pad, bool paused)
+    private Session OpenFrame(GameWindow game, LookupContext context, string cjk, CapturedFrame still, bool pad, bool paused,
+        bool translating = false)
     {
         if (_frame is null)
         {
@@ -225,7 +248,7 @@ public sealed class LookupSessions
         var family = context.Choices?.Language == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
         var session = new Session
         {
-            Game = game, Context = context, Cjk = cjk, Still = still, Pad = pad, Paused = paused,
+            Game = game, Context = context, Cjk = cjk, Still = still, Pad = pad, Paused = paused, Translating = translating,
             // The whole still is recognized once (about as long as the region around a cursor); every word on it is then at hand.
             Page = _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
         };
@@ -259,7 +282,7 @@ public sealed class LookupSessions
     /// <summary>A word clicked on the still, or chosen with A.</summary>
     private async Task LookAtAsync(int x, int y)
     {
-        if (_session is not { Still: { } still, Page: { } pending } s) return;
+        if (_session is not { Still: { } still, Page: { } pending, Translating: false } s) return;
         var sw = Stopwatch.StartNew();
         var page = await pending;
         if (_session != s) return;
@@ -271,6 +294,90 @@ public sealed class LookupSessions
         }
         _frame?.SetHint(s.Pad ? PadHint : MouseHint);
         await _controller.LookupAsync(still, x, y, s.Context with { Trigger = s.Pad ? "A" : "Щелчок" }, sw, page);
+    }
+
+    /// <summary>
+    /// Только перевод by the chosen way: the paragraph under the cursor in a small card (line), every paragraph of a still
+    /// of the screen (screen), or subtitles while playing, switched on and off by the same keys (live).
+    /// </summary>
+    private async Task TranslateAsync(string trigger, string mode)
+    {
+        if (mode == "live" && _live.Running)
+        {
+            _live.Stop();
+            Notice?.Invoke("Живой перевод выключен.");
+            return;
+        }
+        var sw = Stopwatch.StartNew();
+        Native.GetCursorPos(out var cursor);
+        var (game, context, cjk) = await BeginAsync(trigger);
+        if (mode == "live" && context.Choices?.IsProtected == true)
+        {
+            Notice?.Invoke($"«{game.Title}»: игра под античитом — живой перевод поверх неё не включается. Перевожу реплику под курсором.");
+            mode = "line";
+        }
+        switch (mode)
+        {
+            case "screen":
+                await TranslateScreenAsync(game, context, cjk, cursor);
+                break;
+            case "live":
+                _live.Start(game, context, cjk);
+                break;
+            default:
+                _session = null;
+                var frame = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
+                await _controller.TranslateLineAsync(frame, cursor.X, cursor.Y, context, sw);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Перевод экрана: a still of the monitor, recognized once; every paragraph worth it gets a plate with its translation,
+    /// the one under the cursor first, then the dialogue, then the rest from the top. Esc or the same keys go back.
+    /// </summary>
+    private async Task TranslateScreenAsync(GameWindow game, LookupContext context, string cjk, Native.POINT cursor)
+    {
+        var still = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
+        var session = OpenFrame(game, context, cjk, still, pad: false, paused: false, translating: true);
+        _frame!.SetHint("Распознаю текст…");
+        try
+        {
+            var page = await session.Page!;
+            if (_session != session) return;
+            var s = _settings();
+            var language = context.Choices?.Language ?? s.ScreenLanguage;
+            var forced = language is "en" or "ja" or "zh" ? language : null;
+            string Lang(TextBlock b) => forced ?? Languages.DetectText(b.Text, cjk);
+            var blocks = TextBlocks.Of(page).Where(b => TextBlocks.Translatable(b, Languages.TargetFor(Lang(b), s.NativeLanguage))).ToList();
+            var first = TextBlocks.At(page, cursor.X, cursor.Y);
+            var dialogue = TextBlocks.Dialogue(blocks);
+            var order = blocks.OrderBy(b => b == first ? 0 : b == dialogue ? 1 : 2).ThenBy(b => b.Box.Top).ToList();
+            if (order.Count == 0)
+            {
+                _frame.SetHint("На снимке нет текста для перевода · Esc — вернуться в игру");
+                return;
+            }
+            var done = 0;
+            foreach (var block in order)
+            {
+                var show = _frame.AddTranslation(block.Box, block.Lines);
+                _frame.SetHint($"Перевожу {done + 1} из {order.Count}…");
+                var lang = Lang(block);
+                var (text, _) = await _controller.TranslateTextAsync(block.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),
+                    context.Choices?.Ai, show, session.Stop.Token);
+                show(text);
+                done++;
+            }
+            _frame.SetHint($"Переведено: {done} · щелчок по переводу — оригинал · Esc — вернуться в игру");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (LlmException ex)
+        {
+            if (_session == session) _frame?.SetHint(ex.Message + " · Esc — вернуться в игру");
+        }
     }
 
     private async Task<bool> PauseAsync(GameWindow game)

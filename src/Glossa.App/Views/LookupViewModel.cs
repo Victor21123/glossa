@@ -39,6 +39,7 @@ public sealed class LookupViewModel : ObservableObject
     private bool _hideTranslation;
     private bool _revealed;
     private bool _dictionariesOpen;
+    private bool _translationOnly;
     private IReadOnlySet<string> _hidden = new HashSet<string>();
     private double? _width;
 
@@ -319,9 +320,36 @@ public sealed class LookupViewModel : ObservableObject
         }
     }
 
-    public bool IsLess => _preset == "less" && !_expanded;
-    public bool IsStandard => _preset == "standard" || (_preset == "less" && _expanded);
-    public bool IsMore => _preset == "more";
+    public bool IsLess => !_translationOnly && _preset == "less" && !_expanded;
+    public bool IsStandard => !_translationOnly && (_preset == "standard" || (_preset == "less" && _expanded));
+    public bool IsMore => !_translationOnly && _preset == "more";
+
+    /// <summary>«Только перевод»: the card is just the line and its translation, whatever the preset.</summary>
+    public bool IsTranslation => _translationOnly;
+
+    /// <summary>The translation card's width: the Standard one, or «Свой».</summary>
+    public double TranslationWidth => _width ?? 560;
+
+    /// <summary>A paragraph to translate (Только перевод, «Реплика»): no word, no dictionaries, nothing to save.</summary>
+    public void BeginTranslation(string text, string language)
+    {
+        Message = null;
+        Error = null;
+        Status = null;
+        Timing = null;
+        Language = language;
+        Headword = "";
+        Translation = null;
+        ContextTranslation = null;
+        Dictionaries = [];
+        Context = text;
+        ContextOffset = -1;
+        WordLength = 0;
+        IsSaved = false;
+        _translationOnly = true;
+        OnLayoutChanged();
+        IsBusy = true;
+    }
 
     /// <summary>Training mode: the translation waits for Space.</summary>
     public bool HideTranslation
@@ -348,6 +376,8 @@ public sealed class LookupViewModel : ObservableObject
     {
         Message = null;
         Error = null;
+        _translationOnly = false;
+        OnLayoutChanged();
         Language = language;
         Headword = seed.DictionaryForm ?? hit.Word;
         Reading = seed.Reading;
@@ -403,6 +433,7 @@ public sealed class LookupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsLess));
         OnPropertyChanged(nameof(IsStandard));
         OnPropertyChanged(nameof(IsMore));
+        OnPropertyChanged(nameof(IsTranslation));
         OnPropertyChanged(nameof(ShowDictionaries));
     }
 }

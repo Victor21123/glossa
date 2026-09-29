@@ -50,6 +50,7 @@ public partial class FrozenFrame : Window
         Shot.Source = BitmapSource.Create(frame.Width, frame.Height, 96, 96, PixelFormats.Bgr32, null, frame.Bgra, frame.Stride);
         Highlight.Visibility = Visibility.Collapsed;
         ShowKnown([]);
+        Plates.Children.Clear();
         if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(this).EnsureHandle();
         Native.SetWindowDisplayAffinity(_hwnd, hideFromCapture ? Native.WDA_EXCLUDEFROMCAPTURE : Native.WDA_NONE);
         Show();
@@ -71,6 +72,45 @@ public partial class FrozenFrame : Window
         Shot.Source = null;
         Highlight.Visibility = Visibility.Collapsed;
         ShowKnown([]);
+        Plates.Children.Clear();
+    }
+
+    /// <summary>
+    /// Перевод экрана: a plate exactly over a paragraph (screen pixels) in the window's colours. The translation is set in
+    /// the original's type size and shrinks to fit the original's place when it is longer (Russian often is), so plates
+    /// never run over each other. A click shows the original under it and back. Returns where the text goes as it streams.
+    /// </summary>
+    public Action<string> AddTranslation(PixelRect box, int lines)
+    {
+        var scale = Scale();
+        const double pad = 4, inset = 6;
+        var width = Math.Max(box.Width / scale + pad * 2, 120);
+        // A one-line caption has room beside it: widen before shrinking its (usually longer) translation.
+        if (lines == 1) width = Math.Max(width, Math.Min(width * 1.8, 420));
+        var text = new TextBlock
+        {
+            Text = "…", TextWrapping = TextWrapping.Wrap, Width = width - inset * 2,
+            FontSize = Math.Clamp(box.Height / Math.Max(1, lines) / scale * 0.58, 11, 22),
+        };
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
+        var plate = new Border
+        {
+            CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(1), Padding = new Thickness(inset, 3, inset, 3),
+            Cursor = Cursors.Hand, ToolTip = "Щелчок — оригинал",
+            Child = new Viewbox { Child = text, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly,
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top },
+        };
+        plate.SetResourceReference(Border.BackgroundProperty, "Surface");
+        plate.SetResourceReference(Border.BorderBrushProperty, "Rule");
+        Place(plate, box, scale, pad);
+        plate.Width = width;
+        plate.MouseLeftButtonUp += (_, e) =>
+        {
+            plate.Opacity = plate.Opacity > 0.5 ? 0.06 : 1;
+            e.Handled = true; // not a click on a word
+        };
+        Plates.Children.Add(plate);
+        return t => text.Text = t;
     }
 
     /// <summary>

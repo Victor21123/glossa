@@ -1,0 +1,18 @@
+<Window x:Class="Glossa.App.Views.SubtitleOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True" ShowInTaskbar="False"
+        ShowActivated="False" ResizeMode="NoResize" SizeToContent="WidthAndHeight"
+        FontFamily="{DynamicResource UiFont}" FontSize="14" TextOptions.TextFormattingMode="Display">
+    <!-- Живой перевод: the translation of the newest dialogue line over the game. Clicks go through it, it never takes
+         the focus, and screen capture does not see it, so Glossa never reads its own subtitles. -->
+    <Border x:Name="Box" CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource Rule}" Padding="18,10,18,13" Margin="8">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.5" Color="Black" />
+        </Border.Effect>
+        <StackPanel>
+            <TextBlock x:Name="Caption" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="0,0,0,4" />
+            <TextBlock x:Name="Line" FontSize="18" LineHeight="26" TextWrapping="Wrap" Foreground="{DynamicResource Ink}" />
+        </StackPanel>
+    </Border>
+</Window>

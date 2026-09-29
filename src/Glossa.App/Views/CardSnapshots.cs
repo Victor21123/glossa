@@ -30,6 +30,24 @@ internal static class CardSnapshots
                 Save(popup, Path.Combine(folder, $"{themeName}-{preset}-{name}.png"));
                 popup.Close();
             }
+            // Только перевод: «Реплика» (the card) and «Живой перевод» (the subtitle).
+            {
+                var vm = new LookupViewModel();
+                var popup = new LookupPopup(vm);
+                vm.BeginTranslation("GARTE, THE CAFETERIA MANAGER - \"Not so fast.\" He points to you. \"You owe me 130 real.\"", "en");
+                vm.ContextTranslation = "ГАРТЕ, ЗАВЕДУЮЩИЙ СТОЛОВОЙ — «Не так быстро». Он указывает на тебя. «Ты должен мне 130 реалов».";
+                vm.IsBusy = false;
+                vm.Timing = "ИИ 0,6 с · gemma26b";
+                popup.ApplyLook(new PopupSettings(), theme);
+                Save(popup, Path.Combine(folder, $"{themeName}-translation.png"));
+                popup.Close();
+
+                var subtitle = new SubtitleOverlay();
+                subtitle.Preview("ПЕРЕВОД", "Я иду прямиком к той девке, у которой самая большая грудь.", 620);
+                Save(subtitle, Path.Combine(folder, $"{themeName}-subtitle.png"));
+                subtitle.Close();
+            }
+
             // «Свой»: narrower, see-through, tinted, its own accent, part of the lines hidden.
             foreach (var (name, fill) in Samples)
             {
@@ -132,6 +150,18 @@ internal static class CardSnapshots
             SaveWindow(custom, Path.Combine(folder, $"settings-{themeName}-card-custom.png"));
             custom.Close();
             settings.Popup = new PopupSettings();
+
+            // Вызов и клавиши with «Только перевод» chosen: the way of translating and what it does.
+            settings.Purpose = "translate";
+            settings.TranslateMode = "live";
+            var translate = new MainWindow(services);
+            SaveWindow(translate, Path.Combine(folder, $"home-{themeName}-translate.png"));
+            translate.ShowTab(MainTab.Settings);
+            translate.SettingsPage.Show("keys");
+            SaveWindow(translate, Path.Combine(folder, $"settings-{themeName}-keys-translate.png"));
+            translate.Close();
+            settings.Purpose = "dictionary";
+            settings.TranslateMode = "line";
 
             // The still frame as the gamepad sees it, through the real path: the picture recognized as a whole, the
             // words of its biggest block, two steps to the right from the first one.
@@ -241,7 +271,7 @@ internal static class CardSnapshots
             AntiCheat = "HoYoProtect", DuringLookup = "pause", CreatedUtc = now.AddDays(-1) };
     }
 
-    private static void SaveWindow(Window window, string file, int width = 2048, int height = 1152)
+    internal static void SaveWindow(Window window, string file, int width = 2048, int height = 1152)
     {
         var root = (FrameworkElement)window.Content;
         root.Measure(new Size(width, height));

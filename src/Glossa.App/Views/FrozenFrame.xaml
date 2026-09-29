@@ -19,6 +19,8 @@
                 </Border.Effect>
             </Border>
         </Canvas>
+        <!-- Перевод экрана: a plate with the translation over each paragraph; a click shows the original under it. -->
+        <Canvas x:Name="Plates" />
         <Border x:Name="Hint" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,18,0,0" Padding="16,9"
                 CornerRadius="10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
                 IsHitTestVisible="False">
