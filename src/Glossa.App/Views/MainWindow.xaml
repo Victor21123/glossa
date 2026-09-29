@@ -377,12 +377,13 @@
                         <StackPanel Margin="28,22,28,24">
                             <Border x:Name="FrameBorder" Height="520" CornerRadius="10" Background="#FF1C1A18" ClipToBounds="True">
                                 <Grid>
-                                    <Viewbox Stretch="UniformToFill">
+                                    <!-- The frame fills the panel and is moved so the word stays in view above the chips (PlaceShot). -->
+                                    <Canvas SizeChanged="OnShotSized">
                                         <Grid x:Name="ShotGrid">
                                             <Image x:Name="ShotImage" Stretch="None" />
                                             <Canvas x:Name="ShotOverlay" IsHitTestVisible="False" />
                                         </Grid>
-                                    </Viewbox>
+                                    </Canvas>
                                     <TextBlock x:Name="NoShot" Text="Кадра нет" Foreground="#99FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Visibility="Collapsed" />
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14">

@@ -81,7 +81,7 @@ public partial class App : Application
         if (renderMain >= 0 && renderMain + 1 < e.Args.Length)
         {
             _theme.Install(this, "dark");
-            CardSnapshots.RenderMain(e.Args[renderMain + 1], renderMain + 2 < e.Args.Length ? e.Args[renderMain + 2] : null, _theme);
+            CardSnapshots.RenderMain(e.Args[renderMain + 1], _theme);
             Shutdown();
             return;
         }

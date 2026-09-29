@@ -66,10 +66,11 @@ internal static class CardSnapshots
     }
 
     /// <summary>
-    /// <c>Glossa.exe --render-main &lt;folder&gt; [&lt;scenes&gt;]</c>: the main window with sample words, dark and light, viewing
-    /// and editing. Uses its own data folder inside <paramref name="folder"/>, never the user's library.
+    /// <c>Glossa.exe --render-main &lt;folder&gt;</c>: the main window with sample words, dark and light, viewing
+    /// and editing. Uses its own data folder inside <paramref name="folder"/>, never the user's library; the game frame is
+    /// a scene drawn here.
     /// </summary>
-    public static void RenderMain(string folder, string? scenes, ThemeManager theme)
+    public static void RenderMain(string folder, ThemeManager theme)
     {
         Directory.CreateDirectory(folder);
         var data = Path.Combine(folder, "data");
@@ -77,10 +78,11 @@ internal static class CardSnapshots
         Environment.SetEnvironmentVariable("GLOSSA_DATA", data); // before anything reads DataPaths
         Directory.CreateDirectory(Path.Combine(data, "shots"));
 
-        var shot = scenes is not null && File.Exists(Path.Combine(scenes, "en_disco_05_1440.jpg"))
-            ? CopyShot(Path.Combine(scenes, "en_disco_05_1440.jpg"), data) : null;
+        // A scene drawn here rather than a game's frame: the snapshots (and the README made from them) show no one
+        // else's art, and they no longer need the test scenes on this computer.
+        var (shot, reconsiderBox, stainedBox) = DrawScene(data);
         var library = new Glossa.Core.Library.LibraryStore(Glossa.Core.Config.DataPaths.Library);
-        foreach (var (w, fresh) in SampleWords(shot)) library.Record(w, fresh);
+        foreach (var (w, fresh) in SampleWords(shot, reconsiderBox, stainedBox)) library.Record(w, fresh);
         var pinned = library.List().First(w => w.Headword == "俺様");
         library.SetPinned(pinned.Id, true);
         var exam = library.CreateCollection("К экзамену N3", filter: null);
@@ -200,7 +202,7 @@ internal static class CardSnapshots
 
             // The still frame as the gamepad sees it, through the real path: the picture recognized as a whole, the
             // words of its biggest block, two steps to the right from the first one.
-            if (shot is not null && StillWords(Path.Combine(data, shot), folder) is { } walk)
+            if (StillWords(Path.Combine(data, shot), folder) is { } walk)
             {
                 var still = new FrozenFrame();
                 still.Preview(walk.Picture, walk.Word, Lookup.LookupSessions.PadHint);
@@ -219,14 +221,64 @@ internal static class CardSnapshots
         }
     }
 
-    private static string CopyShot(string source, string data)
+    /// <summary>
+    /// A game-like scene (a field at dusk and a dialogue box with two sample lines) drawn in WPF and saved as the sample
+    /// shot. Returns its path in the data folder and where "reconsider" and "shit-stained" stand on it, measured from the
+    /// same text layout that drew them.
+    /// </summary>
+    private static (string Shot, PixelRect Reconsider, PixelRect Stained) DrawScene(string data)
     {
-        var rel = Path.Combine("shots", Path.GetFileName(source));
-        File.Copy(source, Path.Combine(data, rel), overwrite: true);
-        return rel;
+        const int w = 1920, h = 1080;
+        const double size = 40, left = 250, top = 850, step = 62;
+        string[] lines = ["I'd reconsider the offer if I were you.", "He looks at his shit-stained coat with a grim expression."];
+        var face = new Typeface(new FontFamily("Georgia"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        var ink = new SolidColorBrush(Color.FromRgb(0xf3, 0xec, 0xdc));
+        FormattedText Text(string s, double em, Brush brush) =>
+            new(s, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, em, brush, 1.0);
+        Brush Fill(byte a, byte r, byte g, byte b) => new SolidColorBrush(Color.FromArgb(a, r, g, b));
+
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var sky = new LinearGradientBrush(new GradientStopCollection
+            {
+                new(Color.FromRgb(0x1b, 0x24, 0x3f), 0), new(Color.FromRgb(0x5a, 0x3f, 0x6b), 0.42),
+                new(Color.FromRgb(0xdc, 0x86, 0x5c), 0.68), new(Color.FromRgb(0xf2, 0xc5, 0x86), 0.8),
+            }, 90);
+            dc.DrawRectangle(sky, null, new Rect(0, 0, w, h));
+            dc.DrawEllipse(Fill(0xe6, 0xff, 0xe2, 0xaa), null, new Point(1380, 560), 88, 88);
+            dc.DrawGeometry(Fill(0xff, 0x4a, 0x3a, 0x5c), null, Geometry.Parse(
+                "M0,640 L180,520 L330,600 L520,450 L700,590 L880,500 L1080,610 L1300,470 L1500,580 L1700,500 L1920,590 L1920,1080 L0,1080 Z"));
+            dc.DrawGeometry(Fill(0xff, 0x2c, 0x2a, 0x3e), null, Geometry.Parse(
+                "M0,760 C300,690 520,720 760,700 C1000,680 1260,740 1500,700 C1680,672 1820,700 1920,690 L1920,1080 L0,1080 Z"));
+            dc.DrawGeometry(Fill(0xff, 0x1f, 0x1d, 0x2c), null, Geometry.Parse(
+                "M1560,700 L1560,560 L1545,560 L1575,505 L1605,560 L1590,560 L1590,700 Z"));
+
+            var frame = new Pen(Fill(0xcc, 0xe8, 0xdc, 0xc0), 3);
+            dc.DrawRoundedRectangle(Fill(0xe6, 0x0f, 0x13, 0x1f), frame, new Rect(200, 790, 1520, 250), 18, 18);
+            dc.DrawRoundedRectangle(Fill(0xff, 0x2a, 0x22, 0x33), frame, new Rect(240, 752, 270, 60), 12, 12);
+            dc.DrawText(Text("Old Captain", 30, Fill(0xff, 0xf2, 0xc5, 0x86)), new Point(268, 763));
+            for (var i = 0; i < lines.Length; i++) dc.DrawText(Text(lines[i], size, ink), new Point(left, top + i * step));
+        }
+        var bitmap = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        var rel = Path.Combine("shots", "scene.jpg");
+        var jpeg = new JpegBitmapEncoder { QualityLevel = 92 };
+        jpeg.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var fs = File.Create(Path.Combine(data, rel))) jpeg.Save(fs);
+
+        PixelRect Box(int line, string word)
+        {
+            var at = lines[line].IndexOf(word, StringComparison.Ordinal);
+            var x = left + Text(lines[line][..at], size, ink).WidthIncludingTrailingWhitespace;
+            var text = Text(word, size, ink);
+            var y = top + line * step;
+            return new PixelRect(x, y + 6, x + text.Width, y + text.Height - 6);
+        }
+        return (rel, Box(0, "reconsider"), Box(1, "shit-stained"));
     }
 
-    private static IEnumerable<(Glossa.Core.Library.SavedWord Word, bool Fresh)> SampleWords(string? shot)
+    private static IEnumerable<(Glossa.Core.Library.SavedWord Word, bool Fresh)> SampleWords(string shot, PixelRect reconsider, PixelRect stained)
     {
         var now = DateTime.UtcNow;
         Glossa.Core.Library.SavedWord W(string lang, string word, string tr, string? level, string? pos, string ctx, string ctxTr, string here,
@@ -237,15 +289,15 @@ internal static class CardSnapshots
             WindowTitle = game, CreatedUtc = at, Definition = lang == "en" ? "To think again about a decision and possibly change it." : null,
             DefinitionTranslation = lang == "en" ? "Обдумать решение ещё раз и, возможно, изменить его." : null,
         };
-        yield return (W("en", "shit-stained", "испачканный в дерьме", "B1", "прил.", "He looks at his shit-stained Lickra(TM) with a grim expression.",
-            "Он с мрачным видом смотрит на свою заляпанную дерьмом Ликру(TM).", "отвращение, брезгливость", "Disco Elysium", now.AddMinutes(-30),
-            register: "vulgar") with { ShotFile = shot, WordBox = new PixelRect(941 * 1440 / 1440, 346, 1027, 368) }, true);
+        yield return (W("en", "shit-stained", "испачканный в дерьме", "B1", "прил.", "He looks at his shit-stained coat with a grim expression.",
+            "Он с мрачным видом смотрит на свой заляпанный дерьмом плащ.", "отвращение, брезгливость", "Night Harbor", now.AddMinutes(-30),
+            register: "vulgar") with { ShotFile = shot, WordBox = stained }, true);
         yield return (W("en", "reconsider", "передумать", "B2", "гл.", "You should reconsider your position, mortal.",
             "Тебе стоит пересмотреть свою позицию, смертный.", "Мелиноя угрожает: «одумайся», вежливая форма звучит как предупреждение",
             "Hades II", now.AddDays(-2)), true);
         yield return (W("en", "reconsider", "передумать", "B2", "гл.", "I'd reconsider the offer if I were you.",
-            "На твоём месте я бы пересмотрел предложение.", "совет с оттенком угрозы: «подумай ещё раз»", "Disco Elysium", now.AddMinutes(-10),
-            usageTr: "пересмотреть") with { ShotFile = shot, WordBox = new PixelRect(941, 346, 1027, 368) }, true);
+            "На твоём месте я бы пересмотрел предложение.", "совет с оттенком угрозы: \"подумай ещё раз\"", "Night Harbor", now.AddMinutes(-10),
+            usageTr: "пересмотреть") with { ShotFile = shot, WordBox = reconsider }, true);
         yield return (W("ja", "合体する", "сливаться, объединяться", "N4", "гл. suru", "スライムたちが どんどん 合体していく！",
             "Слаймы всё больше и больше сливаются воедино!", "слаймы сливаются в одного большого", "Dragon Quest XI S", now.AddMinutes(-20),
             reading: "がったいする") with { Word = "合体" }, true);

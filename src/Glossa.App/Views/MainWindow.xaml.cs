@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly AppServices _services;
     private readonly DispatcherTimer _aiTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private WordEntry? _shown;
+    private Glossa.Core.Ocr.PixelRect? _shotBox;
 
     public MainWindow(AppServices services)
     {
@@ -193,8 +194,10 @@ public partial class MainWindow : Window
         ShotImage.Height = img.PixelHeight;
         ShotOverlay.Width = img.PixelWidth;
         ShotOverlay.Height = img.PixelHeight;
+        _shotBox = entry!.WordBox;
+        PlaceShot();
 
-        if (entry!.WordBox is { } b)
+        if (entry.WordBox is { } b)
         {
             var scale = Math.Max(1, img.PixelWidth / 1200.0);
             // White with a dark edge in any theme: it lies over the game picture, as on the still frame.
@@ -210,6 +213,24 @@ public partial class MainWindow : Window
                 ShotOverlay.Children.Add(ring);
             }
         }
+    }
+
+    private void OnShotSized(object sender, SizeChangedEventArgs e) => PlaceShot();
+
+    /// <summary>
+    /// The frame fills its panel; the word, when known, sits in the middle of what the chips along the bottom leave in
+    /// view. Centred as a whole it could hide under them: game dialogue is usually at the bottom of the screen.
+    /// </summary>
+    private void PlaceShot()
+    {
+        if (ShotImage.Source is not BitmapSource img || FrameBorder.ActualWidth <= 0) return;
+        const double chips = 58; // the row of chips along the bottom edge
+        double w = FrameBorder.ActualWidth, h = FrameBorder.ActualHeight, iw = img.PixelWidth, ih = img.PixelHeight;
+        var scale = Math.Max(w / iw, h / ih);
+        var (cx, cy) = _shotBox is { } b ? (b.CenterX, b.CenterY) : (iw / 2, ih / 2);
+        var left = Math.Clamp(w / 2 - cx * scale, w - iw * scale, 0);
+        var top = Math.Clamp((h - chips) / 2 - cy * scale, h - ih * scale, 0);
+        ShotGrid.RenderTransform = new MatrixTransform(scale, 0, 0, scale, left, top);
     }
 
     /// <summary>The sentence with the word highlighted (inverse, like the card).</summary>
