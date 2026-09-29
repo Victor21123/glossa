@@ -313,11 +313,32 @@ public class DictionaryTests
         Assert.Equal("JLPT N2", levels.LevelOf("ja", "薄暗い", "うすぐらい"));
         Assert.Equal("HSK 1", levels.LevelOf("zh", "學習"));
         Assert.Equal("HSK 4", levels.LevelOf("zh", "阿姨"));
-        Assert.Equal("HSK 7–9", levels.LevelOf("zh", "呵护"));
+        Assert.Equal("HSK 7-9", levels.LevelOf("zh", "呵护"));
         Assert.Equal("B1", levels.LevelOf("en", "Abandon"));
         Assert.Equal("A1", levels.LevelOf("en", "am"));
         Assert.Equal("C1", levels.LevelOf("en", "cloak"));
         Assert.Null(levels.LevelOf("en", "zebra"));
+    }
+
+    [Fact]
+    public void Levels_built_with_an_en_dash_get_a_hyphen()
+    {
+        var dir = Temp();
+        var db = Path.Combine(dir, "levels.db");
+        using (var old = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db};Pooling=False"))
+        {
+            old.Open();
+            using var cmd = old.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE levels(lang TEXT NOT NULL, term TEXT NOT NULL, reading TEXT, level TEXT NOT NULL, rank INTEGER NOT NULL);
+                INSERT INTO levels VALUES ('zh', '呵护', NULL, 'HSK 7' || char(8211) || '9', 7), ('zh', '阿姨', NULL, 'HSK 4', 4);
+                """;
+            cmd.ExecuteNonQuery();
+        }
+
+        using var levels = new LevelService(db);
+        Assert.Equal("HSK 7-9", levels.LevelOf("zh", "呵护"));
+        Assert.Equal("HSK 4", levels.LevelOf("zh", "阿姨"));
     }
 
     [Fact]

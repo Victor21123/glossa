@@ -8,7 +8,7 @@ public class WordLevelsTests
     [InlineData("ja", "JLPT N3", "JLPT", "N3")]   // from the lists
     [InlineData("ja", "N1", "JLPT", "N1")]        // from the AI
     [InlineData("zh", "HSK 4", "HSK", "4")]
-    [InlineData("zh", "HSK 7–9", "HSK", "7-9")]
+    [InlineData("zh", "HSK 7-9", "HSK", "7-9")]
     [InlineData("en", "b2", "CEFR", "B2")]
     public void A_level_is_read_on_its_languages_list(string language, string level, string scale, string value) =>
         Assert.Equal((scale, value), WordLevels.Split(language, level));
@@ -21,6 +21,10 @@ public class WordLevelsTests
     [InlineData("en", null)]
     public void A_level_off_the_languages_list_is_none(string language, string? level) =>
         Assert.Null(WordLevels.Split(language, level));
+
+    [Fact]
+    public void An_en_dash_from_the_ai_or_an_old_library_reads_as_a_hyphen() =>
+        Assert.Equal(("HSK", "7-9"), WordLevels.Split("zh", "HSK 7" + (char)0x2013 + "9"));
 
     [Fact]
     public void Stored_and_short_forms()

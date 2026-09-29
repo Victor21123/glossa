@@ -18,6 +18,7 @@ public sealed class LevelService : IDisposable
     public LevelService(string path)
     {
         if (!File.Exists(path)) return;
+        LevelsBuilder.Upgrade(path);
         _db = new SqliteConnection($"Data Source={path};Mode=ReadOnly;Pooling=False");
         _db.Open();
         _find = _db.CreateCommand();
@@ -133,7 +134,7 @@ public static class LevelsBuilder
                     var old = levels.Where(l => l.StartsWith('o')).Select(l => int.TryParse(l[1..], out var n) ? n : 99).DefaultIfEmpty(99).Min();
                     string label;
                     int rank;
-                    if (newest < 99) { label = newest >= 7 ? "HSK 7–9" : $"HSK {newest}"; rank = newest; }
+                    if (newest < 99) { label = newest >= 7 ? "HSK 7-9" : $"HSK {newest}"; rank = newest; }
                     else if (old < 99) { label = $"HSK {old}"; rank = old + 10; }
                     else continue;
                     Add("zh", s, null, label, rank);
@@ -159,11 +160,29 @@ public static class LevelsBuilder
             }
             tx.Commit();
             using var index = db.CreateCommand();
-            index.CommandText = "CREATE INDEX levels_term ON levels(lang, term, rank); ANALYZE;";
+            index.CommandText = $"CREATE INDEX levels_term ON levels(lang, term, rank); ANALYZE; PRAGMA user_version = {Version};";
             index.ExecuteNonQuery();
         }
         SqliteConnection.ClearAllPools();
         File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>1: "HSK 7-9" with a hyphen (the first builds wrote an en dash, char 8211; 2026-09-29).</summary>
+    public const int Version = 1;
+
+    /// <summary>Brings a levels.db built by an older Glossa up to <see cref="Version"/> without the sources.</summary>
+    public static void Upgrade(string path)
+    {
+        if (!File.Exists(path)) return;
+        using (var db = new SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = "PRAGMA user_version";
+            if (Convert.ToInt32(cmd.ExecuteScalar()) >= Version) return;
+            cmd.CommandText = $"UPDATE levels SET level = 'HSK 7-9' WHERE level = 'HSK 7' || char(8211) || '9'; PRAGMA user_version = {Version};";
+            cmd.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Minimal RFC 4180 reader: quoted fields with commas and doubled quotes.</summary>

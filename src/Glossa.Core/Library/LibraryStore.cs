@@ -116,7 +116,7 @@ public sealed record WordContext
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 6;
+    private const int SchemaVersion = 7;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -245,6 +245,18 @@ public sealed partial class LibraryStore : IDisposable
                 PRAGMA user_version = 6;
                 """);
             tx.Commit();
+        }
+        if (version < 7)
+        {
+            // "HSK 7-9" with a hyphen: levels and smart filters were written with an en dash (char 8211); the filters'
+            // JSON keeps it escaped as backslash (char 92) + "u2013".
+            Exec("""
+                UPDATE words SET level = 'HSK 7-9' WHERE level = 'HSK 7' || char(8211) || '9';
+                UPDATE collections
+                  SET filter = replace(replace(filter, 'HSK 7' || char(8211) || '9', 'HSK 7-9'),
+                                       'HSK 7' || char(92) || 'u20139', 'HSK 7-9')
+                  WHERE filter IS NOT NULL;
+                """);
         }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }

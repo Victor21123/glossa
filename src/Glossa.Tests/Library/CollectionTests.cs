@@ -73,6 +73,31 @@ public sealed class CollectionTests : IDisposable
     }
 
     [Fact]
+    public void A_version_six_library_gets_hsk_7_9_with_a_hyphen()
+    {
+        var dash = "HSK 7" + (char)0x2013 + "9";
+        using (var store = new LibraryStore(_path))
+        {
+            store.Record(Word("呵护", lang: "zh", level: dash), newLookup: true);
+            store.CreateCollection("HSK 7-9", new SmartFilter { Level = dash });
+        }
+        using (var db = new SqliteConnection($"Data Source={_path}"))
+        {
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = "PRAGMA user_version = 6";
+            cmd.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        using var migrated = new LibraryStore(_path);
+        Assert.Equal("HSK 7-9", migrated.List().Single().Level);
+        Assert.Equal("HSK 7-9", migrated.Collections().Single().Filter!.Level);
+        SqliteConnection.ClearAllPools();
+        File.Delete(_path + ".v6.bak");
+    }
+
+    [Fact]
     public void Deleting_a_collection_keeps_its_words()
     {
         using var store = new LibraryStore(_path);
