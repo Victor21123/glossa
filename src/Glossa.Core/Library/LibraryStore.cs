@@ -387,8 +387,12 @@ public sealed partial class LibraryStore : IDisposable
                 if (added.Revived) Run("UPDATE words SET deleted = 1 WHERE id = $id", ("$id", added.WordId));
                 MirrorNewest(added.WordId);
             }
+            // Frames are stored by content: another word from the same still frame may still show this one.
+            shots.RemoveAll(shot => Scalar("""
+                SELECT 1 FROM contexts WHERE shot_file = $s UNION ALL SELECT 1 FROM words WHERE shot_file = $s LIMIT 1
+                """, ("$s", shot)) is not null);
             tx.Commit();
-            return shots;
+            return shots.Distinct().ToList();
         }
     }
 

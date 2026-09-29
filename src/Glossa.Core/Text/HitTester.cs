@@ -12,7 +12,35 @@ public sealed record WordHit(
     string Context,
     int ContextOffset,
     Script Script,
-    float Score = 1f);
+    float Score = 1f)
+{
+    /// <summary>
+    /// The same place with the word as the user spelled it (a misread corrected in the card): the sentence and the line
+    /// read it that way too, and the word is as sure as a typed one.
+    /// </summary>
+    public WordHit Respelled(string word)
+    {
+        // The misread word under the cursor: at its offset, else the occurrence nearest to it.
+        var offset = At(Context, ContextOffset);
+        var context = offset >= 0 ? Context[..offset] + word + Context[(offset + Word.Length)..] : Context;
+        if (offset < 0) offset = Context.IndexOf(word, StringComparison.Ordinal);
+
+        // The same one in the line, placed by where the line sits in the sentence.
+        var lineStart = Context.IndexOf(Line, StringComparison.Ordinal);
+        var inLine = At(Line, lineStart >= 0 && offset >= lineStart ? offset - lineStart : 0);
+        var line = inLine >= 0 ? Line[..inLine] + word + Line[(inLine + Word.Length)..] : Line;
+        return this with { Word = word, Context = context, ContextOffset = offset, Line = line, Script = Scripts.Dominant(word), Score = 1f };
+    }
+
+    private int At(string text, int near)
+    {
+        if (near >= 0 && near + Word.Length <= text.Length && string.CompareOrdinal(text, near, Word, 0, Word.Length) == 0) return near;
+        var best = -1;
+        for (var i = text.IndexOf(Word, StringComparison.Ordinal); i >= 0; i = text.IndexOf(Word, i + 1, StringComparison.Ordinal))
+            if (best < 0 || Math.Abs(i - near) < Math.Abs(best - near)) best = i;
+        return best;
+    }
+}
 
 /// <summary>
 /// Finds word boundaries in text written without spaces (Japanese, Chinese).

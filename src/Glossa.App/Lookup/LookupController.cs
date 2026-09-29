@@ -53,10 +53,120 @@ public sealed class LookupController(
     {
         public required WordHit Hit { get; set; }
         public required CapturedFrame Frame { get; init; }
+        public required Run Run { get; init; }
         public required string AppExe { get; init; }
         public required string WindowTitle { get; init; }
         public required WordCard Card { get; set; }
         public string? SavedId { get; set; }
+
+        /// <summary>What the first save added to the library, taken back if the user corrects the word.</summary>
+        public RecordedLookup? Added { get; set; }
+
+        /// <summary>The word as recognized, when the model read it differently (offered back when correcting).</summary>
+        public string? Misread { get; set; }
+    }
+
+    /// <summary>One lookup's frame, point, game and settings, and when each stage finished (ms from the key press).</summary>
+    private sealed class Run(CapturedFrame frame, Native.POINT cursor, LookupContext context, Stopwatch sw, AppSettings settings,
+        string? forced, string cjk, CancellationToken ct)
+    {
+        public CapturedFrame Frame => frame;
+        public Native.POINT Cursor => cursor;
+        public LookupContext Context => context;
+        public Stopwatch Sw => sw;
+        public AppSettings Settings => settings;
+        public string? Forced => forced;
+        public string Cjk => cjk;
+        public CancellationToken Ct => ct;
+        public long Capture { get; init; }
+        public long Ocr { get; init; }
+        public long Plan { get; set; }
+        public long Card { get; set; }
+
+        /// <summary>Saved even with autosave off: the corrected word of a card the user had saved.</summary>
+        public bool SaveAnyway { get; init; }
+
+        public LookupStages Stages(long? first = null, long? ai = null) => new(Capture, Ocr, Plan, Card, first, ai);
+    }
+
+    /// <summary>The word the card is about, as the frame reads it (what F2 starts correcting).</summary>
+    public string? CurrentWord => _pending?.Hit.Word;
+
+    /// <summary>
+    /// Spellings to offer when the user corrects the word: the recognizer's own reading if the model changed it, then
+    /// dictionary words a letter or two away (Latin script), the commonest first. Takes up to ~0.1 s: call off the UI thread.
+    /// </summary>
+    public IReadOnlyList<string> CorrectionChoices()
+    {
+        if (_pending is not { } p) return [];
+        var current = p.Hit.Word;
+        var choices = new List<string>();
+        if (p.Misread is { } misread) choices.Add(misread);
+        choices.AddRange(words.Suggestions(p.Card.Language, current));
+        return choices.Where(c => !string.Equals(c, current, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(5).ToList();
+    }
+
+    /// <summary>
+    /// The user's spelling of a misread word (F2 or a click on it in the card): whatever the lookup of the misread word
+    /// added to the library is taken back, and the card is made again for the corrected word in the same sentence, frame
+    /// and game - saved in its place.
+    /// </summary>
+    public async Task CorrectAsync(string word)
+    {
+        word = word.Trim();
+        if (_pending is not { } p || word.Length == 0 || word == p.Hit.Word) return;
+        _deferred = null;
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        // The misread card is gone: S (or the save button) meanwhile must not save it again.
+        _pending = null;
+        vm.IsSaved = false;
+        var wasSaved = p.Added is not null;
+        try
+        {
+            if (p.Added is { } added)
+            {
+                try
+                {
+                    foreach (var shot in library.Retract(added)) DeleteShot(shot);
+                }
+                catch (Exception ex)
+                {
+                    log.Error("Retract failed", ex); // the misread word stays in the library; the correction goes on
+                }
+                p.Added = null;
+            }
+            log.Info($"lookup: corrected '{p.Hit.Word}' -> '{word}'");
+            var old = p.Run;
+            // A word saved by hand (autosave off) is saved again under its corrected spelling.
+            var run = new Run(old.Frame, old.Cursor, old.Context, Stopwatch.StartNew(), settings(), old.Forced, old.Cjk, cts.Token)
+            {
+                SaveAnyway = wasSaved,
+            };
+            await ShowAsync(run, p.Hit.Respelled(word), page: null);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            log.Error("Corrected lookup failed", ex);
+            vm.Error = ex.Message;
+            vm.IsBusy = false;
+        }
+    }
+
+    private void DeleteShot(string shot)
+    {
+        try
+        {
+            File.Delete(Path.Combine(DataPaths.Root, shot));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warn($"shot not deleted: {shot} ({ex.Message})");
+        }
     }
 
     /// <summary>
@@ -125,14 +235,8 @@ public sealed class LookupController(
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
         var ct = cts.Token;
-        var (title, exe, trigger) = (context.Title, context.Exe, context.Trigger);
         var cursor = new Native.POINT { X = x, Y = y };
         var tCapture = sw.ElapsedMilliseconds;
-        long tOcrAt = 0, tPlanAt = 0, tCardAt = 0;
-        LookupStages Stages(long? first = null, long? ai = null) =>
-            new(tCapture, tOcrAt, tPlanAt, tCardAt, first, ai);
-        void Report(string result, bool ok, double? aiSeconds = null, string? model = null, LookupStages? stages = null) =>
-            this.Report(trigger, result, ok, aiSeconds, model, stages);
 
         var s = settings();
         // The game's profile may read its text in one language (Игры и профили), else as in Языки.
@@ -156,11 +260,12 @@ public sealed class LookupController(
             }
         }
         ct.ThrowIfCancellationRequested();
-        var tOcr = tOcrAt = sw.ElapsedMilliseconds;
+        var tOcr = sw.ElapsedMilliseconds;
 
         // A game always in one language (Языки, or its profile) skips the guessing: its text is read as that language.
         var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
         var cjk = forced is "ja" or "zh" ? forced : s.PreferredCjk;
+        var run = new Run(frame, cursor, context, sw, s, forced, cjk, ct) { Capture = tCapture, Ocr = tOcr };
         page = words.Normalize(page, forced);
         var hit = words.Hit(page, cursor.X, cursor.Y, cjk);
         if (hit is null)
@@ -168,28 +273,52 @@ public sealed class LookupController(
             vm.ShowMessage("Под курсором не найден текст");
             popup.ShowNear(new PixelRect(cursor.X, cursor.Y, cursor.X + 1, cursor.Y + 1));
             log.Info($"lookup: no text (capture {tCapture} ms, ocr {tOcr} ms, {page.Lines.Count} lines)");
-            Report("под курсором нет текста", ok: false, stages: Stages());
+            Report(context.Trigger, "под курсором нет текста", ok: false, stages: run.Stages());
             return;
         }
+        await ShowAsync(run, hit, page);
+    }
+
+    /// <summary>
+    /// The card for a word on the frame: offline dictionaries at once, then the AI card streamed in and saved. With the
+    /// recognized <paramref name="page"/> a doubtful word may be read again by the model from the picture; without it
+    /// (the user's own spelling, <see cref="CorrectAsync"/>) the word is taken as given.
+    /// </summary>
+    private async Task ShowAsync(Run run, WordHit hit, OcrPage? page)
+    {
+        var (frame, cursor, context, sw, s, forced, cjk, ct) = (run.Frame, run.Cursor, run.Context, run.Sw, run.Settings, run.Forced, run.Cjk, run.Ct);
+        var (title, exe, trigger) = (context.Title, context.Exe, context.Trigger);
+        LookupStages Stages(long? first = null, long? ai = null) => run.Stages(first, ai);
+        void Report(string result, bool ok, double? aiSeconds = null, string? model = null, LookupStages? stages = null) =>
+            this.Report(trigger, result, ok, aiSeconds, model, stages);
 
         // Offline dictionaries answer in milliseconds, before the AI model is even loaded.
         var ds = s.Dictionaries;
         var plan = await Task.Run(() => words.Plan(hit, cjk, s.NativeLanguage, ds, forced), ct);
         // A newer lookup started meanwhile: do not show this card over it.
         ct.ThrowIfCancellationRequested();
-        tPlanAt = sw.ElapsedMilliseconds;
+        run.Plan = sw.ElapsedMilliseconds;
         var (lang, target, seed, sections) = (plan.Language, plan.Target, plan.Seed, plan.Sections);
 
         vm.Begin(hit, seed, lang, library.Contains(lang, seed.DictionaryForm ?? hit.Word));
         if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
         popup.ShowNear(hit.Box);
-        var tSkeleton = tCardAt = sw.ElapsedMilliseconds;
-        log.Info($"lookup '{hit.Word}' [{lang}] capture {tCapture} ms, ocr {tOcr} ms ({page.Elapsed.TotalMilliseconds:F0}), " +
-                 $"card {tSkeleton} ms, {sections.Count} dictionaries");
+        run.Card = sw.ElapsedMilliseconds;
+        log.Info($"lookup '{hit.Word}' [{lang}] capture {run.Capture} ms, ocr {run.Ocr} ms" +
+                 (page is null ? " (spelled by the user)" : $" ({page.Elapsed.TotalMilliseconds:F0})") +
+                 $", card {run.Card} ms, {sections.Count} dictionaries");
 
-        var pending = _pending = new Pending { Hit = hit, Frame = frame, AppExe = exe, WindowTitle = title, Card = seed };
+        var pending = _pending = new Pending { Hit = hit, Frame = frame, Run = run, AppExe = exe, WindowTitle = title, Card = seed };
         LastAppExe = exe;
         if (s.Popup.AutoPlayAudio) Speak();
+
+        // A doubtful word (not in the dictionaries, unsure letters, a letter lost at the line's end) is marked on the
+        // card only while the doubt stands: the model did not read it again (off, no vision, no AI yet) or failed to.
+        var doubtful = page is not null && VisionReading.Doubtful(hit, plan.Known, page);
+        void StillUnsure()
+        {
+            if (doubtful) vm.SetRecognition(unsure: true, readFrom: null);
+        }
 
         // The same word in the same line again (a re-read dialogue, a menu): the card is already known.
         string CacheKey() => $"{lang}|{target}|{s.DictionaryEngine}|{s.LocalAi.Profile}|{hit.Word}|{hit.Context}";
@@ -198,12 +327,13 @@ public sealed class LookupController(
         {
             if (!s.Performance.CacheCards || _cache.Get(cacheKey) is not { } known) return false;
             vm.Apply(known);
+            StillUnsure();
             pending.Card = known;
             if (DictionaryCheck.Of(known.Translation, sections, target) is { } knownCheck) vm.SetDictionaryMark(knownCheck.Matches);
             vm.IsBusy = false;
             vm.Timing = string.Format(Russian, "готовая карточка, {0:0.0} с", sw.Elapsed.TotalSeconds);
             Report($"слово \"{hit.Word}\", готовая карточка", ok: true, stages: Stages(sw.ElapsedMilliseconds, sw.ElapsedMilliseconds));
-            if (s.AutoSaveWords) Save(pending);
+            if (s.AutoSaveWords || run.SaveAnyway) Save(pending);
             return true;
         }
         if (Cached()) return;
@@ -213,6 +343,7 @@ public sealed class LookupController(
         {
             vm.IsBusy = false;
             vm.Status = "Tab - спросить ИИ";
+            StillUnsure(); // Tab may still have the model read it again
             _deferred = CardAsync;
             Report($"слово \"{hit.Word}\", справочники, ИИ по Tab", ok: true, stages: Stages());
             return;
@@ -226,6 +357,7 @@ public sealed class LookupController(
         {
             vm.Status = sections.Count > 0 ? "ИИ в этой игре выключен - показаны справочники" : "ИИ в этой игре выключен";
             vm.IsBusy = false;
+            StillUnsure();
             Report($"слово \"{hit.Word}\", только справочники (профиль игры)", ok: true, stages: Stages());
             return;
         }
@@ -241,6 +373,7 @@ public sealed class LookupController(
         {
             vm.Error = ex.Message;
             vm.IsBusy = false;
+            StillUnsure();
             Report($"слово \"{hit.Word}\", ИИ: {ex.Message}", ok: false, stages: Stages());
             return;
         }
@@ -250,6 +383,7 @@ public sealed class LookupController(
                 ? "ИИ выключен (мало видеопамяти или режим \"выкл.\") - показаны словари"
                 : "ИИ выключен - мало видеопамяти или режим \"выкл.\"";
             vm.IsBusy = false;
+            StillUnsure();
             Report($"слово \"{hit.Word}\", только справочники", ok: true, stages: Stages());
             return;
         }
@@ -258,26 +392,38 @@ public sealed class LookupController(
         // A word no dictionary knows, or one the recognizer was unsure of, is read again by the model from the picture
         // (a game's cursor over the letters, a stylized font); the card and its dictionaries follow the new reading.
         // A failed reading only costs the second look: the card is made from the word as recognized.
-        if (clients.Vision is { } eyes && VisionReading.Doubtful(hit, plan.Known, page)
-            && await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) is { } reading)
+        if (doubtful && page is not null)
         {
-            var tRead = sw.ElapsedMilliseconds;
-            var reread = words.Normalize(VisionReading.Correct(page, hit, reading), forced);
-            var again = words.Hit(reread, cursor.X, cursor.Y, cjk);
-            log.Info($"lookup: read again '{hit.Word}' -> '{again?.Word}' at {tRead} ms");
-            if (again is not null && (again.Word != hit.Word || again.Context != hit.Context))
+            var reading = clients.Vision is { } eyes ? await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) : null;
+            var again = reading is null ? null : words.Hit(words.Normalize(VisionReading.Correct(page, hit, reading), forced), cursor.X, cursor.Y, cjk);
+            if (reading is not null) log.Info($"lookup: read again '{hit.Word}' -> '{again?.Word}' at {sw.ElapsedMilliseconds} ms");
+            if (again is null)
             {
-                hit = again;
-                page = reread;
-                plan = await Task.Run(() => words.Plan(hit, cjk, s.NativeLanguage, ds, forced), ct);
-                ct.ThrowIfCancellationRequested();
-                (lang, target, seed, sections) = (plan.Language, plan.Target, plan.Seed, plan.Sections);
-                vm.Begin(hit, seed, lang, library.Contains(lang, seed.DictionaryForm ?? hit.Word));
-                if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
-                pending.Hit = hit;
-                pending.Card = seed;
-                cacheKey = CacheKey();
-                if (Cached()) return;
+                StillUnsure(); // no vision, or it could not read the piece
+            }
+            else
+            {
+                doubtful = false; // the model has read it: agreeing leaves no mark
+                // The user already typing a spelling of their own (F2 during the second look) keeps the card as it is.
+                if ((again.Word != hit.Word || again.Context != hit.Context) && !vm.IsCorrecting)
+                {
+                    var misread = hit.Word;
+                    hit = again;
+                    plan = await Task.Run(() => words.Plan(hit, cjk, s.NativeLanguage, ds, forced), ct);
+                    ct.ThrowIfCancellationRequested();
+                    (lang, target, seed, sections) = (plan.Language, plan.Target, plan.Seed, plan.Sections);
+                    vm.Begin(hit, seed, lang, library.Contains(lang, seed.DictionaryForm ?? hit.Word));
+                    if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
+                    if (hit.Word != misread)
+                    {
+                        vm.SetRecognition(unsure: false, readFrom: misread);
+                        pending.Misread = misread;
+                    }
+                    pending.Hit = hit;
+                    pending.Card = seed;
+                    cacheKey = CacheKey();
+                    if (Cached()) return;
+                }
             }
         }
 
@@ -340,7 +486,7 @@ public sealed class LookupController(
             Stages(tFirst, sw.ElapsedMilliseconds));
 
         if (pending.Card.Error is null && !ct.IsCancellationRequested) _cache.Put(cacheKey, pending.Card);
-        if (s.AutoSaveWords && pending.Card.Error is null && !ct.IsCancellationRequested) Save(pending);
+        if ((s.AutoSaveWords || run.SaveAnyway) && pending.Card.Error is null && !ct.IsCancellationRequested) Save(pending);
         }
     }
 
@@ -683,7 +829,9 @@ public sealed class LookupController(
                 WordBox = box,
             };
             // The first save of a lookup counts it; saving the same lookup again (S after autosave) only refreshes it.
-            p.SavedId = library.Record(p.SavedId is null ? word : word with { Id = p.SavedId }, newLookup: p.SavedId is null);
+            var first = p.SavedId is null;
+            p.SavedId = library.Record(p.SavedId is { } saved ? word with { Id = saved } : word, newLookup: first, out var added);
+            if (first) p.Added = added;
             vm.IsSaved = true;
         }
         catch (Exception ex)

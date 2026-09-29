@@ -122,12 +122,18 @@ public sealed class LibraryStoreTests : IDisposable
         Assert.Equal(1, kept.Lookups);
         Assert.Equal("Keep watching.", Assert.Single(kept.Contexts).Context);
 
+        // A frame another word still shows stays (frames are stored by content: one still frame, many words).
+        store.Record(Seen("you", "I'm watching you.") with { ShotFile = "shots/frame.jpg" }, newLookup: true);
+        store.Record(Seen("wtching", "I'm wtching you.") with { ShotFile = "shots/frame.jpg" }, newLookup: true, out var sameFrame);
+        Assert.Empty(store.Retract(sameFrame!));
+        Assert.Equal(2, store.List().Count);
+
         // A deleted word brought back by the lookup is deleted again.
         store.Delete(id);
         store.Record(Seen("watching", "Keep watching."), newLookup: true, out var back);
         Assert.True(back!.Revived);
         Assert.Empty(store.Retract(back)); // the sentence was already there
-        Assert.Empty(store.List());
+        Assert.Equal("you", Assert.Single(store.List()).Word);
         Assert.Single(store.ListDeleted());
     }
 

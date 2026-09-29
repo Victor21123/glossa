@@ -166,6 +166,49 @@ public sealed class LookupViewModel : ObservableObject
         DictionaryMark = matches ? "есть в словаре" : "нет в словаре - перевод по контексту";
     }
 
+    private string? _recognition;
+    private bool _recognitionUnsure;
+    private bool _isCorrecting;
+    private string _correction = "";
+    private IReadOnlyList<string> _correctionChoices = [];
+
+    /// <summary>
+    /// "Распознано неуверенно" while the recognizer's doubt about the word stands (the model did not read it again);
+    /// "Перечитано, было: Wching" when the model read it differently; null otherwise (decided 2026-09-30).
+    /// </summary>
+    public string? Recognition
+    {
+        get => _recognition;
+        private set
+        {
+            if (SetProperty(ref _recognition, value)) OnPropertyChanged(nameof(ShowRecognition));
+        }
+    }
+
+    public bool RecognitionUnsure { get => _recognitionUnsure; private set => SetProperty(ref _recognitionUnsure, value); }
+
+    public void SetRecognition(bool unsure, string? readFrom)
+    {
+        RecognitionUnsure = unsure;
+        Recognition = unsure ? "Распознано неуверенно" : readFrom is null ? null : $"Перечитано, было: {readFrom}";
+    }
+
+    /// <summary>The mark and its "F2 исправить", hidden while the word is being corrected.</summary>
+    public bool ShowRecognition => _recognition is not null && !_isCorrecting;
+
+    /// <summary>F2 or a click on the word: the word becomes an input, spellings to pick from under it.</summary>
+    public bool IsCorrecting
+    {
+        get => _isCorrecting;
+        set
+        {
+            if (SetProperty(ref _isCorrecting, value)) OnPropertyChanged(nameof(ShowRecognition));
+        }
+    }
+
+    public string Correction { get => _correction; set => SetProperty(ref _correction, value); }
+    public IReadOnlyList<string> CorrectionChoices { get => _correctionChoices; set => SetProperty(ref _correctionChoices, value); }
+
     public string? Translation { get => _translation; set => SetProperty(ref _translation, value); }
     public string? Definition
     {
@@ -331,6 +374,7 @@ public sealed class LookupViewModel : ObservableObject
     /// <summary>A paragraph to translate (Только перевод, «Реплика»): no word, no dictionaries, nothing to save.</summary>
     public void BeginTranslation(string text, string language)
     {
+        IsCorrecting = false; // a new lookup ends the correction (the card gives the keyboard back)
         Message = null;
         Error = null;
         Status = null;
@@ -401,6 +445,9 @@ public sealed class LookupViewModel : ObservableObject
         IsBusy = true;
         Status = null;
         Timing = null;
+        SetRecognition(unsure: false, readFrom: null);
+        IsCorrecting = false;
+        CorrectionChoices = [];
     }
 
     public void Apply(WordCard card)
@@ -422,6 +469,7 @@ public sealed class LookupViewModel : ObservableObject
 
     public void ShowMessage(string text)
     {
+        IsCorrecting = false;
         Message = text;
         IsBusy = false;
     }

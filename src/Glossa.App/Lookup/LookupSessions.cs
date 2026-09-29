@@ -237,6 +237,8 @@ public sealed class LookupSessions
     /// <summary>The game in front, its profile touched (created at the first lookup), its window prepared.</summary>
     private async Task<(GameWindow Game, LookupContext Context, string Cjk)> BeginAsync(string trigger)
     {
+        // A word being corrected in the card has the keyboard: it goes back first, or Glossa would pass for the game.
+        _popup.CancelCorrection();
         var game = GameWindow.Foreground();
         // A lookup in another program wakes a game paused by the previous one; in the same game it stays paused.
         if (_session is { Paused: true, Still: null } paused && paused.Game.Pid != game.Pid) End();

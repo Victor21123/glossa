@@ -12,7 +12,7 @@ public partial class KeysSection : UserControl
     private static readonly (string Name, string Key)[] CardKeyList =
     [
         ("Подробнее или короче", "Tab"), ("Показать перевод", "Space"), ("Произнести", "P"), ("Сохранить в словарь", "S"),
-        ("Закрыть", "Escape"),
+        ("Исправить слово", "F2"), ("Закрыть", "Escape"),
     ];
 
     private readonly AppServices _services;

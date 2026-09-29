@@ -131,6 +131,23 @@ internal static class SelfTest
             results.Add(new Result(c.Id + " (повтор)", c.Word, last?.Result ?? "нет отчёта", last?.Ok ?? false, last?.Stages,
                 after.GlossaCpu - before.GlossaCpu, after.ServerCpu - before.ServerCpu, after.GlossaMb, after.ServerMb, after.VramFreeMb));
         }
+        // Correcting the word in the card (F2): the first spelling offered replaces it, the card is made again for it.
+        foreach (var c in cases.Where(c => points.ContainsKey(c.Id) && c.Id.StartsWith("s-en-", StringComparison.Ordinal)).Take(3))
+        {
+            var (x, y) = points[c.Id];
+            await controller.RunAsync(Load(c.Image!), x, y, "selftest", "selftest.exe", Stopwatch.StartNew());
+            var choices = await Task.Run(controller.CorrectionChoices);
+            if (choices.Count == 0) continue;
+            last = null;
+            var before = LoadMeter.Sample(host);
+            var sw = Stopwatch.StartNew();
+            await controller.CorrectAsync(choices[0]);
+            var after = LoadMeter.Sample(host);
+            var ok = last?.Ok == true && controller.CurrentWord == choices[0];
+            results.Add(new Result($"{c.Id} (правка -> {choices[0]})", c.Word,
+                $"{last?.Result ?? "нет отчёта"}; варианты: {string.Join(", ", choices)}; {sw.ElapsedMilliseconds} мс", ok, last?.Stages,
+                after.GlossaCpu - before.GlossaCpu, after.ServerCpu - before.ServerCpu, after.GlossaMb, after.ServerMb, after.VramFreeMb));
+        }
 
         var end = LoadMeter.Sample(host);
         // What of it is garbage the collector has not got to yet, and what is really held.

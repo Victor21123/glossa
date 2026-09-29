@@ -83,6 +83,56 @@ public partial class CardView : UserControl
         target.Inlines.Add(new Run(text[(off + len)..]));
     }
 
+    /// <summary>A click on the word or on the recognizer's mark: correct the word (as F2 does).</summary>
+    public event Action? CorrectRequested;
+
+    /// <summary>Enter in the input or a spelling picked: look this word up instead.</summary>
+    public event Action<string>? CorrectionSubmitted;
+
+    /// <summary>Esc in the input: back to the card as it was.</summary>
+    public event Action? CorrectionCancelled;
+
+    private void OnCorrectClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_vm is null || _vm.IsCorrecting) return;
+        e.Handled = true;
+        CorrectRequested?.Invoke();
+    }
+
+    private void OnCorrectionKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter && _vm is not null)
+        {
+            e.Handled = true;
+            CorrectionSubmitted?.Invoke(_vm.Correction);
+        }
+        else if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            e.Handled = true;
+            CorrectionCancelled?.Invoke();
+        }
+    }
+
+    private void OnCorrectionChoice(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Content: string word }) CorrectionSubmitted?.Invoke(word);
+    }
+
+    /// <summary>Puts the keyboard into the word's input in the layout on screen, the word selected to retype at once.</summary>
+    public bool FocusCorrection()
+    {
+        UpdateLayout();
+        foreach (var host in new[] { CorrectLess, CorrectStandard, CorrectMore })
+        {
+            if (!host.IsVisible || host.Template.FindName("Box", host) is not TextBox box) continue;
+            box.Focus();
+            System.Windows.Input.Keyboard.Focus(box);
+            box.SelectAll();
+            return true;
+        }
+        return false;
+    }
+
     private void OnSave(object sender, RoutedEventArgs e) => SaveRequested?.Invoke();
 
     private void OnSpeak(object sender, RoutedEventArgs e) => SpeakRequested?.Invoke();

@@ -28,6 +28,7 @@ public partial class App : Application
     private const int HotkeyDetails = 5;
     private const int HotkeyReveal = 6;
     private const int HotkeyWindow = 7;
+    private const int HotkeyCorrect = 8;
 
     private readonly ThemeManager _theme = new();
     private KeyStore? _keys;
@@ -162,6 +163,10 @@ public partial class App : Application
         _popup.SaveRequested += _controller.SaveCurrent;
         _popup.SpeakRequested += _controller.Speak;
         _popup.IsVisibleChanged += (_, _) => OnPopupVisibility(_popup.IsVisible);
+        _popup.CorrectRequested += StartCorrection;
+        _popup.CorrectionSubmitted += word => _ = _controller.CorrectAsync(word);
+        // While the word is typed in, S, P, Tab, Space and Esc are letters and keys of the input, not the card's.
+        _popup.CorrectingChanged += correcting => OnPopupVisibility(_popup.IsVisible && !correcting);
         vm.PropertyChanged += (_, ev) =>
         {
             if (ev.PropertyName == nameof(LookupViewModel.IsSaved) && vm.IsSaved) _services.NotifyLibraryChanged();
@@ -353,6 +358,24 @@ public partial class App : Application
             case HotkeySpeak: _controller?.Speak(); break;
             case HotkeyDetails: _controller?.OnDetails(); break;
             case HotkeyReveal: _popup?.RevealTranslation(); break;
+            case HotkeyCorrect: StartCorrection(); break;
+        }
+    }
+
+    /// <summary>F2 or a click on the word in the card: the word becomes an input, the spellings to pick follow.</summary>
+    private async void StartCorrection()
+    {
+        if (_popup is null || _controller is null || _controller.CurrentWord is not { } word) return;
+        var session = _popup.BeginCorrection(word);
+        if (session == 0) return;
+        try
+        {
+            var controller = _controller;
+            _popup.SetCorrectionChoices(session, await Task.Run(controller.CorrectionChoices));
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn($"correction choices: {ex.Message}");
         }
     }
 
@@ -370,16 +393,20 @@ public partial class App : Application
         _main.Activate();
     }
 
-    /// <summary>Esc, S, P, Tab (and Space in training mode) belong to the card only while it is on screen.</summary>
+    /// <summary>
+    /// Esc, S, P, Tab, F2 (and Space in training mode) belong to the card only while it is on screen and its word is not
+    /// being typed in.
+    /// </summary>
     private void OnPopupVisibility(bool visible)
     {
         if (_hotkeys is null) return;
-        if (visible)
+        if (visible && _popup?.IsCorrecting != true)
         {
             _hotkeys.Register(HotkeyClose, "Escape");
             _hotkeys.Register(HotkeySave, "S");
             _hotkeys.Register(HotkeySpeak, "P");
             _hotkeys.Register(HotkeyDetails, "Tab");
+            _hotkeys.Register(HotkeyCorrect, "F2");
             if (_settings.Popup.HideTranslation) _hotkeys.Register(HotkeyReveal, "Space");
         }
         else
@@ -388,6 +415,7 @@ public partial class App : Application
             _hotkeys.Unregister(HotkeySave);
             _hotkeys.Unregister(HotkeySpeak);
             _hotkeys.Unregister(HotkeyDetails);
+            _hotkeys.Unregister(HotkeyCorrect);
             _hotkeys.Unregister(HotkeyReveal);
         }
     }

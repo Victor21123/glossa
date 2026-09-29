@@ -29,6 +29,18 @@ public partial class LookupPopup : Window
     public event Action? SpeakRequested;
     public event Action? Dismissed;
 
+    /// <summary>A click on the word or its recognition mark (F2 comes through the app's keys).</summary>
+    public event Action? CorrectRequested;
+
+    /// <summary>The corrected word, typed or picked: the card is made again for it.</summary>
+    public event Action<string>? CorrectionSubmitted;
+
+    /// <summary>The word's input took (true) or gave back (false) the keyboard: the card's own keys step aside meanwhile.</summary>
+    public event Action<bool>? CorrectingChanged;
+
+    private bool _correcting;
+    private IntPtr _returnFocus;
+
     public LookupPopup(LookupViewModel vm)
     {
         InitializeComponent();
@@ -36,8 +48,84 @@ public partial class LookupPopup : Window
         DataContext = vm;
         Card.SaveRequested += () => SaveRequested?.Invoke();
         Card.SpeakRequested += () => SpeakRequested?.Invoke();
+        Card.CorrectRequested += () => CorrectRequested?.Invoke();
+        Card.CorrectionSubmitted += word =>
+        {
+            EndCorrection(giveFocusBack: true);
+            CorrectionSubmitted?.Invoke(word);
+        };
+        Card.CorrectionCancelled += () => EndCorrection(giveFocusBack: true);
+        // A new lookup (Alt+Q while typing) resets the card: the input goes, and so does the keyboard.
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LookupViewModel.IsCorrecting) && !vm.IsCorrecting) EndCorrection(giveFocusBack: true);
+        };
+        // The game (or anything else) took the foreground back: the input closes, the card's keys return.
+        Deactivated += (_, _) => EndCorrection(giveFocusBack: false);
         SizeChanged += (_, _) => { if (IsVisible) Place(); };
         _outsideClick.Tick += (_, _) => CheckOutsideClick();
+    }
+
+    public bool IsCorrecting => _correcting;
+
+    /// <summary>Which correction is open: spellings found for an earlier one must not land in the next.</summary>
+    private int _session;
+
+    /// <summary>
+    /// F2 or a click: the word becomes an input. The card may take the keyboard for as long as it is typed in - it never
+    /// does otherwise - and the window in front before (the game, or the still frame) gets it back afterwards. Returns the
+    /// correction's number for <see cref="SetCorrectionChoices"/>, 0 if it did not open.
+    /// </summary>
+    public int BeginCorrection(string word)
+    {
+        if (_correcting || !IsVisible || _vm.IsTranslation || _vm.HasMessage) return 0;
+        _correcting = true;
+        _session++;
+        _vm.Correction = word;
+        _vm.CorrectionChoices = [];
+        _vm.IsCorrecting = true;
+        CorrectingChanged?.Invoke(true);
+        _returnFocus = Native.GetForegroundWindow();
+        SetActivatable(true);
+        Native.ForceForeground(_hwnd);
+        Activate();
+        // Windows may refuse the foreground: typing would then go to the game while the card's keys are off.
+        if (Native.GetForegroundWindow() != _hwnd || !Card.FocusCorrection())
+        {
+            EndCorrection(giveFocusBack: true);
+            return 0;
+        }
+        return _session;
+    }
+
+    /// <summary>The spellings to pick, when they are found (they take a moment), for the correction still open.</summary>
+    public void SetCorrectionChoices(int session, IReadOnlyList<string> choices)
+    {
+        if (_correcting && session == _session) _vm.CorrectionChoices = choices;
+    }
+
+    /// <summary>A new lookup while the word is typed in: the keyboard goes back first, so the game is the one in front.</summary>
+    public void CancelCorrection() => EndCorrection(giveFocusBack: true);
+
+    private void EndCorrection(bool giveFocusBack)
+    {
+        if (!_correcting) return;
+        _correcting = false;
+        _vm.IsCorrecting = false;
+        SetActivatable(false);
+        var back = _returnFocus;
+        _returnFocus = IntPtr.Zero;
+        // Only while the card still has it: a window the user switched to meanwhile keeps the focus.
+        if (giveFocusBack && back != IntPtr.Zero && back != _hwnd && Native.GetForegroundWindow() == _hwnd) Native.ForceForeground(back);
+        CorrectingChanged?.Invoke(false);
+    }
+
+    private void SetActivatable(bool activatable)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        var ex = Native.GetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE).ToInt64();
+        ex = activatable ? ex & ~Native.WS_EX_NOACTIVATE : ex | Native.WS_EX_NOACTIVATE;
+        Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -76,11 +164,13 @@ public partial class LookupPopup : Window
     /// <summary>Out of the next screenshot's way without closing (the lookup that takes it shows its own card).</summary>
     public void StepAside()
     {
+        EndCorrection(giveFocusBack: true);
         if (IsVisible) Hide();
     }
 
     public void Dismiss()
     {
+        EndCorrection(giveFocusBack: false); // a click elsewhere has put the focus where the user wants it
         if (!IsVisible) return;
         _outsideClick.Stop();
         Hide();

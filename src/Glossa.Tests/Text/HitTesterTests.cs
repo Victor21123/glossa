@@ -154,6 +154,26 @@ public class HitTesterTests
         Assert.DoesNotContain("うすぐらい", hit.Context);
     }
 
+    [Fact]
+    public void A_corrected_word_is_spelled_so_in_its_sentence_and_line()
+    {
+        var misread = new WordHit("Wching", default, "Wching you. Wching them.", "I kept... Wching you. Wching them.", 10, Script.Latin, 0.4f);
+
+        var fixedHit = misread.Respelled("Watching");
+
+        Assert.Equal("Watching", fixedHit.Word);
+        Assert.Equal("I kept... Watching you. Wching them.", fixedHit.Context); // only the one under the cursor
+        Assert.Equal(10, fixedHit.ContextOffset);
+        Assert.Equal("Watching you. Wching them.", fixedHit.Line);
+        Assert.Equal(1f, fixedHit.Score);
+
+        // The second one under the cursor, and an offset that missed the word by a letter.
+        var second = (misread with { ContextOffset = 24 }).Respelled("Watching");
+        Assert.Equal("I kept... Wching you. Watching them.", second.Context);
+        Assert.Equal("Wching you. Watching them.", second.Line);
+        Assert.Equal("I kept... Wching you. Watching them.", (misread with { ContextOffset = 23 }).Respelled("Watching").Context);
+    }
+
     private sealed class StubMatcher(int start, int length) : ITermMatcher
     {
         public (int Start, int Length) Match(string text, int index) => (start, length);

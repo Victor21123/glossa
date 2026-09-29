@@ -179,6 +179,74 @@
                 </ItemsControl>
             </StackPanel>
         </DataTemplate>
+
+        <!-- A spelling to pick when correcting a misread word. -->
+        <Style x:Key="Chip" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="FontFamily" Value="{Binding DataContext.WordFont, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{DynamicResource Well}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                                CornerRadius="6" Padding="10,3,10,4">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Under the headword of every layout (Tag: the headword's font size). The recognizer's doubt, if it stands,
+             with F2 to correct; while correcting, the word as an input in place (approved "on the spot" editing), the
+             recognizer's and the dictionaries' spellings to pick, Enter and Esc. -->
+        <ControlTemplate x:Key="Correction" TargetType="ContentControl">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Background="Transparent" Cursor="Hand" ToolTip="Исправить слово (F2)"
+                            Visibility="{Binding ShowRecognition, Converter={StaticResource BoolToVis}}" MouseLeftButtonUp="OnCorrectClick">
+                    <TextBlock Text="{Binding Recognition}" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RecognitionUnsure}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Border Style="{StaticResource KbdBox}"><TextBlock Text="F2" Style="{StaticResource KbdText}" /></Border>
+                    <TextBlock Text="исправить" FontSize="11.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Visibility="{Binding IsCorrecting, Converter={StaticResource BoolToVis}}">
+                    <TextBox x:Name="Box" Style="{StaticResource InlineEdit}" TextWrapping="NoWrap" FontWeight="Bold"
+                             Text="{Binding Correction, UpdateSourceTrigger=PropertyChanged}" Foreground="{DynamicResource Ink}"
+                             CaretBrush="{DynamicResource Ink}" FontFamily="{Binding WordFont}"
+                             FontSize="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" PreviewKeyDown="OnCorrectionKey" />
+                    <ItemsControl ItemsSource="{Binding CorrectionChoices}" ItemsPanel="{StaticResource WrapItems}" Margin="0,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding}" Style="{StaticResource Chip}" Click="OnCorrectionChoice" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0" TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Muted}">
+                        <Border Style="{StaticResource KbdBox}"><TextBlock Text="Enter" Style="{StaticResource KbdText}" /></Border>
+                        <TextBlock Text="искать" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource KbdBox}"><TextBlock Text="Esc" Style="{StaticResource KbdText}" /></Border>
+                        <TextBlock Text="отмена" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ControlTemplate>
     </UserControl.Resources>
 
     <Grid x:Name="Root" Margin="16,12,16,24">
@@ -229,10 +297,14 @@
                             </Border>
                         </Grid>
                     </DockPanel>
-                    <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13.5" Foreground="{DynamicResource Muted}">
-                        <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
-                             Foreground="{DynamicResource Ink}" /><Run Text="   " /><Run Text="{Binding Meta, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" />
-                    </TextBlock>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock TextWrapping="Wrap" FontSize="13.5" Foreground="{DynamicResource Muted}" MouseLeftButtonUp="OnCorrectClick"
+                                   Visibility="{Binding IsCorrecting, Converter={StaticResource FalseToVis}}">
+                            <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Ink}" /><Run Text="   " /><Run Text="{Binding Meta, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" />
+                        </TextBlock>
+                        <ContentControl x:Name="CorrectLess" Template="{StaticResource Correction}" Tag="15" Focusable="False" />
+                    </StackPanel>
                     <Border Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="{Binding ContextTranslation}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="15" LineHeight="22"
                                    Foreground="{DynamicResource InkSoft}" Visibility="{Binding ContextTranslation, Converter={StaticResource NullToCollapsed}}" />
@@ -273,10 +345,12 @@
                                 </Border>
                             </StackPanel>
                             <StackPanel>
-                                <TextBlock TextWrapping="Wrap" FontFamily="{Binding WordFont}">
+                                <TextBlock TextWrapping="Wrap" FontFamily="{Binding WordFont}" MouseLeftButtonUp="OnCorrectClick"
+                                           Visibility="{Binding IsCorrecting, Converter={StaticResource FalseToVis}}">
                                     <Run Text="{Binding Headword, Mode=OneWay}" FontSize="30" FontWeight="Bold" /><Run Text="  " /><Run
                                         Text="{Binding ShownReading, Mode=OneWay}" FontSize="15" Foreground="{DynamicResource InkSoft}" />
                                 </TextBlock>
+                                <ContentControl x:Name="CorrectStandard" Template="{StaticResource Correction}" Tag="30" Focusable="False" />
                                 <TextBlock Text="{Binding ShownPartOfSpeech}" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"
                                            Visibility="{Binding ShownPartOfSpeech, Converter={StaticResource NullToCollapsed}}" />
                             </StackPanel>
@@ -414,6 +488,21 @@
                                 <Button Style="{StaticResource SaveButton}" Click="OnSave" />
                             </StackPanel>
                             <StackPanel>
+                                <ContentControl x:Name="CorrectMore" Template="{StaticResource Correction}" Tag="19" Focusable="False" Margin="0,-6,64,8">
+                                    <ContentControl.Style>
+                                        <Style TargetType="ContentControl">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowRecognition}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCorrecting}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ContentControl.Style>
+                                </ContentControl>
                                 <Grid Margin="0,0,64,0">
                                     <TextBlock Text="{Binding Translation, TargetNullValue='...'}" FontFamily="{DynamicResource SerifFont}" FontSize="25"
                                                FontWeight="SemiBold" LineHeight="30" TextWrapping="Wrap"
@@ -488,7 +577,7 @@
                 </Border>
                 <!-- The nameplate sits on the frame's top edge, above the border line (Plate On Top). -->
                 <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,0,0,0" CornerRadius="6" Background="{DynamicResource Plate}"
-                        Padding="14,4,14,6">
+                        Padding="14,4,14,6" MouseLeftButtonUp="OnCorrectClick">
                     <TextBlock Foreground="{DynamicResource PlateInk}">
                         <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding PlateFont, Mode=OneWay}" FontSize="19" FontWeight="SemiBold" /><Run
                             Text="  " /><Run Text="{Binding ShownLevel, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />

@@ -442,5 +442,40 @@ internal static class CardSnapshots
             vm.SetDictionaryMark(true);
             vm.Timing = "ИИ 2,4 с, gemma26b";
         }),
+        // Recognition: the doubt stands (no second look); the model read it again differently; the word being corrected.
+        ("unsure", vm =>
+        {
+            Watching(vm, "Wching");
+            vm.SetRecognition(unsure: true, readFrom: null);
+        }),
+        ("reread", vm =>
+        {
+            Watching(vm, "watching");
+            vm.SetRecognition(unsure: false, readFrom: "Wching");
+        }),
+        ("correcting", vm =>
+        {
+            Watching(vm, "Wching");
+            vm.SetRecognition(unsure: true, readFrom: null);
+            vm.Correction = "Wching";
+            vm.CorrectionChoices = ["Watching", "Whing", "Waking", "Washing"];
+            vm.IsCorrecting = true;
+        }),
     ];
+
+    private static void Watching(LookupViewModel vm, string headword)
+    {
+        vm.Language = "en";
+        vm.Headword = headword;
+        vm.Level = "A1";
+        vm.PartOfSpeech = "гл.";
+        vm.Translation = "следить, смотреть";
+        vm.UsageNote = "угроза: я за тобой слежу";
+        vm.Context = $"Remember, I'm {headword} you. Always.";
+        vm.ContextOffset = 14;
+        vm.WordLength = headword.Length;
+        vm.ContextTranslation = "Помни, я слежу за тобой. Всегда.";
+        vm.SetDictionaryMark(true);
+        vm.Timing = "ИИ 2,3 с, gemma26b";
+    }
 }
