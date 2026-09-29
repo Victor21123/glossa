@@ -41,6 +41,10 @@ public sealed class Bench : IDisposable
     private readonly DictionaryService _dicts = new(DataPaths.Packs);
     private readonly LevelService _levels = new(DataPaths.Levels);
     private readonly WordLookup _words;
+
+    /// <summary>The lookup's word finder, for ocr-eval.</summary>
+    internal WordLookup Words => _words;
+
     private readonly Dictionary<string, OcrPage> _pages = new(StringComparer.OrdinalIgnoreCase);
     private readonly HttpClient _http = new(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromMinutes(3) };
 

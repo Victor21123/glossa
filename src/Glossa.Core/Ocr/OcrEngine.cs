@@ -156,7 +156,8 @@ public sealed class OcrEngine : IDisposable
 
         // Python-rapidocr preprocessing: the detector upscales the short side to 736 px. Screen crops are
         // short and game text is small; without the upscale DBNet splits lines and drops characters.
-        var options = RapidOcrOptions.PythonCompat with
+        // PP-OCRv6 has its own preset (RapidOcrNet 4.2): with v5's options it drops text and garbles boxes.
+        var options = (family == OcrModelFamily.V6Multi ? RapidOcrOptions.PPOCRv6 : RapidOcrOptions.PythonCompat) with
         {
             ReturnWordBox = true,
             DoAngle = false,

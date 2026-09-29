@@ -97,6 +97,17 @@ switch (args[0])
         Console.WriteLine($"-- {page.Lines.Count} lines in {page.Elapsed.TotalMilliseconds:F0} ms");
         break;
     }
+    case "ocr-eval":
+    {
+        // ocr-eval <cases.json> [v5|v6]: the word under the point on hard frames against the true text
+        using var bench = new Bench();
+        await OcrEval.RunAsync(args[1], args.Length > 2 ? args[2] : "v5", bench.Words);
+        break;
+    }
+    case "ocr-found":
+        // ocr-found <eval_cases.json> [v5|v6]: whether each word is read anywhere on its frame
+        await OcrEval.FoundAsync(args[1], args.Length > 2 ? args[2] : "v5");
+        break;
     case "dictcheck":
     {
         // dictcheck <cases.json> <results.json>: the "как в словаре" mark for translations of a finished eval run
