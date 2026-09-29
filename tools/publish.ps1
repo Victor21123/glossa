@@ -41,7 +41,8 @@ if ($running) {
 }
 
 New-Item -ItemType Directory -Force $Target | Out-Null
-robocopy $stage $Target /MIR /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+# A portable copy keeps its data in GlossaData beside the exe: /MIR must not wipe it.
+robocopy $stage $Target /MIR /XD (Join-Path $Target 'GlossaData') /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
 $global:LASTEXITCODE = 0
 

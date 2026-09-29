@@ -427,11 +427,23 @@ public sealed class SettingsStore(string path)
     }
 }
 
-/// <summary>Where Glossa keeps its data. Defaults to D:\GlossaData; GLOSSA_DATA overrides.</summary>
+/// <summary>
+/// Where Glossa keeps its data: GLOSSA_DATA if set; else a GlossaData folder beside the program (the portable
+/// archive ships one with the OCR models, UniDic and CC-CEDICT); else D:\GlossaData if it exists; else a new
+/// GlossaData beside the program (a PC without D:).
+/// </summary>
 public static class DataPaths
 {
-    public static string Root { get; } =
-        Environment.GetEnvironmentVariable("GLOSSA_DATA") is { Length: > 0 } env ? env : @"D:\GlossaData";
+    public static string Root { get; } = FindRoot();
+
+    private static string FindRoot()
+    {
+        if (Environment.GetEnvironmentVariable("GLOSSA_DATA") is { Length: > 0 } env) return env;
+        var portable = System.IO.Path.Combine(AppContext.BaseDirectory, "GlossaData");
+        if (Directory.Exists(portable)) return portable;
+        const string classic = @"D:\GlossaData";
+        return Directory.Exists(classic) ? classic : portable;
+    }
 
     public static string Settings => System.IO.Path.Combine(Root, "settings.json");
     public static string Logs => System.IO.Path.Combine(Root, "logs");
