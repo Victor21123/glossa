@@ -22,8 +22,9 @@ public static class PartialJson
         var raws = new Dictionary<string, string>();
         string? streaming = null;
 
-        var i = SkipWs(buffer, 0);
-        if (i >= buffer.Length || buffer[i] != '{') return new(strings, arrays, raws, null);
+        // The object may come after a code fence or a few words (endpoints without a JSON schema): start at its brace.
+        var i = buffer.IndexOf('{');
+        if (i < 0) return new(strings, arrays, raws, null);
         i++;
 
         while (true)

@@ -96,27 +96,21 @@ public sealed class OpenAiCompatibleClient(HttpClient http, LlmEndpoint endpoint
 
             await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var reader = new StreamReader(stream, Encoding.UTF8);
-            var inThink = false;
+            // Reasoning models may still think aloud despite enable_thinking=false, and a proxy may glue chunks together.
+            var thinking = new ThinkFilter();
             while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
             {
                 if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
                 var data = line[5..].Trim();
-                if (data == "[DONE]") yield break;
+                if (data == "[DONE]") break;
 
                 var delta = ExtractDelta(data);
                 if (string.IsNullOrEmpty(delta)) continue;
-
-                // Reasoning models may still emit <think>…</think> despite enable_thinking=false; drop it.
-                if (delta.Contains("<think>")) { inThink = true; delta = delta[..delta.IndexOf("<think>", StringComparison.Ordinal)]; }
-                if (inThink)
-                {
-                    var end = delta.IndexOf("</think>", StringComparison.Ordinal);
-                    if (end < 0) continue;
-                    inThink = false;
-                    delta = delta[(end + "</think>".Length)..];
-                }
-                if (delta.Length > 0) yield return delta;
+                var shown = thinking.Feed(delta);
+                if (shown.Length > 0) yield return shown;
             }
+            var rest = thinking.Flush();
+            if (rest.Length > 0) yield return rest;
         }
     }
 

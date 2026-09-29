@@ -18,6 +18,18 @@ public class PartialJsonTests
     }
 
     [Fact]
+    public void Skips_a_code_fence_or_words_before_the_object()
+    {
+        // An endpoint without a JSON schema may wrap the answer; the card must not come out empty.
+        var fenced = PartialJson.Read("```json\n{\"translation\": \"терпеть\"}\n```");
+        var spoken = PartialJson.Read("Here is the card: {\"translation\": \"терп");
+
+        Assert.Equal("терпеть", fenced.Strings["translation"]);
+        Assert.Equal("терп", spoken.Strings["translation"]);
+        Assert.Empty(PartialJson.Read("```json\n").Strings);
+    }
+
+    [Fact]
     public void Reads_string_arrays_and_nested_objects()
     {
         const string json = """
