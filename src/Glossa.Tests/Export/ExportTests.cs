@@ -11,12 +11,16 @@ using SkiaSharp;
 
 namespace Glossa.Tests.Export;
 
-public class ExportTests
+public sealed class ExportTests : IDisposable
 {
+    private readonly TestFolders _temp = new();
+
+    public void Dispose() => _temp.Dispose();
+
     /// <summary>Sample library in a temp data folder, with a real screenshot for the English word.</summary>
-    internal static (string Root, List<SavedWord> Words) Sample()
+    private (string Root, List<SavedWord> Words) Sample()
     {
-        var root = Path.Combine(Path.GetTempPath(), "glossa-test-" + Guid.NewGuid().ToString("N"));
+        var root = _temp.New();
         Directory.CreateDirectory(Path.Combine(root, "shots"));
         using (var bmp = new SKBitmap(640, 360))
         using (var canvas = new SKCanvas(bmp))

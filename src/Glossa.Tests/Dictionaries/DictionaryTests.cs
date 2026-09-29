@@ -8,15 +8,13 @@ using Glossa.Core.Text;
 
 namespace Glossa.Tests.Dictionaries;
 
-public class DictionaryTests
+public sealed class DictionaryTests : IDisposable
 {
-    /// <summary>Scratch folder on the data drive (the machine keeps everything on D:).</summary>
-    private static string Temp()
-    {
-        var dir = Path.Combine(DataPaths.Work, "tests", Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
+    private readonly TestFolders _temp = new();
+
+    public void Dispose() => _temp.Dispose();
+
+    private string Temp() => _temp.New();
 
     [Fact]
     public void Markup_parses_styles_indents_and_escapes()
