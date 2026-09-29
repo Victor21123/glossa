@@ -28,9 +28,17 @@ public partial class CardSection : UserControl
         DataContext = model;
         Presets.ItemsSource = PresetTile.All;
         Accents.ItemsSource = AccentTile.All;
+        foreach (var (key, name) in CardPartNames)
+        {
+            var box = new CheckBox { Content = name, IsChecked = model.IsPartShown(key), Margin = new Thickness(0, 0, 22, 12) };
+            box.Checked += (_, _) => model.SetPartShown(key, true);
+            box.Unchecked += (_, _) => model.SetPartShown(key, false);
+            Parts.Children.Add(box);
+        }
         Description.Text = $"Как выглядит окно, которое открывается по {model.Hotkey}.";
         Card.DataContext = _card;
         FillPreview();
+        ApplyLook(); // Loaded comes later on screen and never off screen (snapshots)
 
         // The theme manager outlives this page: follow it only while the page is on screen.
         Loaded += (_, _) =>
@@ -47,12 +55,20 @@ public partial class CardSection : UserControl
         PreviewBox.SizeChanged += (_, _) => Arrange();
     }
 
+    /// <summary>What «Свой» can hide, in the order the card shows it.</summary>
+    private static readonly (string Key, string Name)[] CardPartNames =
+    [
+        ("reading", "Чтение"), ("pos", "Часть речи"), ("level", "Уровень"), ("scene", "Контекст сцены"), ("definition", "Значение"),
+        ("line", "Реплика"), ("lineTranslation", "Перевод реплики"), ("components", "Разбор иероглифов"), ("forms", "Формы"),
+        ("synonyms", "Синонимы"), ("dictionaries", "Статьи словарей"), ("footer", "Нижняя строка"),
+    ];
+
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e) => ApplyLook();
 
     private void ApplyLook()
     {
         Card.ApplyLook(_services.Settings.Popup, _services.Theme);
-        Ring.Stroke = RingBrush(_services.Theme.CardKind(_services.Settings.Popup.Theme), _services.Settings.Popup.Accent);
+        Ring.Stroke = RingBrush(_services.Theme.CardKind(_services.Settings.Popup.Theme), _services.Settings.Popup);
         Dispatcher.BeginInvoke(Arrange, DispatcherPriority.Loaded);
     }
 
@@ -78,6 +94,7 @@ public partial class CardSection : UserControl
         _card.Translation = word.Translation;
         _card.UsageNote = word.UsageNote;
         _card.Definition = word.Definition;
+        _card.DefinitionTranslation = word.DefinitionTranslation;
         _card.Context = word.Context ?? "";
         _card.ContextOffset = word.ContextOffset;
         _card.WordLength = (word.Contexts.FirstOrDefault()?.Surface ?? word.Word).Length;
@@ -160,10 +177,11 @@ public partial class CardSection : UserControl
         Canvas.SetTop(CardHost, y - shadowTop * fit);
     }
 
-    private static Brush RingBrush(ThemeKind kind, string accent)
+    private static Brush RingBrush(ThemeKind kind, PopupSettings look)
     {
         var value = kind == ThemeKind.Disco ? "0.74 0.14 55"
-            : AccentTile.Hues.TryGetValue(accent, out var hue) ? $"0.82 0.14 {hue}" : "0.97 0.005 95";
+            : look.Accent == "custom" ? $"0.82 0.14 {look.AccentHue}"
+            : AccentTile.Hues.TryGetValue(look.Accent, out var hue) ? $"0.82 0.14 {hue}" : "0.97 0.005 95";
         var brush = new SolidColorBrush(Oklch.Parse(value));
         brush.Freeze();
         return brush;
@@ -179,6 +197,7 @@ public partial class CardSection : UserControl
         vm.Translation = "передумать";
         vm.UsageNote = "угроза под видом вежливости: «одумайся»";
         vm.Definition = "To think again about a decision and possibly change it.";
+        vm.DefinitionTranslation = "Обдумать решение ещё раз и, возможно, изменить его.";
         vm.Context = "You should reconsider your position, mortal.";
         vm.ContextOffset = 11;
         vm.WordLength = 10;
@@ -197,6 +216,7 @@ public sealed record PresetTile(string Key, string Name, string Description, dou
         new("less", "Меньше", "перевод и реплика; остальное по Tab", 8, 0.8, 0),
         new("standard", "Стандарт", "всё о слове сразу, словари свёрнуты", 6, 0.7, 0.6),
         new("more", "Больше", "плюс статья словаря, разбор, синонимы", 6, 0.9, 0.9),
+        new("custom", "Свой", "ширина, прозрачность и что показывать — как хочешь", 7, 0.5, 0.75),
     ];
 
     public GridLength Line3 => new(L3, GridUnitType.Star);
@@ -221,7 +241,18 @@ public sealed record AccentTile(string Key, string Name, Brush Swatch, Brush? Ou
         new("amber", "Янтарь", Frozen("0.74 0.13 62"), null),
         new("sun", "Солнце", Frozen("0.74 0.13 95"), null),
         new("lilac", "Сирень", Frozen("0.74 0.13 300"), null),
+        new("custom", "Свой", HueWheel(), null),
     ];
+
+    /// <summary>The «Свой» swatch: every hue, as a hint that it can be any.</summary>
+    private static Brush HueWheel()
+    {
+        var brush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+        foreach (var (hue, offset) in new[] { (25, 0.0), (95, 0.25), (168, 0.5), (250, 0.75), (330, 1.0) })
+            brush.GradientStops.Add(new GradientStop(Oklch.Parse($"0.74 0.13 {hue}"), offset));
+        brush.Freeze();
+        return brush;
+    }
 
     private static Brush Frozen(string oklch)
     {

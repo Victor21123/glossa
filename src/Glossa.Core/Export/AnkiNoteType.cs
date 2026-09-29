@@ -112,7 +112,7 @@ public static class AnkiNoteType
         E(w.Headword),
         E(w.Reading),
         E(w.Translation),
-        E(w.Definition),
+        w.DefinitionTranslation is { Length: > 0 } defTr ? $"{E(w.Definition)}<br>{E(defTr)}" : E(w.Definition),
         ContextHtml(w),
         E(w.ContextTranslation),
         E(w.Level),

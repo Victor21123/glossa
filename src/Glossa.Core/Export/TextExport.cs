@@ -12,7 +12,7 @@ public static class TextExport
         foreach (var w in words)
         {
             var term = w.Reading is { Length: > 0 } r && r != w.Headword ? $"{w.Headword} [{r}]" : w.Headword;
-            var def = string.Join(" — ", new[] { w.Translation, w.Definition }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            var def = string.Join(" — ", new[] { w.Translation, w.Definition, w.DefinitionTranslation }.Where(s => !string.IsNullOrWhiteSpace(s)));
             sb.Append(Clean(term)).Append('\t').Append(Clean(def)).Append('\n');
         }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));

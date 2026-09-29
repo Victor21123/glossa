@@ -110,7 +110,7 @@
                                 <ColumnDefinition Width="16" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" LineHeight="13" />
                             <ContentPresenter Grid.Column="2" />
                         </Grid>
                     </ControlTemplate>
@@ -191,7 +191,7 @@
         <Grid Visibility="{Binding HasMessage, Converter={StaticResource FalseToVis}}">
 
             <!-- ============ Меньше: the translation is the headline ============ -->
-            <Border Width="440" CornerRadius="14" Background="{DynamicResource Surface}" Padding="20,16,18,13"
+            <Border Width="{Binding LessWidth}" CornerRadius="14" Background="{DynamicResource Surface}" Padding="20,16,18,13"
                     Effect="{StaticResource CardShadow}" Visibility="{Binding IsLess, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
                     <DockPanel>
@@ -211,11 +211,14 @@
                         <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
                              Foreground="{DynamicResource Ink}" /><Run Text="   " /><Run Text="{Binding Meta, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" />
                     </TextBlock>
-                    <TextBlock Text="{Binding ContextTranslation}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="15" LineHeight="22"
-                               Foreground="{DynamicResource InkSoft}" Visibility="{Binding ContextTranslation, Converter={StaticResource NullToCollapsed}}" />
+                    <Border Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding ContextTranslation}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="15" LineHeight="22"
+                                   Foreground="{DynamicResource InkSoft}" Visibility="{Binding ContextTranslation, Converter={StaticResource NullToCollapsed}}" />
+                    </Border>
                     <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource Danger}"
                                Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
-                    <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,9,0,0">
+                    <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,9,0,0"
+                            Visibility="{Binding Show[footer], Converter={StaticResource BoolToVis}}">
                         <DockPanel TextElement.FontSize="12.5" TextElement.Foreground="{DynamicResource Muted}">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <TextBlock Text="{Binding Footer}" />
@@ -228,7 +231,7 @@
             </Border>
 
             <!-- ============ Стандарт: everything about the word at once, dictionaries folded ============ -->
-            <Border Width="560" CornerRadius="10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+            <Border Width="{Binding StandardWidth}" CornerRadius="10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
                     Effect="{StaticResource CardShadow}" Visibility="{Binding IsStandard, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
                     <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="22,18,20,16">
@@ -237,7 +240,7 @@
                                 <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" ToolTip="Произнести (P)" Click="OnSpeak" />
                                 <Button Style="{StaticResource SaveButton}" Click="OnSave" />
                                 <Border Width="58" Height="58" Margin="10,0,0,0" CornerRadius="8" BorderBrush="{DynamicResource Ink}" BorderThickness="1.5"
-                                        Visibility="{Binding Level, Converter={StaticResource NullToCollapsed}}">
+                                        Visibility="{Binding ShownLevel, Converter={StaticResource NullToCollapsed}}">
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding LevelScale}" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Muted}"
                                                    HorizontalAlignment="Center" />
@@ -248,10 +251,10 @@
                             <StackPanel>
                                 <TextBlock TextWrapping="Wrap" FontFamily="{Binding WordFont}">
                                     <Run Text="{Binding Headword, Mode=OneWay}" FontSize="30" FontWeight="Bold" /><Run Text="  " /><Run
-                                        Text="{Binding Reading, Mode=OneWay}" FontSize="15" Foreground="{DynamicResource InkSoft}" />
+                                        Text="{Binding ShownReading, Mode=OneWay}" FontSize="15" Foreground="{DynamicResource InkSoft}" />
                                 </TextBlock>
-                                <TextBlock Text="{Binding PartOfSpeech}" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"
-                                           Visibility="{Binding PartOfSpeech, Converter={StaticResource NullToCollapsed}}" />
+                                <TextBlock Text="{Binding ShownPartOfSpeech}" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"
+                                           Visibility="{Binding ShownPartOfSpeech, Converter={StaticResource NullToCollapsed}}" />
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -279,33 +282,37 @@
                                 </TextBlock>
                             </StackPanel>
                         </HeaderedContentControl>
-                        <HeaderedContentControl Header="ЗДЕСЬ" Style="{StaticResource Row}"
-                                                Visibility="{Binding UsageNote, Converter={StaticResource NullToCollapsed}}">
+                        <HeaderedContentControl Header="КОНТЕКСТ СЦЕНЫ" Style="{StaticResource Row}"
+                                                Visibility="{Binding ShownUsageNote, Converter={StaticResource NullToCollapsed}}">
                             <TextBlock Text="{Binding UsageNote}" FontSize="14.5" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="ЗНАЧЕНИЕ" Style="{StaticResource Row}"
-                                                Visibility="{Binding Definition, Converter={StaticResource NullToCollapsed}}">
-                            <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                                                Visibility="{Binding ShownDefinition, Converter={StaticResource NullToCollapsed}}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                                <TextBlock Text="{Binding DefinitionTranslation}" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Margin="0,3,0,0"
+                                           Foreground="{DynamicResource Muted}" Visibility="{Binding DefinitionTranslation, Converter={StaticResource NullToCollapsed}}" />
+                            </StackPanel>
                         </HeaderedContentControl>
-                        <HeaderedContentControl Header="РЕПЛИКА" Style="{StaticResource Row}">
+                        <HeaderedContentControl Header="РЕПЛИКА" Style="{StaticResource Row}" Visibility="{Binding ShowLineRow, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock x:Name="ContextStandard" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
-                                           FontFamily="{Binding WordFont}" />
+                                           FontFamily="{Binding WordFont}" Visibility="{Binding Show[line], Converter={StaticResource BoolToVis}}" />
                                 <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
-                                           Margin="0,5,0,0" />
+                                           Margin="0,5,0,0" Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}" />
                             </StackPanel>
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="РАЗБОР" Style="{StaticResource Row}"
-                                                Visibility="{Binding HasComponents, Converter={StaticResource BoolToVis}}">
+                                                Visibility="{Binding ShowComponents, Converter={StaticResource BoolToVis}}">
                             <ItemsControl ItemsSource="{Binding Components}" ItemTemplate="{StaticResource ComponentItem}" ItemsPanel="{StaticResource WrapItems}"
                                           TextElement.Foreground="{DynamicResource InkSoft}" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="ФОРМЫ" Style="{StaticResource Row}"
-                                                Visibility="{Binding KeyForms, Converter={StaticResource NullToCollapsed}}">
+                                                Visibility="{Binding ShownKeyForms, Converter={StaticResource NullToCollapsed}}">
                             <TextBlock Text="{Binding KeyForms}" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" FontFamily="{Binding WordFont}" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource Row}"
-                                                Visibility="{Binding Synonyms, Converter={StaticResource NullToCollapsed}}">
+                                                Visibility="{Binding ShownSynonyms, Converter={StaticResource NullToCollapsed}}">
                             <TextBlock Text="{Binding Synonyms}" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" FontFamily="{Binding WordFont}" />
                         </HeaderedContentControl>
                         <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,0,0,11" Foreground="{DynamicResource Danger}"
@@ -318,7 +325,7 @@
                     </ScrollViewer>
 
                     <Border Background="{DynamicResource Band}" BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0" CornerRadius="0,0,9,9"
-                            Padding="22,10">
+                            Padding="22,10" Visibility="{Binding Show[footer], Converter={StaticResource BoolToVis}}">
                         <DockPanel TextElement.FontSize="12.5" TextElement.Foreground="{DynamicResource Muted}">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <Border Style="{StaticResource KbdBox}"><TextBlock Text="S" Style="{StaticResource KbdText}" /></Border>
@@ -337,7 +344,7 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding Show[dictionaries], Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="СЛОВАРИ" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />
                                 <Button Content="{Binding DictionarySummary}" Click="OnToggleDictionaries" Cursor="Hand" Focusable="False"
                                         IsEnabled="{Binding HasDictionaries}">
@@ -354,7 +361,7 @@
             </Border>
 
             <!-- ============ Больше: nameplate on top, serif, the dictionary open ============ -->
-            <Grid Width="472" Visibility="{Binding IsMore, Converter={StaticResource BoolToVis}}">
+            <Grid Width="{Binding MoreWidth}" Visibility="{Binding IsMore, Converter={StaticResource BoolToVis}}">
                 <Border Margin="0,17,0,0" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}"
                         BorderThickness="1" Padding="4" Effect="{StaticResource CardShadow}">
                     <Border CornerRadius="8" BorderBrush="{DynamicResource RuleSoft}" BorderThickness="1" Padding="22,28,22,14">
@@ -373,29 +380,33 @@
                                     </Border>
                                 </Grid>
                                 <TextBlock TextWrapping="Wrap" Margin="0,12,0,0" FontSize="13.5" Foreground="{DynamicResource InkSoft}">
-                                    <Run Text="{Binding PartOfSpeech, Mode=OneWay}" Foreground="{DynamicResource Muted}" /><Run Text="   " /><Run
-                                        Text="{Binding UsageNote, Mode=OneWay}" />
+                                    <Run Text="{Binding ShownPartOfSpeech, Mode=OneWay}" Foreground="{DynamicResource Muted}" /><Run Text="   " /><Run
+                                        Text="{Binding ShownUsageNote, Mode=OneWay}" />
                                 </TextBlock>
-                                <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Margin="0,12,0,0"
-                                           Foreground="{DynamicResource InkSoft}" Visibility="{Binding Definition, Converter={StaticResource NullToCollapsed}}" />
-                                <Border Height="1" Background="{DynamicResource RuleSoft}" Margin="0,14,0,12" />
+                                <StackPanel Visibility="{Binding ShownDefinition, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Margin="0,12,0,0"
+                                               Foreground="{DynamicResource InkSoft}" />
+                                    <TextBlock Text="{Binding DefinitionTranslation}" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Margin="0,3,0,0"
+                                               Foreground="{DynamicResource Muted}" Visibility="{Binding DefinitionTranslation, Converter={StaticResource NullToCollapsed}}" />
+                                </StackPanel>
+                                <Border Height="1" Background="{DynamicResource RuleSoft}" Margin="0,14,0,12" Visibility="{Binding ShowLineRow, Converter={StaticResource BoolToVis}}" />
                                 <TextBlock x:Name="ContextMore" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
-                                           FontFamily="{Binding WordFont}" />
+                                           FontFamily="{Binding WordFont}" Visibility="{Binding Show[line], Converter={StaticResource BoolToVis}}" />
                                 <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontFamily="{DynamicResource SerifFont}" FontSize="15.5"
-                                           LineHeight="22" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                           LineHeight="22" TextWrapping="Wrap" Margin="0,6,0,12" Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}" />
                                 <HeaderedContentControl Header="РАЗБОР" Style="{StaticResource SmallRow}"
-                                                        Visibility="{Binding HasComponents, Converter={StaticResource BoolToVis}}">
+                                                        Visibility="{Binding ShowComponents, Converter={StaticResource BoolToVis}}">
                                     <ItemsControl ItemsSource="{Binding Components}" ItemTemplate="{StaticResource ComponentItem}" ItemsPanel="{StaticResource WrapItems}" />
                                 </HeaderedContentControl>
                                 <HeaderedContentControl Header="ФОРМЫ" Style="{StaticResource SmallRow}"
-                                                        Visibility="{Binding KeyForms, Converter={StaticResource NullToCollapsed}}">
+                                                        Visibility="{Binding ShownKeyForms, Converter={StaticResource NullToCollapsed}}">
                                     <TextBlock Text="{Binding KeyForms}" TextWrapping="Wrap" FontFamily="{Binding WordFont}" />
                                 </HeaderedContentControl>
                                 <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource SmallRow}"
-                                                        Visibility="{Binding Synonyms, Converter={StaticResource NullToCollapsed}}">
+                                                        Visibility="{Binding ShownSynonyms, Converter={StaticResource NullToCollapsed}}">
                                     <TextBlock Text="{Binding Synonyms}" TextWrapping="Wrap" FontFamily="{Binding WordFont}" />
                                 </HeaderedContentControl>
-                                <HeaderedContentControl Header="СЛОВАРИ" Style="{StaticResource SmallRow}">
+                                <HeaderedContentControl Header="СЛОВАРИ" Style="{StaticResource SmallRow}" Visibility="{Binding Show[dictionaries], Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding DictionaryMark, TargetNullValue=статьи нет}" TextWrapping="Wrap"
                                                Foreground="{DynamicResource Muted}" />
                                 </HeaderedContentControl>
@@ -405,7 +416,8 @@
                                 </ScrollViewer>
                                 <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource Danger}"
                                            Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
-                                <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,4,0,0">
+                                <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,4,0,0"
+                                        Visibility="{Binding Show[footer], Converter={StaticResource BoolToVis}}">
                                     <DockPanel TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Muted}">
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                                                     Visibility="{Binding Footer, Converter={StaticResource NullToCollapsed}}">
@@ -436,7 +448,7 @@
                         Padding="14,4,14,6">
                     <TextBlock Foreground="{DynamicResource PlateInk}">
                         <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding PlateFont, Mode=OneWay}" FontSize="19" FontWeight="SemiBold" /><Run
-                            Text="  " /><Run Text="{Binding Level, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />
+                            Text="  " /><Run Text="{Binding ShownLevel, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />
                     </TextBlock>
                 </Border>
             </Grid>

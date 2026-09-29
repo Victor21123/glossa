@@ -25,6 +25,10 @@ public sealed record SavedWord
     public string? PartOfSpeech { get; init; }
     public string? Level { get; init; }
     public string? Definition { get; init; }
+
+    /// <summary>The definition in the user's language when <see cref="Definition"/> is in the word's own.</summary>
+    public string? DefinitionTranslation { get; init; }
+
     public string? Translation { get; init; }
     public string? Context { get; init; }
     public int ContextOffset { get; init; } = -1;
@@ -68,6 +72,7 @@ public sealed record SavedWord
         PartOfSpeech = card.PartOfSpeech,
         Level = card.Level,
         Definition = card.Definition,
+        DefinitionTranslation = card.DefinitionTranslation,
         Translation = card.Translation,
         Context = context,
         ContextOffset = contextOffset,
@@ -97,7 +102,7 @@ public sealed record WordContext
     /// <summary>The translation chosen for this sentence (the word's own translation may differ).</summary>
     public string? Translation { get; init; }
 
-    /// <summary>«здесь»: what the word means in this sentence and why.</summary>
+    /// <summary>«Контекст сцены»: what the word means in this sentence and why.</summary>
     public string? UsageNote { get; init; }
 
     public string? AppExe { get; init; }
@@ -108,7 +113,7 @@ public sealed record WordContext
 
 public sealed class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 4;
+    private const int SchemaVersion = 5;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -196,6 +201,11 @@ public sealed class LibraryStore : IDisposable
                   PRIMARY KEY(collection_id, word_id));
                 """);
         }
+        if (version < 5)
+        {
+            // The definition in the user's language beside a monolingual (English) one.
+            Exec("ALTER TABLE words ADD COLUMN definition_tr TEXT;");
+        }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }
 
@@ -274,7 +284,7 @@ public sealed class LibraryStore : IDisposable
             {
                 cmd.CommandText = """
                     UPDATE words SET updated_utc = $updated, word = $word, dictionary_form = $dict, reading = $reading,
-                      part_of_speech = $pos, level = $level, definition = $def, translation = $tr, explanation = $expl,
+                      part_of_speech = $pos, level = $level, definition = $def, definition_tr = $deftr, translation = $tr, explanation = $expl,
                       synonyms = $syn, key_forms = $forms, components = $comp, register = $register
                     WHERE id = $id
                     """;
@@ -439,9 +449,9 @@ public sealed class LibraryStore : IDisposable
         cmd.CommandText = """
             INSERT INTO words(id, created_utc, updated_utc, language, word, dictionary_form, reading, part_of_speech,
               level, definition, translation, context, context_offset, context_translation, explanation, synonyms,
-              key_forms, components, app_exe, window_title, shot_file, word_box, register, usage_note, lookups, pinned)
+              key_forms, components, app_exe, window_title, shot_file, word_box, register, usage_note, lookups, pinned, definition_tr)
             VALUES($id, $created, $updated, $lang, $word, $dict, $reading, $pos, $level, $def, $tr, $ctx, $off,
-              $ctxtr, $expl, $syn, $forms, $comp, $exe, $title, $shot, $box, $register, $usage, 1, 0)
+              $ctxtr, $expl, $syn, $forms, $comp, $exe, $title, $shot, $box, $register, $usage, 1, 0, $deftr)
             """;
         Bind(cmd, w);
         cmd.ExecuteNonQuery();
@@ -454,7 +464,8 @@ public sealed class LibraryStore : IDisposable
         cmd.CommandText = """
             UPDATE words SET updated_utc = $updated,
               reading = COALESCE(reading, $reading), part_of_speech = COALESCE(part_of_speech, $pos),
-              level = COALESCE(level, $level), definition = COALESCE(definition, $def), translation = COALESCE(translation, $tr),
+              level = COALESCE(level, $level), definition = COALESCE(definition, $def), definition_tr = COALESCE(definition_tr, $deftr),
+              translation = COALESCE(translation, $tr),
               explanation = COALESCE(explanation, $expl), register = COALESCE(register, $register),
               synonyms = CASE WHEN synonyms IS NULL OR synonyms = '[]' THEN $syn ELSE synonyms END,
               key_forms = CASE WHEN key_forms IS NULL OR key_forms = '[]' THEN $forms ELSE key_forms END,
@@ -536,6 +547,7 @@ public sealed class LibraryStore : IDisposable
         cmd.Parameters.AddWithValue("$pos", (object?)w.PartOfSpeech ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$level", (object?)w.Level ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$def", (object?)w.Definition ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$deftr", (object?)w.DefinitionTranslation ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$tr", (object?)w.Translation ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$ctx", (object?)w.Context ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$off", w.ContextOffset);
@@ -569,6 +581,7 @@ public sealed class LibraryStore : IDisposable
             PartOfSpeech = S("part_of_speech"),
             Level = S("level"),
             Definition = S("definition"),
+            DefinitionTranslation = S("definition_tr"),
             Translation = S("translation"),
             Context = S("context"),
             ContextOffset = Convert.ToInt32(r["context_offset"], CultureInfo.InvariantCulture),

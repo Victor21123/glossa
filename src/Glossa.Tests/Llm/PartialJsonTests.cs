@@ -87,6 +87,27 @@ public class PartialJsonTests
     }
 
     [Fact]
+    public void An_english_definition_also_comes_in_the_users_language()
+    {
+        var en = new CardRequest(new WordHit("reconsider", new PixelRect(0, 0, 1, 1), "", "", 0, Script.Latin), "en", "ru", null,
+            new WordCard { Word = "reconsider", Language = "en" });
+        var props = CardService.Schema(en)["properties"]!.AsObject();
+        Assert.True(props.ContainsKey("definition_en"));
+        Assert.True(props.ContainsKey("definition_ru"));
+        Assert.Contains("\"definition_ru\": the same definition in Russian", CardService.SystemPrompt(en));
+
+        var card = CardService.Merge(en, PartialJson.Read(
+            "{\"definition_en\": \"To think again.\", \"definition_ru\": \"Обдумать ещё раз.\"}"), partial: false);
+        Assert.Equal(("To think again.", "Обдумать ещё раз."), (card.Definition, card.DefinitionTranslation));
+
+        // Chinese and Japanese definitions are in the user's language already: one field, nothing to translate.
+        var zh = new CardRequest(new WordHit("出生", new PixelRect(0, 0, 1, 1), "", "", 0, Script.Han), "zh", "ru", null,
+            new WordCard { Word = "出生", Language = "zh" });
+        Assert.Null(CardService.Merge(zh, PartialJson.Read("{\"definition_ru\": \"родиться\"}"), false).DefinitionTranslation);
+        Assert.DoesNotContain("the same definition in", CardService.SystemPrompt(zh));
+    }
+
+    [Fact]
     public void Dictionary_rule_appears_only_with_the_hint()
     {
         var seed = new WordCard { Word = "nuts", Language = "en" };

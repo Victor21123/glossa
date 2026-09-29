@@ -122,7 +122,7 @@
                                 <ColumnDefinition Width="18" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
                             <ContentPresenter Grid.Column="2" />
                         </Grid>
                     </ControlTemplate>
@@ -482,7 +482,7 @@
                                                      Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="перевод" />
                                         </Grid>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="ЗДЕСЬ" Style="{StaticResource DetailRow}">
+                                    <HeaderedContentControl Header="КОНТЕКСТ СЦЕНЫ" Style="{StaticResource DetailRow}">
                                         <Grid>
                                             <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="{Binding HereTranslation}" FontSize="15.5" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,3"
@@ -494,16 +494,24 @@
                                                 <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditHere}" FontSize="15" Margin="0,0,0,8"
                                                          theme:Hint.Text="перевод в этой реплике, если не такой, как общий" />
                                                 <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditUsage}" AcceptsReturn="True"
-                                                         theme:Hint.Text="почему здесь употреблено так" />
+                                                         theme:Hint.Text="что слово значит в этой сцене и почему" />
                                             </StackPanel>
                                         </Grid>
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="ЗНАЧЕНИЕ" Style="{StaticResource DetailRow}">
                                         <Grid>
-                                            <TextBlock Text="{Binding Definition, TargetNullValue=—}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
-                                                       Foreground="{DynamicResource InkSoft}" Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}" />
-                                            <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditDefinition}" AcceptsReturn="True"
-                                                     Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="значение" />
+                                            <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{Binding Definition, TargetNullValue=—}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource InkSoft}" />
+                                                <TextBlock Text="{Binding DefinitionTranslation}" FontSize="14" LineHeight="20" TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Foreground="{DynamicResource Muted}" Visibility="{Binding DefinitionTranslation, Converter={StaticResource NullToCollapsed}}" />
+                                            </StackPanel>
+                                            <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                                                <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditDefinition}" AcceptsReturn="True" Margin="0,0,0,8"
+                                                         theme:Hint.Text="значение" />
+                                                <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditDefinitionTranslation}" AcceptsReturn="True"
+                                                         theme:Hint.Text="значение по-русски" />
+                                            </StackPanel>
                                         </Grid>
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="РЕПЛИКА" Style="{StaticResource DetailRow}"
@@ -650,7 +658,7 @@
                     </Border>
                     <TextBlock Text="РЕПЛИКА · НЕОБЯЗАТЕЛЬНО" Style="{StaticResource Caption}" Margin="0,16,0,6" />
                     <TextBox x:Name="AddSentence" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" VerticalContentAlignment="Top"
-                             theme:Hint.Text="Вставь фразу, где встретил слово, — перевод «здесь» будет точнее" />
+                             theme:Hint.Text="Вставь фразу, где встретил слово, — перевод и контекст сцены будут точнее" />
                     <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

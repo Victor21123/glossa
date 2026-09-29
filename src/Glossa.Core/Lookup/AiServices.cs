@@ -21,6 +21,9 @@ public sealed record CardRequest(
     /// Chinese a beginner cannot read a monolingual definition, so they are written in the user's language.
     /// </summary>
     public string DefinitionLanguage => Language is "ja" or "zh" or "ko" ? Target : Language;
+
+    /// <summary>A monolingual definition also comes in the user's language, so it is never the only one to read.</summary>
+    public bool TranslatesDefinition => DefinitionLanguage != Target;
 }
 
 /// <summary>AI dictionary: asks the model only for context-dependent fields and merges them into the seed card.</summary>
@@ -66,11 +69,13 @@ public sealed class CardService
     /// JSON keys carry their language ("translation_ru"). Without it a model reading Chinese or Japanese text
     /// drifts into that language even when told otherwise; the suffix keeps it on target.
     /// </summary>
-    internal sealed record Keys(string Translation, string ContextTranslation, string Definition, string Meaning, string PartOfSpeech, string Usage)
+    internal sealed record Keys(string Translation, string ContextTranslation, string Definition, string? DefinitionTranslation,
+        string Meaning, string PartOfSpeech, string Usage)
     {
         public static Keys For(CardRequest req) => new(
             $"translation_{req.Target}", $"context_translation_{req.Target}",
-            $"definition_{req.DefinitionLanguage}", $"meaning_{req.Target}", $"part_of_speech_{req.Target}", $"usage_{req.Target}");
+            $"definition_{req.DefinitionLanguage}", req.TranslatesDefinition ? $"definition_{req.Target}" : null,
+            $"meaning_{req.Target}", $"part_of_speech_{req.Target}", $"usage_{req.Target}");
     }
 
     internal static string SystemPrompt(CardRequest req)
@@ -79,6 +84,7 @@ public sealed class CardService
         var target = Languages.EnglishName(req.Target);
         var definition = Languages.EnglishName(req.DefinitionLanguage);
         var script = req.Target == "ru" ? " (Cyrillic script; never Chinese, Japanese or English)" : "";
+        var definitionRule = k.DefinitionTranslation is { } defTr ? $"\n- \"{defTr}\": the same definition in {target}{script}." : "";
         var contextRule = req.WithContextTranslation
             ? $"\n- \"{k.ContextTranslation}\": the whole TEXT translated into natural {target}{script}."
             : "";
@@ -92,7 +98,7 @@ public sealed class CardService
             Describe the word exactly in the sense it has in that text.
             Rules:
             - "{k.Translation}": the {target}{script} equivalent of the word in this sense, 1-4 words, never the word itself.{contextRule}
-            - "{k.Definition}": one short plain sentence in {definition}.
+            - "{k.Definition}": one short plain sentence in {definition}.{definitionRule}
             - "{k.PartOfSpeech}": the word class as a short {target} label.
             - "register": how the word is used HERE — neutral, informal, slang, rude, vulgar or sexual ("cock" about a
               rooster is neutral; about a penis it is sexual; "fuck yeah" is vulgar).
@@ -137,8 +143,9 @@ public sealed class CardService
         {
             [k.Translation] = Str(),
             [k.Definition] = Str(),
-            [k.Usage] = Str(),
         };
+        if (k.DefinitionTranslation is { } defTr) props[defTr] = Str();
+        props[k.Usage] = Str();
         if (req.WithContextTranslation) props[k.ContextTranslation] = Str();
         if (seed.DictionaryForm is null) props["dictionary_form"] = Str();
         props[k.PartOfSpeech] = Str();
@@ -182,6 +189,7 @@ public sealed class CardService
         {
             Translation = Get(k.Translation) ?? seed.Translation,
             Definition = Get(k.Definition) ?? seed.Definition,
+            DefinitionTranslation = (k.DefinitionTranslation is { } defTr ? Get(defTr) : null) ?? seed.DefinitionTranslation,
             ContextTranslation = Unwrap(Get(k.ContextTranslation)) ?? seed.ContextTranslation,
             DictionaryForm = seed.DictionaryForm ?? Get("dictionary_form"),
             PartOfSpeech = seed.PartOfSpeech ?? Get(k.PartOfSpeech),
@@ -253,7 +261,7 @@ public sealed class CardService
         card = card with { KeyForms = card.KeyForms.Take(4).ToList(), Components = UsefulComponents(card.Components, lemma) };
 
         var error = card.Error;
-        if (req.Target == "ru" && (HasCjk(card.Translation) || HasCjk(card.ContextTranslation)
+        if (req.Target == "ru" && (HasCjk(card.Translation) || HasCjk(card.ContextTranslation) || HasCjk(card.DefinitionTranslation)
                                    || card.Components.Any(c => HasCjk(c.Meaning))))
             error = "Модель ответила не на русском — попробуйте ещё раз или смените модель.";
 

@@ -24,13 +24,16 @@ public partial class CardView : UserControl
         DataContextChanged += (_, _) => Attach(DataContext as LookupViewModel);
     }
 
-    /// <summary>Preset, theme, accent, text size and training mode from the settings.</summary>
+    /// <summary>Preset (or «Свой»: its layout, width and parts), theme, colours, text size and training mode from the settings.</summary>
     public void ApplyLook(PopupSettings settings, ThemeManager theme)
     {
-        ThemeManager.Fill(_palette, Palettes.Card(theme.CardKind(settings.Theme), settings.Accent));
+        ThemeManager.Fill(_palette, Palettes.Card(theme.CardKind(settings.Theme), settings));
         if (_vm is not null)
         {
-            _vm.Preset = settings.Preset is "less" or "more" ? settings.Preset : "standard";
+            var custom = settings.Preset == "custom";
+            var layout = custom ? settings.Custom.Base : settings.Preset;
+            _vm.Preset = layout is "less" or "more" ? layout : "standard";
+            _vm.SetLook(custom ? settings.Custom.Hidden : [], custom ? Math.Clamp(settings.Custom.Width, 360, 800) : null);
             _vm.HideTranslation = settings.HideTranslation;
         }
         var scale = Math.Clamp(settings.FontScale, 0.85, 1.3);

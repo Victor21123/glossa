@@ -17,6 +17,10 @@ public sealed record WordCard
     public string? PartOfSpeech { get; init; }
     public string? Level { get; init; }
     public string? Definition { get; init; }
+
+    /// <summary>The definition in the user's language when <see cref="Definition"/> is in the word's own (English).</summary>
+    public string? DefinitionTranslation { get; init; }
+
     public string? Translation { get; init; }
     public string? ContextTranslation { get; init; }
     public string? Explanation { get; init; }

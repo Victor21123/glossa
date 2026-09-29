@@ -31,7 +31,49 @@ public sealed class SettingsViewModel : ObservableObject
 
     // ---- Карточка слова ----
 
-    public string Preset { get => S.Popup.Preset; set => Set(() => S.Popup.Preset = value); }
+    public string Preset { get => S.Popup.Preset; set => Set(() => S.Popup.Preset = value, also: nameof(IsCustom)); }
+
+    /// <summary>«Свой»: its own rows (layout, width, transparency, parts) are shown.</summary>
+    public bool IsCustom => S.Popup.Preset == "custom";
+
+    /// <summary>less, standard or more: the layout «Свой» starts from.</summary>
+    public string CustomBase { get => S.Popup.Custom.Base; set => Set(() => S.Popup.Custom.Base = value); }
+
+    /// <summary>360–800 px in steps of 20.</summary>
+    public double CustomWidth
+    {
+        get => S.Popup.Custom.Width;
+        set => Set(() => S.Popup.Custom.Width = (int)(Math.Round(Math.Clamp(value, 360, 800) / 20) * 20), also: nameof(CustomWidthText));
+    }
+
+    public string CustomWidthText => $"{S.Popup.Custom.Width} пикс.";
+
+    /// <summary>0–60 % in steps of 5: how much of the game shows through the card.</summary>
+    public double CustomTransparency
+    {
+        get => S.Popup.Custom.Transparency;
+        set => Set(() => S.Popup.Custom.Transparency = (int)(Math.Round(Math.Clamp(value, 0, 60) / 5) * 5), also: nameof(CustomTransparencyText));
+    }
+
+    public string CustomTransparencyText => S.Popup.Custom.Transparency == 0 ? "нет" : $"{S.Popup.Custom.Transparency}%";
+
+    public bool IsPartShown(string part) => !S.Popup.Custom.Hidden.Contains(part);
+
+    public void SetPartShown(string part, bool shown) => Set(() =>
+    {
+        S.Popup.Custom.Hidden.Remove(part);
+        if (!shown) S.Popup.Custom.Hidden.Add(part);
+    }, name: "CustomParts");
+
+    /// <summary>The own accent's OKLCH hue, 0–359.</summary>
+    public double AccentHue { get => S.Popup.AccentHue; set => Set(() => S.Popup.AccentHue = (int)Math.Round(value) % 360); }
+
+    public bool IsCustomAccent => S.Popup.Accent == "custom";
+
+    /// <summary>A tint of the card's background instead of the theme's neutral grey.</summary>
+    public bool Tint { get => S.Popup.Tint; set => Set(() => S.Popup.Tint = value); }
+
+    public double TintHue { get => S.Popup.TintHue; set => Set(() => S.Popup.TintHue = (int)Math.Round(value) % 360); }
 
     /// <summary>app (as the window), dark, light, disco.</summary>
     public string CardTheme
@@ -40,7 +82,7 @@ public sealed class SettingsViewModel : ObservableObject
         set => Set(() => S.Popup.Theme = value, also: nameof(AccentHint));
     }
 
-    public string Accent { get => S.Popup.Accent; set => Set(() => S.Popup.Accent = value); }
+    public string Accent { get => S.Popup.Accent; set => Set(() => S.Popup.Accent = value, also: nameof(IsCustomAccent)); }
 
     /// <summary>85–130 %, as the slider shows it.</summary>
     public double FontScale

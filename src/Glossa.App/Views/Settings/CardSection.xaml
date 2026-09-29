@@ -7,7 +7,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- Three preset tiles with a sketch of how full the card is. -->
+        <!-- Preset tiles with a sketch of how full the card is; the fourth is the user's own. -->
         <Style x:Key="PresetTile" TargetType="ListBoxItem">
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -70,6 +70,19 @@
             </Setter>
         </Style>
 
+        <!-- The hue scale under a hue slider (OKLCH hues at the card's lightness). -->
+        <LinearGradientBrush x:Key="HueScale" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#E8837F" Offset="0" />
+            <GradientStop Color="#D99A55" Offset="0.17" />
+            <GradientStop Color="#A8B04E" Offset="0.3" />
+            <GradientStop Color="#58BC8B" Offset="0.47" />
+            <GradientStop Color="#3FB6C0" Offset="0.58" />
+            <GradientStop Color="#6FA2EC" Offset="0.7" />
+            <GradientStop Color="#A88BEA" Offset="0.83" />
+            <GradientStop Color="#D97FC4" Offset="0.92" />
+            <GradientStop Color="#E8837F" Offset="1" />
+        </LinearGradientBrush>
+
         <!-- Accent swatches: the chosen one gets a ring with a gap. -->
         <Style x:Key="AccentTile" TargetType="ListBoxItem">
             <Setter Property="Cursor" Value="Hand" />
@@ -125,11 +138,41 @@
                             </ListBox.Template>
                             <ListBox.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <UniformGrid Columns="3" />
+                                    <UniformGrid Columns="4" />
                                 </ItemsPanelTemplate>
                             </ListBox.ItemsPanel>
                         </ListBox>
                     </HeaderedContentControl>
+
+                    <!-- «Свой»: one of the layouts, as wide, as see-through and as full as the user wants. -->
+                    <StackPanel Visibility="{Binding IsCustom, Converter={StaticResource BoolToVis}}">
+                        <HeaderedContentControl Header="Основа" Tag="с какого пресета начать" Style="{StaticResource SettingRow}">
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding CustomBase}" HorizontalAlignment="Left">
+                                <ListBoxItem Content="Меньше" Tag="less" />
+                                <ListBoxItem Content="Стандарт" Tag="standard" />
+                                <ListBoxItem Content="Больше" Tag="more" />
+                            </ListBox>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Ширина" Style="{StaticResource SettingRow}">
+                            <StackPanel Orientation="Horizontal">
+                                <Slider Width="280" Minimum="360" Maximum="800" TickFrequency="20" IsSnapToTickEnabled="True" SmallChange="20"
+                                        LargeChange="40" Value="{Binding CustomWidth}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding CustomWidthText}" FontSize="14" FontWeight="SemiBold" MinWidth="80" Margin="14,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Прозрачность" Tag="игра видна сквозь фон карточки" Style="{StaticResource SettingRow}">
+                            <StackPanel Orientation="Horizontal">
+                                <Slider Width="280" Minimum="0" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" SmallChange="5"
+                                        LargeChange="10" Value="{Binding CustomTransparency}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding CustomTransparencyText}" FontSize="14" FontWeight="SemiBold" MinWidth="48" Margin="14,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Что показывать" Tag="части, которых нет в основе, не появятся" Style="{StaticResource SettingRowTop}">
+                            <WrapPanel x:Name="Parts" />
+                        </HeaderedContentControl>
+                    </StackPanel>
 
                     <HeaderedContentControl Header="Тема карточки" Tag="поверх игры" Style="{StaticResource SettingRow}">
                         <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding CardTheme}">
@@ -141,19 +184,41 @@
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Акцент" Tag="{Binding AccentHint}" Style="{StaticResource SettingRowTop}">
-                        <ListBox x:Name="Accents" SelectedValuePath="Key" SelectedValue="{Binding Accent}" ItemContainerStyle="{StaticResource AccentTile}"
-                                 HorizontalAlignment="Left">
-                            <ListBox.Template>
-                                <ControlTemplate TargetType="ListBox">
-                                    <ItemsPresenter />
-                                </ControlTemplate>
-                            </ListBox.Template>
-                            <ListBox.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                        </ListBox>
+                        <StackPanel>
+                            <ListBox x:Name="Accents" SelectedValuePath="Key" SelectedValue="{Binding Accent}" ItemContainerStyle="{StaticResource AccentTile}"
+                                     HorizontalAlignment="Left">
+                                <ListBox.Template>
+                                    <ControlTemplate TargetType="ListBox">
+                                        <ItemsPresenter />
+                                    </ControlTemplate>
+                                </ListBox.Template>
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                            </ListBox>
+                            <StackPanel Width="280" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                        Visibility="{Binding IsCustomAccent, Converter={StaticResource BoolToVis}}">
+                                <Slider Minimum="0" Maximum="359" SmallChange="5" LargeChange="20" Value="{Binding AccentHue}" />
+                                <Border Height="6" CornerRadius="3" Background="{StaticResource HueScale}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Фон карточки" Tag="свой оттенок вместо серого; в «Диско» свой" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <DockPanel>
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Tint}" VerticalAlignment="Center" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                           Text="яркость та же, так что текст читается так же" />
+                            </DockPanel>
+                            <StackPanel Width="280" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                        Visibility="{Binding Tint, Converter={StaticResource BoolToVis}}">
+                                <Slider Minimum="0" Maximum="359" SmallChange="5" LargeChange="20" Value="{Binding TintHue}" />
+                                <Border Height="6" CornerRadius="3" Background="{StaticResource HueScale}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </StackPanel>
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Размер текста" Style="{StaticResource SettingRow}">

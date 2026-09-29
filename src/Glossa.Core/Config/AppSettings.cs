@@ -240,14 +240,25 @@ public sealed class CustomEndpoint
 
 public sealed class PopupSettings
 {
-    /// <summary>less, standard or more: how much of the card is open at once.</summary>
+    /// <summary>less, standard, more (how much of the card is open at once) or custom (<see cref="Custom"/>).</summary>
     public string Preset { get; set; } = "standard";
 
     /// <summary>app (same as the window), dark, light or disco.</summary>
     public string Theme { get; set; } = "app";
 
-    /// <summary>white (default, inverse highlight), jade, amber, sun or lilac; «Диско» keeps its own amber.</summary>
+    /// <summary>white (default, inverse highlight), jade, amber, sun, lilac or custom (<see cref="AccentHue"/>); «Диско» keeps its own amber.</summary>
     public string Accent { get; set; } = "white";
+
+    /// <summary>The own accent («Свой»): an OKLCH hue, 0–359.</summary>
+    public int AccentHue { get; set; } = 200;
+
+    /// <summary>A tint of the card's background (<see cref="TintHue"/>) instead of the theme's neutral grey; not in «Диско».</summary>
+    public bool Tint { get; set; }
+
+    public int TintHue { get; set; } = 250;
+
+    /// <summary>The user's own card, used when <see cref="Preset"/> is custom.</summary>
+    public CustomCard Custom { get; set; } = new();
 
     public double FontScale { get; set; } = 1.0;
 
@@ -262,6 +273,27 @@ public sealed class PopupSettings
 
     /// <summary>Pronounce the word as soon as the card opens.</summary>
     public bool AutoPlayAudio { get; set; }
+}
+
+/// <summary>
+/// «Свой» card: one of the preset layouts made as wide, as see-through and as full as the user wants.
+/// </summary>
+public sealed class CustomCard
+{
+    /// <summary>The layout it starts from: less, standard or more.</summary>
+    public string Base { get; set; } = "standard";
+
+    /// <summary>Width in pixels, before the text size is applied.</summary>
+    public int Width { get; set; } = 560;
+
+    /// <summary>How much of the game shows through the card's background, percent (0 — solid).</summary>
+    public int Transparency { get; set; }
+
+    /// <summary>
+    /// Parts not shown: reading, pos, level, scene, definition, line, lineTranslation, components, forms, synonyms,
+    /// dictionaries, footer.
+    /// </summary>
+    public List<string> Hidden { get; set; } = [];
 }
 
 public sealed class SettingsStore(string path)

@@ -49,7 +49,7 @@ public static class Palettes
     /// The word card over the game. White is the default accent (Dragon Quest style: inverse highlight);
     /// «Диско» ignores the accent and keeps its own amber.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> Card(ThemeKind kind, string accent)
+    public static IReadOnlyDictionary<string, string> Card(ThemeKind kind, string accent, int accentHue = 200)
     {
         if (kind == ThemeKind.Disco)
             return new Dictionary<string, string>
@@ -81,7 +81,7 @@ public static class Palettes
                 ["Shadow"] = "0.08 0.01 255 / 0.55", ["Danger"] = "0.74 0.16 30", ["DangerWash"] = "0.74 0.16 30 / 0.15",
             };
 
-        if (accent is not ("jade" or "amber" or "sun" or "lilac"))
+        if (accent is not ("jade" or "amber" or "sun" or "lilac" or "custom"))
         {
             t["Accent"] = t["AccentText"] = light ? "0.3 0.02 255" : "0.97 0.005 95";
             t["MarkBg"] = light ? "0.27 0.02 255" : "0.94 0.006 95";
@@ -89,12 +89,37 @@ public static class Palettes
             return t;
         }
 
-        var hue = accent switch { "jade" => 168, "amber" => 62, "sun" => 95, _ => 300 };
+        var hue = accent switch { "jade" => 168, "amber" => 62, "sun" => 95, "lilac" => 300, _ => accentHue };
         var sun = accent == "sun";
         t["Accent"] = light ? $"0.56 0.12 {hue}" : $"0.8 0.13 {hue}";
         t["AccentText"] = light ? $"0.46 0.11 {hue}" : $"0.82 0.12 {hue}";
         t["MarkBg"] = light ? $"0.9 0.08 {hue}" : sun ? "0.87 0.15 95" : $"0.52 0.1 {hue} / 0.62";
         t["MarkInk"] = !light && sun ? "0.24 0.03 95" : t["Ink"];
+        return t;
+    }
+
+    /// <summary>
+    /// The card as the user set it up: its palette, then a tint of the background greys (same lightness, so text keeps
+    /// its contrast; «Диско» keeps its own colours) and see-through backgrounds for «Свой».
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Card(ThemeKind kind, Glossa.Core.Config.PopupSettings look)
+    {
+        var t = new Dictionary<string, string>(Card(kind, look.Accent, Math.Clamp(look.AccentHue, 0, 359)));
+        if (look.Tint && kind != ThemeKind.Disco)
+        {
+            var chroma = kind == ThemeKind.Light ? 0.022 : 0.03;
+            foreach (var key in new[] { "Surface", "Band", "Well", "Kbd", "Rule", "RuleSoft" })
+            {
+                var parts = t[key].Split(' ');
+                t[key] = FormattableString.Invariant($"{parts[0]} {chroma} {Math.Clamp(look.TintHue, 0, 359)}");
+            }
+        }
+        if (look.Preset == "custom" && look.Custom.Transparency > 0)
+        {
+            var alpha = 1 - Math.Clamp(look.Custom.Transparency, 0, 60) / 100.0;
+            foreach (var key in new[] { "Surface", "Band" })
+                t[key] = FormattableString.Invariant($"{t[key].Split('/')[0].Trim()} / {alpha:0.##}");
+        }
         return t;
     }
 }

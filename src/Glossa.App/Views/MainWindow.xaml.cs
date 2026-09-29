@@ -281,10 +281,23 @@ public partial class MainWindow : Window
 
     private void OnNextContext(object sender, RoutedEventArgs e) => _library.Step(1);
 
+    /// <summary>The scene in the default viewer, with the word outlined as it is here.</summary>
     private void OnOpenShot(object sender, RoutedEventArgs e)
     {
-        if (_library.Selected?.ShotPath is { } path && File.Exists(path))
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        if (_library.Selected is not { ShotPath: { } path } entry || !File.Exists(path)) return;
+        var open = path;
+        if (entry.WordBox is { } box)
+        {
+            try
+            {
+                open = FrameExport.Outlined(path, box, System.IO.Path.Combine(Glossa.Core.Config.DataPaths.Work, "frames"));
+            }
+            catch (Exception ex)
+            {
+                _services.Log.Error("open frame", ex); // the plain frame is better than none
+            }
+        }
+        Process.Start(new ProcessStartInfo(open) { UseShellExecute = true });
     }
 
     private async void OnSyncAnki(object sender, RoutedEventArgs e) => await _library.SyncAnki();

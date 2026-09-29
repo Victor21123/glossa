@@ -19,6 +19,7 @@ public sealed class LookupViewModel : ObservableObject
     private bool _dictionaryMarkMatches;
     private string? _translation;
     private string? _definition;
+    private string? _definitionTranslation;
     private string? _contextTranslation;
     private string? _synonyms;
     private string? _keyForms;
@@ -38,6 +39,8 @@ public sealed class LookupViewModel : ObservableObject
     private bool _hideTranslation;
     private bool _revealed;
     private bool _dictionariesOpen;
+    private IReadOnlySet<string> _hidden = new HashSet<string>();
+    private double? _width;
 
     public string Headword { get => _headword; set => SetProperty(ref _headword, value); }
 
@@ -46,9 +49,39 @@ public sealed class LookupViewModel : ObservableObject
         get => _reading;
         set
         {
-            if (SetProperty(ref _reading, value)) OnPropertyChanged(nameof(Meta));
+            if (!SetProperty(ref _reading, value)) return;
+            OnPropertyChanged(nameof(Meta));
+            OnPropertyChanged(nameof(ShownReading));
         }
     }
+
+    /// <summary>What the card shows: Show[part] in XAML. «Свой» hides some parts (see CustomCard.Hidden); presets hide none.</summary>
+    public CardParts Show => new(_hidden);
+
+    /// <summary>Card widths: the presets' own, or the one «Свой» sets for all of them.</summary>
+    public double LessWidth => _width ?? 440;
+    public double StandardWidth => _width ?? 560;
+    public double MoreWidth => _width ?? 472;
+
+    /// <summary>«Свой»: parts to hide and the width; null width and nothing hidden for the presets.</summary>
+    public void SetLook(IEnumerable<string> hidden, double? width)
+    {
+        _hidden = hidden.ToHashSet();
+        _width = width;
+        OnPropertyChanged(string.Empty); // every part and width at once; happens only when settings change
+    }
+
+    private bool Shown(string part) => !_hidden.Contains(part);
+
+    public string? ShownReading => Shown("reading") ? _reading : null;
+    public string? ShownLevel => Shown("level") ? _level : null;
+    public string? ShownPartOfSpeech => Shown("pos") ? _partOfSpeech : null;
+    public string? ShownUsageNote => Shown("scene") ? _usageNote : null;
+    public string? ShownDefinition => Shown("definition") ? _definition : null;
+    public string? ShownKeyForms => Shown("forms") ? _keyForms : null;
+    public string? ShownSynonyms => Shown("synonyms") ? _synonyms : null;
+    public bool ShowComponents => HasComponents && Shown("components");
+    public bool ShowLineRow => Shown("line") || Shown("lineTranslation");
 
     /// <summary>Language of the word on screen; picks the font so Han characters get Japanese or Chinese forms.</summary>
     public string Language
@@ -68,7 +101,7 @@ public sealed class LookupViewModel : ObservableObject
     public FontFamily PlateFont => _language is "ja" or "zh" ? UiFonts.For(_language) : UiFonts.Serif;
 
     /// <summary>The Less card's second line after the word: "がったいする · N4 · гл. suru".</summary>
-    public string Meta => string.Join(" · ", new[] { _reading, _level, _partOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
+    public string Meta => string.Join(" · ", new[] { ShownReading, ShownLevel, ShownPartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
 
     public string? Level
     {
@@ -79,6 +112,7 @@ public sealed class LookupViewModel : ObservableObject
             OnPropertyChanged(nameof(LevelScale));
             OnPropertyChanged(nameof(LevelValue));
             OnPropertyChanged(nameof(Meta));
+            OnPropertyChanged(nameof(ShownLevel));
         }
     }
 
@@ -98,10 +132,20 @@ public sealed class LookupViewModel : ObservableObject
         get => _partOfSpeech;
         set
         {
-            if (SetProperty(ref _partOfSpeech, value)) OnPropertyChanged(nameof(Meta));
+            if (!SetProperty(ref _partOfSpeech, value)) return;
+            OnPropertyChanged(nameof(Meta));
+            OnPropertyChanged(nameof(ShownPartOfSpeech));
         }
     }
-    public string? UsageNote { get => _usageNote; set => SetProperty(ref _usageNote, value); }
+
+    public string? UsageNote
+    {
+        get => _usageNote;
+        set
+        {
+            if (SetProperty(ref _usageNote, value)) OnPropertyChanged(nameof(ShownUsageNote));
+        }
+    }
 
     /// <summary>"✓ есть в словаре" / "нет в словаре — перевод по контексту".</summary>
     public string? DictionaryMark
@@ -124,17 +168,44 @@ public sealed class LookupViewModel : ObservableObject
     }
 
     public string? Translation { get => _translation; set => SetProperty(ref _translation, value); }
-    public string? Definition { get => _definition; set => SetProperty(ref _definition, value); }
+    public string? Definition
+    {
+        get => _definition;
+        set
+        {
+            if (SetProperty(ref _definition, value)) OnPropertyChanged(nameof(ShownDefinition));
+        }
+    }
+
+    /// <summary>The definition in the user's language under a monolingual one.</summary>
+    public string? DefinitionTranslation { get => _definitionTranslation; set => SetProperty(ref _definitionTranslation, value); }
     public string? ContextTranslation { get => _contextTranslation; set => SetProperty(ref _contextTranslation, value); }
-    public string? Synonyms { get => _synonyms; set => SetProperty(ref _synonyms, value); }
-    public string? KeyForms { get => _keyForms; set => SetProperty(ref _keyForms, value); }
+    public string? Synonyms
+    {
+        get => _synonyms;
+        set
+        {
+            if (SetProperty(ref _synonyms, value)) OnPropertyChanged(nameof(ShownSynonyms));
+        }
+    }
+
+    public string? KeyForms
+    {
+        get => _keyForms;
+        set
+        {
+            if (SetProperty(ref _keyForms, value)) OnPropertyChanged(nameof(ShownKeyForms));
+        }
+    }
 
     public IReadOnlyList<CardComponent> Components
     {
         get => _components;
         set
         {
-            if (SetProperty(ref _components, value)) OnPropertyChanged(nameof(HasComponents));
+            if (!SetProperty(ref _components, value)) return;
+            OnPropertyChanged(nameof(HasComponents));
+            OnPropertyChanged(nameof(ShowComponents));
         }
     }
 
@@ -184,7 +255,8 @@ public sealed class LookupViewModel : ObservableObject
         }
     }
 
-    public bool ShowDictionaries => HasDictionaries && (IsMore || _dictionariesOpen);
+    /// <summary>Open articles: always in More; in Standard when unfolded, or when «Свой» hides the footer that unfolds them.</summary>
+    public bool ShowDictionaries => HasDictionaries && Shown("dictionaries") && (IsMore || _dictionariesOpen || !Shown("footer"));
 
     public string Context { get => _context; set => SetProperty(ref _context, value); }
     public int ContextOffset { get => _contextOffset; set => SetProperty(ref _contextOffset, value); }
@@ -285,6 +357,7 @@ public sealed class LookupViewModel : ObservableObject
         DictionaryMark = null;
         Translation = null;
         Definition = null;
+        DefinitionTranslation = null;
         ContextTranslation = null;
         Synonyms = null;
         KeyForms = null;
@@ -311,6 +384,7 @@ public sealed class LookupViewModel : ObservableObject
         UsageNote = card.UsageNote;
         Translation = card.Translation;
         Definition = card.Definition;
+        DefinitionTranslation = card.DefinitionTranslation;
         if (card.ContextTranslation is not null) ContextTranslation = card.ContextTranslation;
         Synonyms = card.Synonyms.Count > 0 ? string.Join(", ", card.Synonyms) : null;
         KeyForms = card.KeyForms.Count > 0 ? string.Join(" · ", card.KeyForms) : null;
@@ -331,6 +405,12 @@ public sealed class LookupViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMore));
         OnPropertyChanged(nameof(ShowDictionaries));
     }
+}
+
+/// <summary>Show[part] for the card's XAML: false for a part «Свой» hides.</summary>
+public sealed class CardParts(IReadOnlySet<string> hidden)
+{
+    public bool this[string part] => !hidden.Contains(part);
 }
 
 public sealed record DictEntryItem(string Headword, string? Reading, string Body);

@@ -19,7 +19,7 @@ def main():
         for n in names:
             r = runs[n].get(cid, {})
             lines.append(f"  {n[:22]:22} {r.get('cardMs', '?'):>5}ms | {r.get('translation')} [{r.get('register')}] "
-                         f"({r.get('pos')}) здесь: {r.get('usage')} | ctx: {r.get('contextTranslation')} | tr: {r.get('translator')}")
+                         f"({r.get('pos')}) контекст сцены: {r.get('usage')} | ctx: {r.get('contextTranslation')} | tr: {r.get('translator')}")
     lines.append("")
     for n in names:
         rs = list(runs[n].values())

@@ -153,7 +153,7 @@ public sealed class Bench : IDisposable
                 c.Id, lang = plan.Language, hint = HintDictionary ? plan.Hint : null, word = plan.Hit.Word, context = plan.Hit.Context, c.Expect,
                 form = last?.DictionaryForm ?? plan.Seed.DictionaryForm, reading = last?.Reading ?? plan.Seed.Reading,
                 level = last?.Level, pos = last?.PartOfSpeech, register = last?.Register, usage = last?.UsageNote,
-                translation = last?.Translation, definition = last?.Definition,
+                translation = last?.Translation, definition = last?.Definition, definitionTranslation = last?.DefinitionTranslation,
                 contextTranslation = last?.ContextTranslation, synonyms = last?.Synonyms, error = last?.Error,
                 firstMs, cardMs, translator = translation, trMs,
             });

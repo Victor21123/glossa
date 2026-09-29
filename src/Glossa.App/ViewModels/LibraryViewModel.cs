@@ -16,7 +16,7 @@ namespace Glossa.App.ViewModels;
 
 /// <summary>
 /// A word of the user's dictionary as the «Словарь» page shows it: the word itself plus the sentence being viewed.
-/// Each sentence keeps its own «здесь» (what the word means there and why), translation and frame.
+/// Each sentence keeps its own «контекст сцены» (what the word means there and why), translation and frame.
 /// </summary>
 public sealed class WordEntry : ObservableObject
 {
@@ -40,6 +40,7 @@ public sealed class WordEntry : ObservableObject
     public string? Reading => Word.Reading;
     public string? Translation => Word.Translation;
     public string? Definition => Word.Definition;
+    public string? DefinitionTranslation => Word.DefinitionTranslation;
     public string? Explanation => Word.Explanation;
     public string? Synonyms => Word.Synonyms.Count > 0 ? string.Join(", ", Word.Synonyms) : null;
     public string? Level => Word.Level;
@@ -148,6 +149,7 @@ public sealed class WordEntry : ObservableObject
     public string EditHere { get; set; } = "";
     public string EditUsage { get; set; } = "";
     public string EditDefinition { get; set; } = "";
+    public string EditDefinitionTranslation { get; set; } = "";
     public string EditContextTranslation { get; set; } = "";
     public string EditSynonyms { get; set; } = "";
     public string EditLevel { get; set; } = "";
@@ -163,6 +165,7 @@ public sealed class WordEntry : ObservableObject
         EditHere = Current?.Translation ?? "";
         EditUsage = UsageNote ?? "";
         EditDefinition = Word.Definition ?? "";
+        EditDefinitionTranslation = Word.DefinitionTranslation ?? "";
         EditContextTranslation = ContextTranslation ?? "";
         EditSynonyms = Synonyms ?? "";
         EditLevel = Word.Level ?? "";
@@ -179,6 +182,7 @@ public sealed class WordEntry : ObservableObject
             Reading = Blank(EditReading),
             Translation = Blank(EditTranslation),
             Definition = Blank(EditDefinition),
+            DefinitionTranslation = Blank(EditDefinitionTranslation),
             Level = Blank(EditLevel),
             PartOfSpeech = Blank(EditPartOfSpeech),
             Register = EditRegister.Length == 0 ? null : EditRegister,

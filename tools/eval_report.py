@@ -215,7 +215,7 @@ function cases() {
         <div class="ans ${a.grade || ""}">
           <div class="ans-head"><span>${esc(titles[a.run])}</span><span>${a.grade ? `<span class="grade ${a.grade}">${MARK[a.grade]}</span> ` : ""}<span class="mono">${sec(a.cardMs)}</span></span></div>
           <div><span class="tr">${esc(a.translation || "—")}</span>${a.register && REG_RU[a.register] ? `<span class="reg ${STRONG.has(a.register) ? "strong" : ""}">${REG_RU[a.register]}</span>` : ""}</div>
-          ${a.usage ? `<div class="usage">здесь: ${esc(a.usage)}</div>` : ""}
+          ${a.usage ? `<div class="usage">контекст сцены: ${esc(a.usage)}</div>` : ""}
           ${a.contextTranslation ? `<div class="line"><span>карточка</span>${esc(a.contextTranslation)}</div>` : ""}
           ${a.translator && a.translator !== a.contextTranslation ? `<div class="line"><span>переводчик</span>${esc(a.translator)}</div>` : ""}
         </div>`).join("")}

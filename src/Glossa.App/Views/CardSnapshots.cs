@@ -30,6 +30,20 @@ internal static class CardSnapshots
                 Save(popup, Path.Combine(folder, $"{themeName}-{preset}-{name}.png"));
                 popup.Close();
             }
+            // «Свой»: narrower, see-through, tinted, its own accent, part of the lines hidden.
+            foreach (var (name, fill) in Samples)
+            {
+                var vm = new LookupViewModel();
+                var popup = new LookupPopup(vm);
+                fill(vm);
+                popup.ApplyLook(new PopupSettings
+                {
+                    Preset = "custom", Accent = "custom", AccentHue = 20, Tint = true, TintHue = 200,
+                    Custom = new CustomCard { Base = "standard", Width = 480, Transparency = 25, Hidden = ["pos", "forms", "synonyms", "footer"] },
+                }, theme);
+                Save(popup, Path.Combine(folder, $"{themeName}-custom-{name}.png"));
+                popup.Close();
+            }
         }
     }
 
@@ -56,6 +70,11 @@ internal static class CardSnapshots
         library.AddToCollection(exam, library.List().First(w => w.Headword == "reconsider").Id);
         library.CreateCollection("Сленг и мат", new Glossa.Core.Library.SmartFilter { Language = "en", Register = null, MinLookups = null });
         library.CreateCollection("Искал 2+ раза", new Glossa.Core.Library.SmartFilter { MinLookups = 2 });
+
+        // «Открыть кадр»: the copy the viewer gets, with the word outlined.
+        if (library.List().FirstOrDefault(w => w.ShotFile is not null && w.WordBox is not null) is { } framed)
+            File.Copy(FrameExport.Outlined(Path.Combine(data, framed.ShotFile!), framed.WordBox!.Value, Path.Combine(data, "tmp", "frames")),
+                Path.Combine(folder, "frame-outlined.jpg"), overwrite: true);
 
         var log = new Glossa.Core.Logging.FileLogger(Path.Combine(data, "logs"));
         var http = new HttpClient();
@@ -99,6 +118,19 @@ internal static class CardSnapshots
             }
             window.Close();
 
+            // Карточка слова with «Свой» chosen: its rows open, own accent and tint on.
+            settings.Popup = new PopupSettings
+            {
+                Preset = "custom", Accent = "custom", AccentHue = 20, Tint = true, TintHue = 200,
+                Custom = new CustomCard { Width = 480, Transparency = 25, Hidden = ["pos", "forms", "synonyms", "footer"] },
+            };
+            var custom = new MainWindow(services);
+            custom.ShowTab(2);
+            custom.SettingsPage.Show("card");
+            SaveWindow(custom, Path.Combine(folder, $"settings-{themeName}-card-custom.png"));
+            custom.Close();
+            settings.Popup = new PopupSettings();
+
             // The still frame as the gamepad sees it, through the real path: the picture recognized as a whole, the
             // words of its biggest block, two steps to the right from the first one.
             if (shot is not null && StillWords(Path.Combine(data, shot), folder) is { } walk)
@@ -132,6 +164,7 @@ internal static class CardSnapshots
             Language = lang, Word = word, Translation = usageTr ?? tr, Level = level, PartOfSpeech = pos, Reading = reading, Register = register,
             Context = ctx, ContextOffset = ctx.IndexOf(word, StringComparison.Ordinal), ContextTranslation = ctxTr, UsageNote = here,
             WindowTitle = game, CreatedUtc = at, Definition = lang == "en" ? "To think again about a decision and possibly change it." : null,
+            DefinitionTranslation = lang == "en" ? "Обдумать решение ещё раз и, возможно, изменить его." : null,
         };
         yield return (W("en", "shit-stained", "испачканный в дерьме", "B1", "прил.", "He looks at his shit-stained Lickra(TM) with a grim expression.",
             "Он с мрачным видом смотрит на свою заляпанную дерьмом Ликру(TM).", "отвращение, брезгливость", "Disco Elysium", now.AddMinutes(-30),
@@ -255,6 +288,7 @@ internal static class CardSnapshots
             vm.Translation = "испачканный в дерьме";
             vm.UsageNote = "отвращение, брезгливость";
             vm.Definition = "Covered or soiled with excrement.";
+            vm.DefinitionTranslation = "Покрытый или испачканный экскрементами.";
             vm.Context = "He looks at his shit-stained Lickra(TM) with a grim expression.";
             vm.ContextOffset = 16;
             vm.WordLength = 12;
