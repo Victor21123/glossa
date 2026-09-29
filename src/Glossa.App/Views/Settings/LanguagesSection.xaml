@@ -53,13 +53,13 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="ПО ЯЗЫКАМ" Style="{StaticResource Caption}" Margin="0,26,0,12" />
+                <TextBlock Text="ПО ЯЗЫКАМ" Style="{StaticResource SectionCaption}" Margin="0,26,0,12" />
                 <UniformGrid x:Name="LanguageCards" Columns="3" Margin="0,0,-16,0" />
             </StackPanel>
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="РАСПОЗНАВАНИЕ И РАЗБОР" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                    <TextBlock Text="РАСПОЗНАВАНИЕ И РАЗБОР" Style="{StaticResource SectionCaption}" Margin="0,0,0,6" />
                     <StackPanel x:Name="Engines" />
                     <TextBlock Style="{StaticResource Note}" Margin="0,12,0,0"
                                Text="Всё работает без интернета: распознавание текста на экране, разбор японского на слова (UniDic) и китайского (CC-CEDICT)." />

@@ -10,6 +10,13 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource Muted}" />
     </Style>
+    <!-- The title of a block on a panel («СЕЙЧАС», «ПРОВЕРКА»): larger and brighter than a field's label (Caption,
+         StatLabel), so a title with a label right under it reads as a heading and its field, not as a doubled label. -->
+    <Style x:Key="SectionCaption" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+    </Style>
     <Style x:Key="PageTitle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="26" />
         <Setter Property="FontWeight" Value="Bold" />
@@ -362,8 +369,11 @@
         </Setter>
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Its own island: a framed track, the chosen option inverse (as the word in a card), so it never sinks into
+                     the panel under it. -->
                 <ControlTemplate TargetType="ListBox">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="3">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                            CornerRadius="10" Padding="3">
                         <ItemsPresenter />
                     </Border>
                 </ControlTemplate>
@@ -385,12 +395,13 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Band}" />
                                         <Setter Property="Foreground" Value="{DynamicResource Ink}" />
                                     </Trigger>
                                     <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
-                                        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
-                                        <Setter Property="FontWeight" Value="Medium" />
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Inverse}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource InverseInk}" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -827,12 +838,13 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Band}" />
                                         <Setter Property="Foreground" Value="{DynamicResource Ink}" />
                                     </Trigger>
                                     <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
-                                        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
-                                        <Setter Property="FontWeight" Value="Medium" />
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Inverse}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource InverseInk}" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>

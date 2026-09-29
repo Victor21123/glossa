@@ -249,7 +249,7 @@
             </Border>
 
             <StackPanel Grid.Column="2">
-                <TextBlock Text="ПРЕДПРОСМОТР" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                <TextBlock Text="ПРЕДПРОСМОТР" Style="{StaticResource SectionCaption}" Margin="0,0,0,10" />
                 <Border x:Name="PreviewBox" Height="660" CornerRadius="12" Background="{DynamicResource Band}" BorderBrush="{DynamicResource Rule}"
                         BorderThickness="1">
                     <Canvas x:Name="Stage" ClipToBounds="True">

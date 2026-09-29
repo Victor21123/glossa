@@ -90,7 +90,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="ПРОСЛУШАТЬ" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                    <TextBlock Text="ПРОСЛУШАТЬ" Style="{StaticResource SectionCaption}" Margin="0,0,0,10" />
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Width="38" Padding="0" Margin="8,0,0,0" Click="OnSay"
                                 ToolTip="Прослушать">
@@ -101,7 +101,7 @@
                     <TextBlock x:Name="SayNote" Style="{StaticResource Note}" Margin="0,8,0,0"
                                Text="Язык определяется по тексту: латиница — английский, кана — японский, иероглифы без каны — китайский." />
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
-                    <TextBlock Text="КАК ДОБАВИТЬ ГОЛОС" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                    <TextBlock Text="КАК ДОБАВИТЬ ГОЛОС" Style="{StaticResource SectionCaption}" Margin="0,0,0,10" />
                     <TextBlock FontSize="14" LineHeight="21" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap">
                         1. Параметры Windows → Время и язык → Речь.<LineBreak />
                         2. «Добавить голоса»: японский — Microsoft Haruka, китайский — Microsoft Huihui.<LineBreak />

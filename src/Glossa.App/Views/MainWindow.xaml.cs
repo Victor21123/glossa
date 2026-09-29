@@ -39,11 +39,6 @@ public partial class MainWindow : Window
             if (_library.Items.FirstOrDefault(w => w.Word.Id == id) is { } entry) _library.Selected = entry;
             ShowTab(MainTab.Words);
         };
-        HomePage.OpenSettings += key =>
-        {
-            NavSettings.IsChecked = true;
-            SettingsPage.Show(key);
-        };
 
         _library.PropertyChanged += OnLibraryChanged;
         _library.Items.CollectionChanged += (_, _) => UpdateEmpty();
@@ -65,11 +60,7 @@ public partial class MainWindow : Window
         };
         StateChanged += (_, _) => Frame.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
         SizeChanged += (_, _) => FrameBorder.Height = Math.Clamp(ActualHeight * 0.45, 240, 560);
-        _aiTimer.Tick += (_, _) =>
-        {
-            UpdateAiStatus();
-            if (HomePage.IsVisible) HomePage.RefreshAi();
-        };
+        _aiTimer.Tick += (_, _) => UpdateAiStatus();
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible) { UpdateAiStatus(); _aiTimer.Start(); }

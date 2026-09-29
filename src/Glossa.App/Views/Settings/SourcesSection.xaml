@@ -84,7 +84,7 @@
             <StackPanel>
                 <DockPanel Margin="0,0,0,8">
                     <TextBlock DockPanel.Dock="Right" Text="{Binding InstalledSummary}" Style="{StaticResource Note}" />
-                    <TextBlock Text="ПОРЯДОК В КАРТОЧКЕ" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                    <TextBlock Text="ПОРЯДОК В КАРТОЧКЕ" Style="{StaticResource SectionCaption}" VerticalAlignment="Center" />
                 </DockPanel>
                 <ListBox ItemsSource="{Binding Packs}" SelectedItem="{Binding SelectedPack}" ItemContainerStyle="{StaticResource PickRow}">
                     <ListBox.Template>
@@ -144,7 +144,7 @@
                         </HeaderedContentControl>
                     </UniformGrid>
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4,0,16" />
-                    <TextBlock Text="ПРОВЕРИТЬ СЛОВО" Style="{StaticResource Caption}" Margin="0,0,0,8" />
+                    <TextBlock Text="ПРОВЕРИТЬ СЛОВО" Style="{StaticResource SectionCaption}" Margin="0,0,0,8" />
                     <TextBox x:Name="CheckBox" theme:Hint.Text="слово, как в словаре" TextChanged="OnCheck" />
                     <ItemsControl x:Name="CheckResults" ItemTemplate="{StaticResource EntryTemplate}" Margin="0,12,0,0" />
                     <TextBlock x:Name="CheckEmpty" Style="{StaticResource Note}" Visibility="Collapsed" Text="В этом словаре такого слова нет." />
@@ -341,7 +341,7 @@
                     <TextBlock Text="{Binding ImportStatus}" Style="{StaticResource Note}" FontSize="13.5" VerticalAlignment="Center" />
                 </DockPanel>
 
-                <TextBlock Text="ИМПОРТИРОВАНО РАНЕЕ" Style="{StaticResource Caption}" Margin="0,20,0,8" />
+                <TextBlock Text="ИМПОРТИРОВАНО РАНЕЕ" Style="{StaticResource SectionCaption}" Margin="0,20,0,8" />
                 <ItemsControl ItemsSource="{Binding Imported}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -360,7 +360,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="ПОДХОДЯЩИЕ ФОРМАТЫ" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                    <TextBlock Text="ПОДХОДЯЩИЕ ФОРМАТЫ" Style="{StaticResource SectionCaption}" Margin="0,0,0,6" />
                     <StackPanel x:Name="Formats" />
                     <TextBlock Style="{StaticResource Note}" Margin="0,14,0,0"
                                Text="Файл не уходит в интернет. Язык статей Glossa угадывает по заголовку; если ошиблась — поправь перед сборкой." />

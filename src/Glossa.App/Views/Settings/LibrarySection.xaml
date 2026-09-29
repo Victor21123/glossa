@@ -78,7 +78,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="КАРТОЧКА В ANKI" Style="{StaticResource Caption}" Margin="0,0,0,12" />
+                    <TextBlock Text="КАРТОЧКА В ANKI" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
                     <Border CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource Rule}" Background="{DynamicResource Page}" Padding="14">
                         <StackPanel>
                             <TextBlock Text="ЛИЦО" Style="{StaticResource Caption}" Margin="0,0,0,10" />

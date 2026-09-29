@@ -257,7 +257,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="СЕЙЧАС" Style="{StaticResource Caption}" />
+                    <TextBlock Text="СЕЙЧАС" Style="{StaticResource SectionCaption}" />
                     <TextBlock x:Name="StateText" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,14" TextWrapping="Wrap" />
                     <Grid>
                         <Grid.ColumnDefinitions>

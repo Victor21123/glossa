@@ -583,14 +583,14 @@
 
                                 <!-- Right column -->
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="СПРАВОЧНИКИ" Style="{StaticResource Caption}" Margin="0,4,0,8" />
+                                    <TextBlock Text="СПРАВОЧНИКИ" Style="{StaticResource SectionCaption}" Margin="0,4,0,8" />
                                     <ItemsControl ItemsSource="{Binding DataContext.Articles, RelativeSource={RelativeSource AncestorType=Window}}"
                                                   ItemTemplate="{StaticResource DictSection}" />
                                     <TextBlock Text="В словарях статьи нет, перевод по контексту" Style="{StaticResource Note}" FontSize="13.5"
                                                Visibility="{Binding DataContext.HasArticles, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource FalseToVis}}" />
-                                    <TextBlock Text="ИСТОЧНИК" Style="{StaticResource Caption}" Margin="0,22,0,6" />
+                                    <TextBlock Text="ИСТОЧНИК" Style="{StaticResource SectionCaption}" Margin="0,22,0,6" />
                                     <TextBlock Text="{Binding SourceText}" FontSize="13.5" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
-                                    <TextBlock Text="КОЛЛЕКЦИИ" Style="{StaticResource Caption}" Margin="0,22,0,8" />
+                                    <TextBlock Text="КОЛЛЕКЦИИ" Style="{StaticResource SectionCaption}" Margin="0,22,0,8" />
                                     <WrapPanel>
                                         <ItemsControl ItemsSource="{Binding DataContext.SelectedCollections, RelativeSource={RelativeSource AncestorType=Window}}">
                                             <ItemsControl.ItemsPanel>

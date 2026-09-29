@@ -69,7 +69,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
-                    <TextBlock Text="НА ДИСКЕ" Style="{StaticResource Caption}" />
+                    <TextBlock Text="НА ДИСКЕ" Style="{StaticResource SectionCaption}" />
                     <TextBlock x:Name="DiskTotal" Text="считаю…" FontSize="28" FontWeight="Bold" Margin="0,10,0,12" />
                     <Grid x:Name="DiskBar" Height="14" ClipToBounds="True" />
                     <ItemsControl x:Name="DiskLegend" Margin="0,10,0,0">
@@ -86,7 +86,7 @@
                     </ItemsControl>
                     <TextBlock x:Name="DiskNote" Style="{StaticResource Note}" Margin="0,8,0,0" />
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
-                    <TextBlock Text="О ПРОГРАММЕ" Style="{StaticResource Caption}" />
+                    <TextBlock Text="О ПРОГРАММЕ" Style="{StaticResource SectionCaption}" />
                     <TextBlock x:Name="Build" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
                     <TextBlock Text="для личного использования" Style="{StaticResource Note}" />
                     <TextBlock x:Name="Location" Style="{StaticResource Note}" Margin="0,4,0,0" />
