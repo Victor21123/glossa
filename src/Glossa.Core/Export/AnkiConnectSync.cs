@@ -11,7 +11,8 @@ public sealed record AnkiSyncResult(int Added, int Updated, int Tagged);
 
 /// <summary>
 /// Pushes the library into a running Anki through the AnkiConnect add-on (API version 6). Notes are matched by
-/// the permanent GlossaId field. Nothing is ever deleted in Anki: removed words get the glossa::removed tag.
+/// the permanent GlossaId field. Nothing is ever deleted in Anki: removed words get the glossa::removed tag, and a
+/// word the user brings back (met again after deleting it) loses it.
 /// </summary>
 public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.0.1:8765")
 {
@@ -35,6 +36,7 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
             await InvokeAsync("createDeck", new JsonObject { ["deck"] = deck }, ct).ConfigureAwait(false);
 
         int added = 0, updated = 0, tagged = 0, i = 0;
+        var kept = new JsonArray();
         foreach (var w in words)
         {
             ct.ThrowIfCancellationRequested();
@@ -56,6 +58,7 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
                 {
                     ["note"] = new JsonObject { ["id"] = existing[0], ["fields"] = fields },
                 }, ct).ConfigureAwait(false);
+                kept.Add(existing[0]);
                 updated++;
             }
             else
@@ -74,6 +77,11 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
                 added++;
             }
         }
+
+        // A word deleted and then met again is back in the library with the same note: one call clears the tag
+        // (a no-op for notes that never had it).
+        if (kept.Count > 0)
+            await InvokeAsync("removeTags", new JsonObject { ["notes"] = kept, ["tags"] = AnkiNoteType.RemovedTag }, ct).ConfigureAwait(false);
 
         foreach (var r in removed)
         {

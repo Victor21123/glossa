@@ -144,6 +144,33 @@ public sealed class ExportTests : IDisposable
         Assert.DoesNotContain("deleteNotes", fake.Actions);
     }
 
+    [Fact]
+    public async Task A_deleted_word_met_again_comes_back_with_its_note()
+    {
+        var db = Path.Combine(_temp.New(), "library.db");
+        using var store = new LibraryStore(db);
+        var id = store.Record(new SavedWord { Language = "en", Word = "gone", Translation = "ушедший", Context = "It's gone." }, newLookup: true);
+        store.SetPinned(id, true);
+        store.Delete(id);
+
+        var again = store.Record(new SavedWord { Language = "en", Word = "gone", Translation = "пропавший", Context = "Gone again." }, newLookup: true);
+
+        Assert.Equal(id, again);
+        var word = Assert.Single(store.List());
+        Assert.Equal(2, word.Lookups);
+        Assert.True(word.Pinned);
+        Assert.Equal("ушедший", word.Translation); // a later lookup only fills blanks
+        Assert.Empty(store.ListDeleted());
+
+        var fake = new FakeAnki(existingGlossaId: id);
+        await new AnkiConnectSync(new HttpClient(fake))
+            .SyncAsync(Path.GetDirectoryName(db)!, store.List(), store.ListDeleted(), new AnkiExportOptions(), null, CancellationToken.None);
+        var untag = Assert.Single(fake.Requests, r => r["action"]!.GetValue<string>() == "removeTags");
+        Assert.Equal(42, untag["params"]!["notes"]![0]!.GetValue<long>());
+        Assert.Equal(AnkiNoteType.RemovedTag, untag["params"]!["tags"]!.GetValue<string>());
+        Assert.DoesNotContain("addNote", fake.Actions);
+    }
+
     private sealed class FakeAnki(string existingGlossaId) : HttpMessageHandler
     {
         public List<string> Actions { get; } = [];

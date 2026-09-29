@@ -310,7 +310,7 @@ public sealed partial class LibraryStore : IDisposable
         lock (_gate)
         {
             using var tx = _db.BeginTransaction();
-            var id = !newLookup && Exists(w.Id) ? w.Id : FindWord(w.Language, w.Headword);
+            var id = !newLookup && Exists(w.Id) ? w.Id : FindWord(w.Language, w.Headword) ?? Revive(w.Language, w.Headword);
             if (id is null)
             {
                 id = w.Id;
@@ -500,6 +500,20 @@ public sealed partial class LibraryStore : IDisposable
     private string? FindWord(string language, string headword) =>
         Scalar("SELECT id FROM words WHERE deleted = 0 AND language = $l AND COALESCE(dictionary_form, word) = $h ORDER BY created_utc LIMIT 1",
             ("$l", language), ("$h", headword)) as string;
+
+    /// <summary>
+    /// A word the user deleted and met again comes back as it was - sentences, edits, study history, its Anki note
+    /// (the next sync takes the removed tag off) - rather than as a second copy (decided 2026-09-30).
+    /// The latest deleted wins: Delete stamps updated_utc, duplicates merged away long ago keep theirs.
+    /// </summary>
+    private string? Revive(string language, string headword)
+    {
+        if (Scalar("SELECT id FROM words WHERE deleted = 1 AND language = $l AND COALESCE(dictionary_form, word) = $h ORDER BY updated_utc DESC LIMIT 1",
+                ("$l", language), ("$h", headword)) is not string id)
+            return null;
+        Run("UPDATE words SET deleted = 0 WHERE id = $id", ("$id", id));
+        return id;
+    }
 
     private void InsertWord(SavedWord w)
     {
