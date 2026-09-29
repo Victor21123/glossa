@@ -166,11 +166,14 @@ public sealed class LlamaServerHost : IDisposable
         if (crashed) _log.Info($"llama-server[{role}] exited unexpectedly (code {process.ExitCode}); it restarts on the next lookup");
     }
 
+    private static readonly bool LogAll = Environment.GetEnvironmentVariable("GLOSSA_LLAMA_LOG") == "all";
+
     private void LogServer(string role, string? line)
     {
         if (string.IsNullOrEmpty(line)) return;
         // llama-server is chatty; keep errors and the load summary (where the weights, cache and buffers went).
-        if (line.Contains("error", StringComparison.OrdinalIgnoreCase) || line.Contains("failed", StringComparison.OrdinalIgnoreCase)
+        // For measurements GLOSSA_LLAMA_LOG=all keeps every line (prompt cache reuse, timings).
+        if (LogAll || line.Contains("error", StringComparison.OrdinalIgnoreCase) || line.Contains("failed", StringComparison.OrdinalIgnoreCase)
             || line.Contains("model loaded", StringComparison.OrdinalIgnoreCase) || line.Contains("buffer size", StringComparison.OrdinalIgnoreCase)
             || line.Contains("offload", StringComparison.OrdinalIgnoreCase) || line.Contains("llama_params_fit", StringComparison.OrdinalIgnoreCase))
             _log.Info($"llama[{role}] {line}");
