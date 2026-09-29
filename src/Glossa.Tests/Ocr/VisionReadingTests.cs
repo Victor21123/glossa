@@ -166,6 +166,41 @@ public class VisionReadingTests
     public void Region_is_the_measured_piece_around_the_point() =>
         Assert.Equal(new PixelRect(550, 380, 1450, 600), VisionReading.Region(1000, 500));
 
+    [Theory]
+    [InlineData("ニューゲーム", "ニューゲーム")]
+    [InlineData("  ニューゲーム \n\n オプション ", "ニューゲーム\nオプション")]
+    [InlineData("no text", null)]
+    [InlineData("Nothing.", null)]
+    [InlineData("(no text)", null)]
+    [InlineData("", null)]
+    [InlineData("123", null)] // no letters: nothing to translate
+    public void A_zones_reading_drops_the_models_no_text_answers(string reading, string? expected) =>
+        Assert.Equal(expected, VisionReading.ZoneText(reading));
+
+    [Fact]
+    public void A_button_of_rubbish_is_read_whole_a_dialogue_with_one_doubt_word_by_word()
+    {
+        var button = new PixelRect(0, 0, 200, 60);
+        Assert.True(VisionReading.ReadWholeZone(Page(CjkLine("想书", 0)), doubtfulWords: 1, button));
+        Assert.True(VisionReading.ReadWholeZone(Page(CjkLine("想书", 0)), doubtfulWords: 0, button)); // 40 px of 200: a piece
+        Assert.False(VisionReading.ReadWholeZone(Page(CjkLine("回想モード", 0)), doubtfulWords: 0, new PixelRect(0, 0, 150, 30)));
+        // A real line in a zone drawn wide: the recognizer's (the model would bring in the lines around it).
+        Assert.False(VisionReading.ReadWholeZone(Page(CjkLine("それでは、刑事", 0)), doubtfulWords: 0, new PixelRect(0, 0, 900, 120)));
+        Assert.True(VisionReading.ReadWholeZone(Page(), doubtfulWords: 0, button));
+        var dialogue = Page(LatinLine("I kept Wching you all", 0), LatinLine("night long and you", 30), LatinLine("never noticed me", 60));
+        Assert.False(VisionReading.ReadWholeZone(dialogue, doubtfulWords: 1, new PixelRect(0, 0, 220, 90))); // three lines: word by word
+        Assert.False(VisionReading.ReadWholeZone(Page(LatinLine("I kept Wching you", 0)), doubtfulWords: 1, new PixelRect(0, 0, 180, 30)));
+    }
+
+    [Fact]
+    public void A_zone_is_sent_with_some_screen_around_it()
+    {
+        var piece = VisionReading.ZonePiece(new PixelRect(128, 298, 328, 360)); // 0.6 of the height: 37.2 px
+        Assert.Equal(90.8, piece.Left, 6);
+        Assert.Equal(397.2, piece.Bottom, 6);
+        Assert.Equal(new PixelRect(84, 84, 216, 116), VisionReading.ZonePiece(new PixelRect(100, 100, 200, 100))); // at least 16
+    }
+
     /// <summary>A Japanese word boundary fixed by the test: the word is [start, start + length).</summary>
     private sealed class FixedWord(int start, int length) : ITermMatcher
     {

@@ -32,10 +32,62 @@ public static class VisionReading
 
     public static PixelRect Region(double x, double y) => new(x - HalfWidth, y - Up, x + HalfWidth, y + Down);
 
-    /// <summary>What the model reads in the picture, as it answered (one screen line per line).</summary>
-    public static async Task<string> ReadAsync(ILlmClient model, byte[] png, CancellationToken ct)
+    /// <summary>
+    /// A zone the recognizer found nothing in: the picture may hold no text at all, and the model must then say
+    /// nothing rather than describe the picture.
+    /// </summary>
+    public const string ZonePrompt = Prompt + " If there is no text, output nothing.";
+
+    /// <summary>
+    /// The margin of screen sent around a zone: the model misreads a button cut tight to its frame (オプション as
+    /// オフライン) and reads it with some of the screen around it; much more brings in the neighbouring buttons. About
+    /// 0.6 of the zone's height (measured on a title menu, 2026-09-30).
+    /// </summary>
+    public static PixelRect ZonePiece(PixelRect zone)
     {
-        var request = new LlmRequest([new LlmMessage("user", Prompt, png)], Temperature: 0, MaxTokens: 400);
+        var pad = Math.Clamp(zone.Height * 0.6, 16, 120);
+        return new PixelRect(zone.Left - pad, zone.Top - pad, zone.Right + pad, zone.Bottom + pad);
+    }
+
+    /// <summary>
+    /// A small zone (a menu item, a button: up to two lines) is read whole by the model when the recognizer's words are
+    /// mostly doubtful, or when all it found is a scrap - at most three letters over less than half the zone's width:
+    /// the pieces it gets of a stylized font are rubbish (回想モード read as 想书 over a third of the button: two real
+    /// hanzi, so no doubtful word). A real line in a loosely drawn zone stays the recognizer's: the model reads the zone
+    /// with a margin and would bring in the lines around it (measured on 24 zones, 2026-09-30).
+    /// </summary>
+    public static bool ReadWholeZone(OcrPage page, int doubtfulWords, PixelRect zone)
+    {
+        if (page.Lines.Count > 2) return false;
+        var withLetters = page.Lines.SelectMany(l => l.Words).Count(w => w.Text.Any(char.IsLetter));
+        if (withLetters == 0 || doubtfulWords * 2 >= withLetters) return true;
+        var letters = page.Lines.Sum(l => l.Text.Count(char.IsLetter));
+        return letters <= 3 && page.Lines.Max(l => l.Box.Width) < zone.Width / 2;
+    }
+
+    private static readonly HashSet<string> NoTextAnswers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "no text", "nothing", "none", "n/a", "empty", "no text found", "there is no text", "there is no text in this image",
+        "the image contains no text", "no visible text",
+    };
+
+    /// <summary>
+    /// The model's reading of a zone as its lines, or null when it read nothing: it answers "no text" or "nothing" on an
+    /// empty picture although asked to say nothing.
+    /// </summary>
+    public static string? ZoneText(string reading)
+    {
+        var lines = reading.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(l => !NoTextAnswers.Contains(l.Trim('.', '(', ')', '*', '"', ' ')))
+            .ToList();
+        var text = string.Join("\n", lines);
+        return text.Any(char.IsLetter) ? text : null;
+    }
+
+    /// <summary>What the model reads in the picture, as it answered (one screen line per line).</summary>
+    public static async Task<string> ReadAsync(ILlmClient model, byte[] png, CancellationToken ct, string prompt = Prompt)
+    {
+        var request = new LlmRequest([new LlmMessage("user", prompt, png)], Temperature: 0, MaxTokens: 400);
         var sb = new StringBuilder();
         await foreach (var part in model.StreamAsync(request, ct).ConfigureAwait(false)) sb.Append(part);
         return sb.ToString();

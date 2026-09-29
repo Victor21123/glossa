@@ -606,8 +606,25 @@ public sealed class LookupController(
         var tOcr = sw.ElapsedMilliseconds;
 
         var text = TextBlocks.Joined(page);
+        var readByEyes = false;
+        // A stylized font (neon outlines, glow: a title menu, 2026-09-30) leaves the recognizer with no lines, or with
+        // rubbish in a button: the model with sight reads the zone whole from the picture.
+        if (context.Choices?.Ai != "off"
+            && (text.Length == 0 || VisionReading.ReadWholeZone(page, VisionReading.DoubtfulWords(page, words, cjk, s.NativeLanguage, forced).Count, zone)))
+        {
+            vm.BeginTranslation(text, forced ?? (text.Length > 0 ? Languages.DetectText(text, s.PreferredCjk) : s.PreferredCjk));
+            vm.Status = ai.Current is null ? "Загружаю модель..." : "Читаю текст по картинке...";
+            popup.ShowNear(zone);
+            if (await ReadZoneByEyesAsync(frame, zone, context.Choices?.Ai, ct) is { } seen)
+            {
+                log.Info($"translate zone: read by the model instead of '{text.Replace('\n', ' ')}'");
+                text = seen;
+                readByEyes = true;
+            }
+        }
         if (text.Length == 0)
         {
+            log.Info($"translate zone: no text (ocr {tOcr} ms, {page.Lines.Count} lines, zone {zone.Width:F0}x{zone.Height:F0})");
             vm.ShowMessage("В зоне не найден текст");
             popup.ShowNear(zone);
             Report(context.Trigger, "в зоне нет текста", ok: false, stages: new LookupStages(0, tOcr, tOcr, 0, null, null));
@@ -619,9 +636,9 @@ public sealed class LookupController(
         popup.ShowNear(zone);
         var tCard = sw.ElapsedMilliseconds;
         LastAppExe = context.Exe;
-        log.Info($"translate zone [{lang}] {text.Length} chars, ocr {tOcr} ms, card {tCard} ms");
+        log.Info($"translate zone [{lang}] {text.Length} chars, ocr {tOcr} ms, card {tCard} ms" + (readByEyes ? ", read by the model" : ""));
 
-        if (context.Choices?.Ai != "off")
+        if (context.Choices?.Ai != "off" && !readByEyes)
         {
             if (ai.Current is null) vm.Status = "Загружаю модель...";
             var reread = await ReadZoneAgainAsync(frame, page, forced, cjk, context.Choices?.Ai, ct);
@@ -641,6 +658,48 @@ public sealed class LookupController(
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
         Report(context.Trigger, string.Format(Russian, "перевод зоны, {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
             model, new LookupStages(0, tOcr, tOcr, tCard, null, sw.ElapsedMilliseconds));
+    }
+
+    /// <summary>
+    /// The text of a zone the recognizer found nothing in, as the model with sight reads it from the picture (one screen
+    /// line per line); null without sight, with the AI off or unavailable, when the reading fails or runs over
+    /// <see cref="ReadingLimit"/>, or when the picture holds no text.
+    /// </summary>
+    private async Task<string?> ReadZoneByEyesAsync(CapturedFrame frame, PixelRect zone, string? gameAi, CancellationToken ct)
+    {
+        using var busy = ai.Use();
+        AiClients clients;
+        try
+        {
+            clients = await ai.GetAsync(ct, gameAi == "lowvram" ? "lowvram" : null);
+        }
+        catch (LlmException ex)
+        {
+            log.Warn($"translate zone: no AI to read it ({ex.Message})");
+            return null;
+        }
+        if (clients.Vision is not { } eyes) return null;
+        var piece = frame.Crop(VisionReading.ZonePiece(zone));
+        if (piece.Width < 4 || piece.Height < 4) return null;
+        vm.Status = "Читаю текст по картинке...";
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(ReadingLimit);
+        try
+        {
+            var png = VisionReading.Png(piece.Bgra, piece.Width, piece.Height, piece.Stride);
+            var text = VisionReading.ZoneText(await VisionReading.ReadAsync(eyes, png, limit.Token, VisionReading.ZonePrompt));
+            log.Info($"translate zone: the model read {text?.Length ?? 0} chars");
+            return text;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            log.Warn($"translate zone: reading failed ({ex.GetType().Name}): {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested) vm.Status = null;
+        }
     }
 
     /// <summary>
