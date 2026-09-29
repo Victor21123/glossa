@@ -12,6 +12,15 @@ public enum OcrModelFamily
     CjkLatin,
     Cyrillic,
     V6Multi,
+
+    /// <summary>PP-OCRv6 medium: the larger v6 pair (det 59 MB, rec 73 MB), for measuring against small.</summary>
+    V6Medium,
+
+    /// <summary>Measuring: lines found by the fast v5 detector, read by the v6 medium recognizer.</summary>
+    V5DetV6MediumRec,
+
+    /// <summary>Measuring: lines found by the v6 small detector, read by the v6 medium recognizer.</summary>
+    V6SmallDetMediumRec,
 }
 
 /// <summary>
@@ -157,7 +166,8 @@ public sealed class OcrEngine : IDisposable
         // Python-rapidocr preprocessing: the detector upscales the short side to 736 px. Screen crops are
         // short and game text is small; without the upscale DBNet splits lines and drops characters.
         // PP-OCRv6 has its own preset (RapidOcrNet 4.2): with v5's options it drops text and garbles boxes.
-        var options = (family == OcrModelFamily.V6Multi ? RapidOcrOptions.PPOCRv6 : RapidOcrOptions.PythonCompat) with
+        var options = (family is OcrModelFamily.V6Multi or OcrModelFamily.V6Medium or OcrModelFamily.V6SmallDetMediumRec
+            ? RapidOcrOptions.PPOCRv6 : RapidOcrOptions.PythonCompat) with
         {
             ReturnWordBox = true,
             DoAngle = false,
@@ -237,6 +247,12 @@ public sealed class OcrEngine : IDisposable
                 Path.Combine(v5, "eslav_PP-OCRv5_rec_mobile.onnx"), Path.Combine(v5, "ppocrv5_eslav_dict.txt")),
             OcrModelFamily.V6Multi => (Path.Combine(v6, "PP-OCRv6_det_small.onnx"),
                 Path.Combine(v6, "PP-OCRv6_rec_small.onnx"), Path.Combine(v6, "ppocrv6_small_dict.txt")),
+            OcrModelFamily.V6Medium => (Path.Combine(v6, "PP-OCRv6_det_medium.onnx"),
+                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
+            OcrModelFamily.V5DetV6MediumRec => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
+                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
+            OcrModelFamily.V6SmallDetMediumRec => (Path.Combine(v6, "PP-OCRv6_det_small.onnx"),
+                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
             _ => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
                 Path.Combine(v5, "ch_PP-OCRv5_rec_mobile.onnx"), Path.Combine(v5, "ppocrv5_ch_dict.txt")),
         };

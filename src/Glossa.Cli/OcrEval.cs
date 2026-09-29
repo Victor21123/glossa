@@ -21,7 +21,7 @@ public static class OcrEval
     {
         var cases = JsonSerializer.Deserialize<List<Case>>(File.ReadAllText(casesPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-        var family = model == "v6" ? OcrModelFamily.V6Multi : OcrModelFamily.CjkLatin;
+        var family = Family(model);
         using var ocr = new OcrEngine(DataPaths.OcrModels);
         ocr.Warm(family);
 
@@ -67,7 +67,7 @@ public static class OcrEval
     {
         var cases = JsonSerializer.Deserialize<List<Case>>(File.ReadAllText(casesPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-        var family = model == "v6" ? OcrModelFamily.V6Multi : OcrModelFamily.CjkLatin;
+        var family = Family(model);
         using var ocr = new OcrEngine(DataPaths.OcrModels);
         ocr.Warm(family);
         var pages = new Dictionary<string, (string Text, long Ms)>();
@@ -89,6 +89,70 @@ public static class OcrEval
         }
         Console.WriteLine($"-- {model}: found {found}/{cases.Count(c => c.Image is not null)} words on {pages.Count} frames, mean {pages.Values.Sum(p => p.Ms) / Math.Max(pages.Count, 1)} ms per frame");
     }
+
+    public sealed record LinesCase(string Id, string Image, string? Lang, List<string> Lines);
+
+    /// <summary>
+    /// <c>ocr-lines &lt;cases.json&gt; [v5|v6|v6m]</c>: pieces of game screens recognized whole; each true line is looked for
+    /// in what was read (a line glued to its neighbour still counts) and scored by the letters that differ.
+    /// </summary>
+    public static async Task LinesAsync(string casesPath, string model)
+    {
+        var cases = JsonSerializer.Deserialize<List<LinesCase>>(File.ReadAllText(casesPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        var family = Family(model);
+        using var ocr = new OcrEngine(DataPaths.OcrModels);
+        ocr.Warm(family);
+        int exact = 0, total = 0;
+        double cerSum = 0;
+        long msSum = 0;
+        foreach (var c in cases)
+        {
+            using var decoded = SKBitmap.Decode(c.Image) ?? throw new InvalidDataException("not an image: " + c.Image);
+            using var bgra = decoded.Copy(SKColorType.Bgra8888);
+            var sw = Stopwatch.StartNew();
+            var page = await ocr.RecognizeAsync(bgra.GetPixelSpan().ToArray(), bgra.Width, bgra.Height, bgra.RowBytes,
+                new PixelRect(0, 0, bgra.Width, bgra.Height), family, CancellationToken.None);
+            msSum += sw.ElapsedMilliseconds;
+            var read = page.Lines.Select(l => (l.Text, Letters: Letters(l.Text))).ToList();
+            foreach (var want in c.Lines)
+            {
+                var w = Letters(want);
+                var best = read.Count == 0 ? (Text: "", Distance: w.Length)
+                    : read.Select(r => (r.Text, Distance: SubstringDistance(w, r.Letters))).MinBy(r => r.Distance);
+                total++;
+                cerSum += best.Distance / (double)Math.Max(w.Length, 1);
+                if (best.Distance == 0) exact++;
+                else Console.WriteLine($"MISS {c.Id,-16} \"{want}\" <- \"{best.Text}\" ({best.Distance})");
+            }
+        }
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"-- {model}: lines exact {exact}/{total}, mean cer {cerSum / Math.Max(total, 1):0.000}, mean {msSum / Math.Max(cases.Count, 1)} ms per image"));
+    }
+
+    /// <summary>Edits from <paramref name="want"/> to the closest stretch of <paramref name="text"/> (free start and end).</summary>
+    private static int SubstringDistance(string want, string text)
+    {
+        var prev = new int[text.Length + 1];
+        var cur = new int[text.Length + 1];
+        for (var i = 1; i <= want.Length; i++)
+        {
+            cur[0] = i;
+            for (var j = 1; j <= text.Length; j++)
+                cur[j] = Math.Min(Math.Min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + (want[i - 1] == text[j - 1] ? 0 : 1));
+            (prev, cur) = (cur, prev);
+        }
+        return prev.Min();
+    }
+
+    private static OcrModelFamily Family(string model) => model switch
+    {
+        "v6" => OcrModelFamily.V6Multi,
+        "v6m" => OcrModelFamily.V6Medium,
+        "v5d-v6mr" => OcrModelFamily.V5DetV6MediumRec,
+        "v6sd-v6mr" => OcrModelFamily.V6SmallDetMediumRec,
+        _ => OcrModelFamily.CjkLatin,
+    };
 
     private static string Letters(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
