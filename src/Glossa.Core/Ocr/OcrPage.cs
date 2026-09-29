@@ -44,8 +44,47 @@ public sealed record OcrWord(string Text, PixelRect Box, float Score);
 
 public sealed record OcrLine(string Text, PixelRect Box, IReadOnlyList<OcrWord> Words, float Score);
 
+/// <summary>«Зона» (Только перевод): a rectangle drawn around the text to translate.</summary>
+public static class Zones
+{
+    /// <summary>The height of screen a lookup reads around the cursor, the scale the recognizer was measured at.</summary>
+    public const int Reach = 480;
+
+    /// <summary>
+    /// The piece of screen to recognize for a zone: the zone, grown to at least <see cref="Reach"/> each way around its
+    /// middle. The detector sizes a picture by its short side (up to 736 px): a low zone alone was blown up four times
+    /// and its lines cut into pieces at the spaces (2026-09-29, P5R); only the words inside the zone are kept after.
+    /// </summary>
+    public static PixelRect Around(PixelRect zone) => new(
+        Math.Min(zone.Left, zone.CenterX - Reach / 2.0), Math.Min(zone.Top, zone.CenterY - Reach / 2.0),
+        Math.Max(zone.Right, zone.CenterX + Reach / 2.0), Math.Max(zone.Bottom, zone.CenterY + Reach / 2.0));
+}
+
 /// <summary>OCR output for one captured region, already mapped to screen coordinates.</summary>
 public sealed record OcrPage(IReadOnlyList<OcrLine> Lines, PixelRect Region, TimeSpan Elapsed)
 {
     public static OcrPage Empty(PixelRect region) => new([], region, TimeSpan.Zero);
+
+    /// <summary>
+    /// What lies inside <paramref name="zone"/>: the lines whose middle height is in it, each with only the words whose
+    /// middle is in it (a line the zone cuts keeps its words inside, joined as the recognizer joins them).
+    /// </summary>
+    public OcrPage Within(PixelRect zone)
+    {
+        var lines = new List<OcrLine>();
+        foreach (var line in Lines)
+        {
+            if (line.Box.CenterY < zone.Top || line.Box.CenterY > zone.Bottom) continue;
+            var words = line.Words.Where(w => zone.Contains(w.Box.CenterX, w.Box.CenterY)).ToList();
+            if (words.Count == 0) continue;
+            if (words.Count == line.Words.Count)
+            {
+                lines.Add(line);
+                continue;
+            }
+            var text = string.Join(Text.Scripts.ContainsCjk(line.Text) ? "" : " ", words.Select(w => w.Text));
+            lines.Add(new OcrLine(text, words.Select(w => w.Box).Aggregate((a, b) => a.Union(b)), words, words.Average(w => w.Score)));
+        }
+        return this with { Lines = lines, Region = zone };
+    }
 }

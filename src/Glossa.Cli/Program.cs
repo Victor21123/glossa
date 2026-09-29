@@ -105,6 +105,16 @@ switch (args[0])
             double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), args.Length > 4 ? args[4] : null, bench.Words);
         break;
     }
+    case "ocr-zone":
+    {
+        // ocr-zone <image> <left> <top> <right> <bottom> [en|ja|zh] [--vision <api root>]: «Зона» as the app makes it
+        using var bench = new Bench();
+        double Arg(int i) => double.Parse(args[i], System.Globalization.CultureInfo.InvariantCulture);
+        var zoneLang = args.Length > 6 && !args[6].StartsWith("--", StringComparison.Ordinal) ? args[6] : null;
+        await OcrEval.ZoneAsync(args[1], new Glossa.Core.Ocr.PixelRect(Arg(2), Arg(3), Arg(4), Arg(5)), zoneLang,
+            OcrEval.Options.Parse(args, zoneLang is null ? 6 : 7), bench.Words);
+        break;
+    }
     case "ocr-eval":
     {
         // ocr-eval <cases.json> [base|v5|v6|v6m] [--vision <api root>]: the word under the point on hard frames

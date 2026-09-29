@@ -29,6 +29,55 @@ public class TextBlocksTests
     }
 
     [Fact]
+    public void A_zone_is_its_paragraphs_one_per_line() =>
+        Assert.Equal("Day 3\nI'm like three or maybe four years into mine. Wait no, make it five.\n1. What do you guys do around here?",
+            TextBlocks.Joined(Dialogue));
+
+    [Fact]
+    public void Two_pieces_of_one_row_do_not_put_the_lines_around_them_in_twice()
+    {
+        // The recognizer cut a line in two ("from" | "ching strong"): both pieces sit under the line above and over the
+        // one below, and the paragraph used to be built from each of them, the outer lines twice.
+        var page = Page(
+            Line("In very rare cases, some people may", 400, 100),
+            Line("symptoms from", 400, 124),
+            Line("ching strong light", 560, 124),
+            Line("lights, or the TV screen.", 450, 148));
+
+        var text = TextBlocks.Joined(page);
+
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(text, "rare cases"));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(text, "TV screen"));
+    }
+
+    [Fact]
+    public void A_zone_keeps_the_lines_and_words_inside_it()
+    {
+        var words = new List<OcrWord>
+        {
+            new("Special", new PixelRect(0, 0, 70, 20), 1), new("Sensation", new PixelRect(80, 0, 170, 20), 1),
+            new("Oil", new PixelRect(180, 0, 210, 20), 1),
+        };
+        var page = Page(new OcrLine("Special Sensation Oil", new PixelRect(0, 0, 210, 20), words, 1), Line("Menu", 0, 300));
+
+        var inside = page.Within(new PixelRect(75, -5, 260, 40));
+
+        var line = Assert.Single(inside.Lines);
+        Assert.Equal("Sensation Oil", line.Text);
+        Assert.Equal(["Sensation", "Oil"], line.Words.Select(w => w.Text));
+    }
+
+    [Fact]
+    public void A_low_zone_is_read_within_the_lookups_height_of_screen()
+    {
+        var around = Zones.Around(new PixelRect(730, 570, 1800, 750));
+        Assert.Equal(Zones.Reach, around.Height);
+        Assert.Equal(new PixelRect(730, 420, 1800, 900), around);
+        var big = new PixelRect(0, 0, 1000, 800);
+        Assert.Equal(big, Zones.Around(big));
+    }
+
+    [Fact]
     public void The_block_under_the_cursor_is_its_whole_paragraph()
     {
         Assert.Equal(TextBlocks.Of(Dialogue)[1], TextBlocks.At(Dialogue, 500, 835));

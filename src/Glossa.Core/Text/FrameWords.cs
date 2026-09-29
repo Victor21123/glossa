@@ -59,7 +59,7 @@ public sealed class FrameWords
         foreach (var line in sources)
         {
             if (!seen.Add(line)) continue;
-            var paragraph = HitTester.ParagraphOf(sources, line);
+            var paragraph = HitTester.ParagraphOf(sources, line, seen);
             foreach (var l in paragraph) seen.Add(l);
             var first = sources.IndexOf(paragraph[0]);
             var size = paragraph.Sum(l => l.Text.Length);

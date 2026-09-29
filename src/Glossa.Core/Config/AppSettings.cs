@@ -29,11 +29,12 @@ public sealed class AppSettings
     public string Purpose { get; set; } = "dictionary";
 
     /// <summary>
-    /// How «Только перевод» translates: line (the paragraph under the cursor, in a small card), screen (every paragraph
-    /// of a still of the screen, laid over it) or live (new dialogue lines as subtitles while the game runs; Alt+Q
-    /// switches it on and off).
+    /// How «Только перевод» translates: zone (Alt+Q stills the screen, the text drawn around with the mouse is translated
+    /// in a small card; a click takes the paragraph under it), screen (every paragraph of a still of the screen, laid over
+    /// it) or live (new dialogue lines as subtitles while the game runs; Alt+Q switches it on and off). «Зона» replaced
+    /// «Реплика» (line) on 2026-09-29 at the user's word.
     /// </summary>
-    public string TranslateMode { get; set; } = "line";
+    public string TranslateMode { get; set; } = "zone";
 
     /// <summary>Настройки → Игры и профили: the programs words were looked up in, each created at its first lookup.</summary>
     public List<GameProfile> Games { get; set; } = [];
@@ -405,6 +406,7 @@ public sealed class SettingsStore(string path)
             if (File.Exists(Path) && JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Path), Json) is { } loaded)
             {
                 loaded.LocalAi.Normalize();
+                if (loaded.TranslateMode is not ("screen" or "live")) loaded.TranslateMode = "zone";
                 return loaded;
             }
         }

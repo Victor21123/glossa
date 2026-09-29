@@ -26,6 +26,7 @@ namespace Glossa.App.Lookup;
 public sealed class LookupSessions
 {
     internal const string MouseHint = "Щёлкни слово, Esc или правый щелчок - вернуться в игру";
+    internal const string ZoneHint = "Обведи мышью текст для перевода, щелчок - абзац под курсором, Esc - вернуться в игру";
     internal const string PadHint = "Крестовина - слово, A - искать, B - назад, X - сохранить, Y - произнести";
 
     private readonly Func<AppSettings> _settings;
@@ -60,6 +61,9 @@ public sealed class LookupSessions
 
         /// <summary>Перевод экрана: clicks toggle plates instead of looking words up; closing stops the translations.</summary>
         public bool Translating { get; init; }
+
+        /// <summary>«Зона»: the still waits for a rectangle (or a click) to translate; nothing is recognized before.</summary>
+        public bool Zone { get; init; }
 
         public CancellationTokenSource Stop { get; } = new();
         public PadButtons Held { get; set; }
@@ -256,24 +260,35 @@ public sealed class LookupSessions
     }
 
     private Session OpenFrame(GameWindow game, LookupContext context, string cjk, CapturedFrame still, bool pad, bool paused,
-        bool translating = false)
+        bool translating = false, bool zone = false)
     {
         if (_frame is null)
         {
             _frame = new FrozenFrame();
-            _frame.Clicked += (x, y) => _ = LookAtAsync(x, y);
+            _frame.Clicked += (x, y) =>
+            {
+                if (_session is { Zone: true } z) _ = TranslateChosenAsync(z, null, x, y);
+                else _ = LookAtAsync(x, y);
+            };
+            _frame.ZoneSelected += box =>
+            {
+                if (_session is { Zone: true } z) _ = TranslateChosenAsync(z, box, 0, 0);
+            };
             _frame.CloseRequested += End;
         }
         var family = context.Choices?.Language == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
         var session = new Session
         {
-            Game = game, Context = context, Cjk = cjk, Still = still, Pad = pad, Paused = paused, Translating = translating,
+            Game = game, Context = context, Cjk = cjk, Still = still, Pad = pad, Paused = paused, Translating = translating, Zone = zone,
             // The whole still is recognized once (about as long as the region around a cursor); every word on it is then at hand.
-            Page = _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
+            // «Зона» recognizes only what is drawn around, at full size.
+            Page = zone ? null
+                : _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
         };
         _session = session;
-        _frame.SetHint(pad ? "Распознаю текст..." : MouseHint);
+        _frame.SetHint(zone ? ZoneHint : pad ? "Распознаю текст..." : MouseHint);
         _frame.ShowFrame(still, _settings().Popup.HideFromCapture);
+        _frame.SelectZone(zone);
         _pad.Steering = pad;
         return session;
     }
@@ -344,11 +359,27 @@ public sealed class LookupSessions
                 _live.Start(game, context, cjk);
                 break;
             default:
-                _session = null;
-                var frame = await CaptureAsync(cursor.X, cursor.Y);
-                await _controller.TranslateLineAsync(frame, cursor.X, cursor.Y, context, sw);
+            {
+                var still = await CaptureAsync(cursor.X, cursor.Y);
+                OpenFrame(game, context, cjk, still, pad: false, paused: false, zone: true);
                 break;
+            }
         }
+    }
+
+    /// <summary>
+    /// «Зона»: a rectangle drawn on the still (or a click, the paragraph under it). The still goes, the game gets its
+    /// focus back, and the card beside the text translates what was chosen.
+    /// </summary>
+    private async Task TranslateChosenAsync(Session s, PixelRect? zone, int x, int y)
+    {
+        if (_session != s || s.Still is not { } still) return;
+        var sw = Stopwatch.StartNew();
+        _session = null;
+        _frame?.Leave();
+        s.Game.Focus();
+        if (zone is { } z) await _controller.TranslateZoneAsync(still, z, s.Context with { Trigger = s.Context.Trigger + ", зона" }, sw);
+        else await _controller.TranslateLineAsync(still, x, y, s.Context with { Trigger = s.Context.Trigger + ", щелчок" }, sw);
     }
 
     /// <summary>

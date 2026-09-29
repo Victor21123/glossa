@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Glossa.Core.Config;
 using Glossa.Core.Llm;
+using Glossa.Core.Lookup;
 using Glossa.Core.Text;
 using SkiaSharp;
 
@@ -74,6 +76,53 @@ public static class VisionReading
     /// </summary>
     public static bool Doubtful(WordHit hit, bool? known, OcrPage? page = null) =>
         known == false || hit.Score < MinScore || (page is not null && UnreadAfter(page, hit));
+
+    /// <summary>
+    /// The page's words worth reading again, each once: the lookup's word under every piece the recognizer read (only
+    /// words with letters), planned against the dictionaries without fetching their articles.
+    /// </summary>
+    public static List<WordHit> DoubtfulWords(OcrPage page, WordLookup words, string cjk, string nativeLanguage, string? forced)
+    {
+        var noArticles = new DictionarySettings { ShowInPopup = false, HintAi = false };
+        var seen = new HashSet<(string, double, double)>();
+        var doubtful = new List<WordHit>();
+        foreach (var unit in page.Lines.SelectMany(l => l.Words))
+        {
+            if (words.Hit(page, unit.Box.CenterX, unit.Box.CenterY, cjk) is not { } hit
+                || !seen.Add((hit.Word, hit.Box.Left, hit.Box.Top)) || !hit.Word.Any(char.IsLetter)) continue;
+            if (Doubtful(hit, words.Plan(hit, cjk, nativeLanguage, noArticles, forced).Known, page)) doubtful.Add(hit);
+        }
+        return doubtful;
+    }
+
+    /// <summary>
+    /// The page with its doubtful words read again: <paramref name="read"/> gives the model's reading of the piece of
+    /// screen around a word (<see cref="Region"/>), and one reading serves every doubtful word inside that piece; at most
+    /// <paramref name="readings"/> pieces. Continues on the caller's context (the app shows a status while reading).
+    /// </summary>
+    public static async Task<OcrPage> CorrectDoubtfulAsync(OcrPage page, WordLookup words, string cjk, string nativeLanguage,
+        string? forced, Func<WordHit, Task<string?>> read, int readings, CancellationToken ct)
+    {
+        var doubtful = DoubtfulWords(page, words, cjk, nativeLanguage, forced);
+        var done = new HashSet<WordHit>();
+        var count = 0;
+        foreach (var first in doubtful)
+        {
+            if (done.Contains(first)) continue;
+            if (count++ >= readings) break;
+            if (await read(first) is not { } reading) continue;
+            ct.ThrowIfCancellationRequested();
+            var piece = Region(first.Box.CenterX, first.Box.CenterY);
+            foreach (var hit in doubtful.Where(d => !done.Contains(d) && piece.Contains(d.Box.CenterX, d.Box.CenterY)).ToList())
+            {
+                done.Add(hit);
+                // Earlier fixes may have changed the line: the word under the same point now.
+                if (words.Hit(page, hit.Box.CenterX, hit.Box.CenterY, cjk) is { } now)
+                    page = words.Normalize(Correct(page, now, reading), forced);
+            }
+        }
+        return page;
+    }
 
     /// <summary>The word is the last one read in its line, and the line's box reaches on past it.</summary>
     internal static bool UnreadAfter(OcrPage page, WordHit hit)

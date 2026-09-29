@@ -14,6 +14,10 @@ public static class TextBlocks
 {
     private const int RealText = 20;
 
+    /// <summary>The page's text as translated whole («Зона»): its paragraphs top to bottom, one per line.</summary>
+    public static string Joined(OcrPage page) =>
+        string.Join("\n", Of(page).Select(b => b.Text.Trim()).Where(t => t.Length > 0));
+
     /// <summary>Every paragraph, top to bottom.</summary>
     public static IReadOnlyList<TextBlock> Of(OcrPage page)
     {
@@ -23,7 +27,7 @@ public static class TextBlocks
         foreach (var line in lines)
         {
             if (seen.Contains(line)) continue;
-            var paragraph = HitTester.ParagraphOf(lines, line);
+            var paragraph = HitTester.ParagraphOf(lines, line, seen);
             foreach (var l in paragraph) seen.Add(l);
             blocks.Add(Block(paragraph));
         }

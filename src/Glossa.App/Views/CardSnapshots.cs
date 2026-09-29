@@ -198,7 +198,7 @@ internal static class CardSnapshots
             SaveWindow(translate, Path.Combine(folder, $"settings-{themeName}-keys-translate.png"));
             translate.Close();
             settings.Purpose = "dictionary";
-            settings.TranslateMode = "line";
+            settings.TranslateMode = "zone";
 
             // The still frame as the gamepad sees it, through the real path: the picture recognized as a whole, the
             // words of its biggest block, two steps to the right from the first one.

@@ -152,23 +152,24 @@ public sealed class HitTester
     /// that shares some width with it, while it is close and of the same font size. Lines of a column beside it (a second
     /// panel, another window) do not break the paragraph.
     /// </summary>
-    internal static List<OcrLine> ParagraphOf(List<OcrLine> lines, OcrLine anchor)
+    /// <param name="used">Lines already in another paragraph (a page cut into paragraphs): never taken twice.</param>
+    internal static List<OcrLine> ParagraphOf(List<OcrLine> lines, OcrLine anchor, IReadOnlySet<OcrLine>? used = null)
     {
         var result = new List<OcrLine> { anchor };
-        for (var current = anchor; Neighbour(lines, current, above: true, result) is { } up && SameParagraph(up, current); current = up)
+        for (var current = anchor; Neighbour(lines, current, above: true, result, used) is { } up && SameParagraph(up, current); current = up)
             result.Insert(0, up);
-        for (var current = anchor; Neighbour(lines, current, above: false, result) is { } down && SameParagraph(current, down); current = down)
+        for (var current = anchor; Neighbour(lines, current, above: false, result, used) is { } down && SameParagraph(current, down); current = down)
             result.Add(down);
         return result;
     }
 
     /// <summary>The nearest line above (or below) <paramref name="line"/> in its column, not yet taken.</summary>
-    private static OcrLine? Neighbour(List<OcrLine> lines, OcrLine line, bool above, List<OcrLine> taken)
+    private static OcrLine? Neighbour(List<OcrLine> lines, OcrLine line, bool above, List<OcrLine> taken, IReadOnlySet<OcrLine>? used)
     {
         OcrLine? best = null;
         foreach (var l in lines)
         {
-            if (!Overlaps(l.Box, line.Box) || taken.Contains(l)) continue;
+            if (!Overlaps(l.Box, line.Box) || taken.Contains(l) || used?.Contains(l) == true) continue;
             var side = l.Box.CenterY - line.Box.CenterY;
             if (above ? side >= 0 : side <= 0) continue;
             if (best is null || Math.Abs(side) < Math.Abs(best.Box.CenterY - line.Box.CenterY)) best = l;

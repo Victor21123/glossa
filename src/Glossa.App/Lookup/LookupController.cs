@@ -414,6 +414,113 @@ public sealed class LookupController(
         }
     }
 
+    /// <summary>At most this many pieces of a zone are read again by the model (on the processor ~3.6 s each).</summary>
+    private const int ZoneReadings = 3;
+
+    /// <summary>
+    /// Только перевод, «Зона»: the text inside a rectangle drawn on a still, recognized at full size, doubtful words read
+    /// again by the model, translated whole in a small card beside it; no word card, nothing saved. Errors go to the card
+    /// and the check list.
+    /// </summary>
+    public async Task TranslateZoneAsync(CapturedFrame frame, PixelRect zone, LookupContext context, Stopwatch sw)
+    {
+        try
+        {
+            await RunZoneAsync(frame, zone, context, sw);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (ex is not LlmException) log.Error("Zone translation failed", ex);
+            vm.Error = ex.Message;
+            vm.IsBusy = false;
+            Report(context.Trigger, "перевод зоны: " + ex.Message, ok: false);
+        }
+    }
+
+    private async Task RunZoneAsync(CapturedFrame frame, PixelRect zone, LookupContext context, Stopwatch sw)
+    {
+        _deferred = null;
+        _pending = null; // S has nothing to save here
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
+        var s = settings();
+        var screenLanguage = context.Choices?.Language ?? s.ScreenLanguage;
+        var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
+        var cjk = forced is "ja" or "zh" ? forced : s.PreferredCjk;
+        // Read within at least the lookup's own height of screen, then only the words inside the zone (Zones.Around).
+        var crop = frame.Crop(Zones.Around(zone));
+        var page = crop.Width < 4 || crop.Height < 4 || zone.Width < 4 || zone.Height < 4 ? OcrPage.Empty(zone)
+            : words.Normalize(await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region,
+                screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin, ct), forced).Within(zone);
+        ct.ThrowIfCancellationRequested();
+        var tOcr = sw.ElapsedMilliseconds;
+
+        var text = TextBlocks.Joined(page);
+        if (text.Length == 0)
+        {
+            vm.ShowMessage("В зоне не найден текст");
+            popup.ShowNear(zone);
+            Report(context.Trigger, "в зоне нет текста", ok: false, stages: new LookupStages(0, tOcr, tOcr, 0, null, null));
+            return;
+        }
+        var lang = forced ?? Languages.DetectText(text, s.PreferredCjk);
+        var target = Languages.TargetFor(lang, s.NativeLanguage);
+        vm.BeginTranslation(text, lang);
+        popup.ShowNear(zone);
+        var tCard = sw.ElapsedMilliseconds;
+        LastAppExe = context.Exe;
+        log.Info($"translate zone [{lang}] {text.Length} chars, ocr {tOcr} ms, card {tCard} ms");
+
+        if (context.Choices?.Ai != "off")
+        {
+            if (ai.Current is null) vm.Status = "Загружаю модель...";
+            var reread = await ReadZoneAgainAsync(frame, page, forced, cjk, context.Choices?.Ai, ct);
+            if (!ReferenceEquals(reread, page) && TextBlocks.Joined(reread) is { Length: > 0 } fixedText && fixedText != text)
+            {
+                log.Info($"translate zone: read again, {text.Length} -> {fixedText.Length} chars");
+                text = fixedText;
+                vm.BeginTranslation(text, lang);
+            }
+        }
+
+        var (translation, model) = await TranslateTextAsync(text, lang, target, context.Choices?.Ai, t => vm.ContextTranslation = t, ct);
+        vm.ContextTranslation = translation;
+        LastTranslation = (text, translation);
+        vm.IsBusy = false;
+        vm.Status = null;
+        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
+        Report(context.Trigger, string.Format(Russian, "перевод зоны, {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
+            model, new LookupStages(0, tOcr, tOcr, tCard, null, sw.ElapsedMilliseconds));
+    }
+
+    /// <summary>
+    /// The zone with its doubtful words (no dictionary knows them, the recognizer was unsure, the line goes on past its
+    /// last word) read again by the model with sight, one piece of screen for all the doubtful words inside it, at most
+    /// <see cref="ZoneReadings"/> pieces. Without sight, or when the AI is off, the page as recognized.
+    /// </summary>
+    private async Task<OcrPage> ReadZoneAgainAsync(CapturedFrame frame, OcrPage page, string? forced, string cjk, string? gameAi,
+        CancellationToken ct)
+    {
+        using var busy = ai.Use();
+        AiClients clients;
+        try
+        {
+            clients = await ai.GetAsync(ct, gameAi == "lowvram" ? "lowvram" : null);
+        }
+        catch (LlmException)
+        {
+            return page; // the translation reports why the AI is not there
+        }
+        vm.Status = null;
+        if (clients.Vision is not { } eyes) return page;
+        return await VisionReading.CorrectDoubtfulAsync(page, words, cjk, settings().NativeLanguage, forced,
+            hit => ReadAgainAsync(eyes, frame, hit, (int)hit.Box.CenterX, (int)hit.Box.CenterY, ct), ZoneReadings, ct);
+    }
+
     private async Task RunTranslationAsync(CapturedFrame frame, int x, int y, LookupContext context, Stopwatch sw)
     {
         _deferred = null;
@@ -434,7 +541,7 @@ public sealed class LookupController(
         {
             vm.ShowMessage("Под курсором не найден текст");
             popup.ShowNear(new PixelRect(x, y, x + 1, y + 1));
-            Report(context.Trigger, "под курсором нет текста", ok: false, stages: new LookupStages(0, tOcr, 0, 0, null, null));
+            Report(context.Trigger, "под курсором нет текста", ok: false, stages: new LookupStages(0, tOcr, tOcr, 0, null, null));
             return;
         }
         var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
@@ -454,7 +561,7 @@ public sealed class LookupController(
         vm.Status = null;
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
         Report(context.Trigger, string.Format(Russian, "перевод реплики, {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
-            model, new LookupStages(0, tOcr, 0, tCard, null, sw.ElapsedMilliseconds));
+            model, new LookupStages(0, tOcr, tOcr, tCard, null, sw.ElapsedMilliseconds));
     }
 
     /// <summary>

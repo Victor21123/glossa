@@ -226,6 +226,43 @@ public static class OcrEval
         Console.WriteLine($"-- context [{hit.Context}] at {hit.ContextOffset}");
     }
 
+    /// <summary>
+    /// <c>ocr-zone &lt;image&gt; &lt;left&gt; &lt;top&gt; &lt;right&gt; &lt;bottom&gt; [en|ja|zh] [--vision &lt;api root&gt;]</c>: «Зона» as the
+    /// app makes it: the zone recognized within at least the lookup's height of screen, its text, and with sight the text
+    /// after its doubtful words are read again (each reading shown).
+    /// </summary>
+    public static async Task ZoneAsync(string image, PixelRect zone, string? lang, Options options, WordLookup words)
+    {
+        using var decoded = SKBitmap.Decode(image) ?? throw new InvalidDataException("not an image: " + image);
+        var around = Zones.Around(zone);
+        var left = (int)Math.Clamp(around.Left, 0, decoded.Width - 1);
+        var top = (int)Math.Clamp(around.Top, 0, decoded.Height - 1);
+        var rect = SKRectI.Create(left, top, Math.Max(1, (int)Math.Min(around.Right, decoded.Width) - left),
+            Math.Max(1, (int)Math.Min(around.Bottom, decoded.Height) - top));
+        using var part = new SKBitmap();
+        decoded.ExtractSubset(part, rect);
+        using var crop = part.Copy(SKColorType.Bgra8888);
+        using var ocr = Engine();
+        var forced = lang is "en" or "ja" or "zh" ? lang : null;
+        var cjk = lang == "zh" ? "zh" : "ja";
+        var sw = Stopwatch.StartNew();
+        var page = words.Normalize(await ocr.RecognizeAsync(crop.GetPixelSpan().ToArray(), crop.Width, crop.Height, crop.RowBytes,
+            new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), OcrModelFamily.CjkLatin, CancellationToken.None), forced).Within(zone);
+        Console.WriteLine($"-- read in {sw.ElapsedMilliseconds} ms:");
+        Console.WriteLine(TextBlocks.Joined(page));
+        if (options.Client() is not { } vision) return;
+        sw.Restart();
+        var fixedPage = await VisionReading.CorrectDoubtfulAsync(page, words, cjk, "ru", forced, async hit =>
+        {
+            var reading = await VisionReading.ReadAsync(vision, Png(decoded, VisionReading.Region(hit.Box.CenterX, hit.Box.CenterY)),
+                CancellationToken.None);
+            Console.WriteLine($"  read again [{hit.Word}] in [{hit.Line}], model: {reading.ReplaceLineEndings("|")}");
+            return reading;
+        }, 3, CancellationToken.None);
+        Console.WriteLine($"-- after the second reading ({sw.ElapsedMilliseconds} ms):");
+        Console.WriteLine(TextBlocks.Joined(fixedPage));
+    }
+
     public sealed record LinesCase(string Id, string Image, string? Lang, List<string> Lines);
 
     /// <summary>

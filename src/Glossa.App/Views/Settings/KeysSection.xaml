@@ -19,7 +19,7 @@
 
             <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
                 <StackPanel>
-                    <!-- What the keys do: the word card, or only a translation (three ways, «Реплика» by default). -->
+                    <!-- What the keys do: the word card, or only a translation (three ways, «Зона» by default). -->
                     <HeaderedContentControl Header="Режим" Tag="что делает сочетание" Style="{StaticResource SettingRowTop}">
                         <StackPanel>
                             <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding Purpose}" HorizontalAlignment="Left">
@@ -34,7 +34,7 @@
                                             Visibility="{Binding IsTranslatePurpose, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
                             <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding TranslateMode}" HorizontalAlignment="Left">
-                                <ListBoxItem Content="Реплика" Tag="line" />
+                                <ListBoxItem Content="Зона" Tag="zone" />
                                 <ListBoxItem Content="Весь экран" Tag="screen" />
                                 <ListBoxItem Content="Живой перевод" Tag="live" />
                             </ListBox>

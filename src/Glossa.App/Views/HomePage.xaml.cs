@@ -125,7 +125,7 @@ public partial class HomePage : UserControl
 
     private static string TranslateModeName(string mode) => mode switch
     {
-        "screen" => "Весь экран", "live" => "Живой перевод", _ => "Реплика",
+        "screen" => "Весь экран", "live" => "Живой перевод", _ => "Зона",
     };
 
     private void FillWords(IReadOnlyList<SavedWord> words, LibraryStats stats)

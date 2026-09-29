@@ -13,16 +13,28 @@ namespace Glossa.App.Views;
 /// <summary>
 /// «Остановить кадр»: the captured monitor shown over the game, pixel for pixel, while the game runs on underneath. It
 /// takes the keyboard and mouse from the game (a game that holds the cursor lets it go), so words can be clicked or
-/// picked with the gamepad; closing it gives the game its focus back.
+/// picked with the gamepad, or (Только перевод, «Зона») a rectangle drawn around the text to translate; closing it gives
+/// the game its focus back.
 /// </summary>
 public partial class FrozenFrame : Window
 {
+    /// <summary>A press and release closer than this (physical pixels, both ways) is a click, not a rectangle.</summary>
+    private const double MinDrag = 8;
+
     private PixelRect _bounds;
     private IntPtr _hwnd;
+    private Point? _dragFrom;
 
     public FrozenFrame()
     {
         InitializeComponent();
+        MouseLeftButtonDown += OnPress;
+        MouseMove += OnDrag;
+        // The window takes the monitor's size only once shown: the dimming follows it until a drag begins.
+        SizeChanged += (_, _) =>
+        {
+            if (Selecting && _dragFrom is null) Dim.Data = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight));
+        };
         MouseLeftButtonUp += OnClick;
         MouseRightButtonUp += (_, _) => CloseRequested?.Invoke();
         KeyDown += (_, e) =>
@@ -36,6 +48,66 @@ public partial class FrozenFrame : Window
 
     /// <summary>Esc, a right click: back to the game.</summary>
     public event Action? CloseRequested;
+
+    /// <summary>«Зона»: a rectangle drawn on the still, in physical screen pixels.</summary>
+    public event Action<PixelRect>? ZoneSelected;
+
+    /// <summary>The still waits for a rectangle (a click without dragging still reports a point).</summary>
+    public bool Selecting { get; private set; }
+
+    /// <summary>«Зона»: the still dims and takes a rectangle drawn with the mouse; off, clicks pick words as before.</summary>
+    public void SelectZone(bool on)
+    {
+        Selecting = on;
+        _dragFrom = null;
+        Cursor = on ? Cursors.Cross : null;
+        SelectionBox.Visibility = Visibility.Collapsed;
+        Selection.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on) Dim.Data = new RectangleGeometry(new Rect(0, 0, Math.Max(ActualWidth, 1), Math.Max(ActualHeight, 1)));
+    }
+
+    private void OnPress(object sender, MouseButtonEventArgs e)
+    {
+        if (!Selecting) return;
+        _dragFrom = e.GetPosition(this);
+        CaptureMouse();
+        ShowSelection(_dragFrom.Value, _dragFrom.Value);
+    }
+
+    private void OnDrag(object sender, MouseEventArgs e)
+    {
+        if (_dragFrom is { } from && e.LeftButton == MouseButtonState.Pressed) ShowSelection(from, e.GetPosition(this));
+    }
+
+    /// <summary>The rectangle between two points (window units) left clear, the rest of the still dimmed.</summary>
+    private void ShowSelection(Point a, Point b)
+    {
+        var rect = new Rect(a, b);
+        Canvas.SetLeft(SelectionBox, rect.X);
+        Canvas.SetTop(SelectionBox, rect.Y);
+        SelectionBox.Width = rect.Width;
+        SelectionBox.Height = rect.Height;
+        SelectionBox.Visibility = Visibility.Visible;
+        Dim.Data = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(new Rect(0, 0, Math.Max(ActualWidth, 1), Math.Max(ActualHeight, 1))), new RectangleGeometry(rect));
+    }
+
+    /// <summary>The end of a drag: a rectangle, or a point when the mouse hardly moved.</summary>
+    private void OnReleased(MouseButtonEventArgs e)
+    {
+        if (_dragFrom is not { } from) return;
+        _dragFrom = null;
+        ReleaseMouseCapture();
+        var a = PointToScreen(from); // physical screen pixels
+        var b = PointToScreen(e.GetPosition(this));
+        if (Math.Abs(b.X - a.X) < MinDrag && Math.Abs(b.Y - a.Y) < MinDrag)
+        {
+            SelectionBox.Visibility = Visibility.Collapsed;
+            Clicked?.Invoke((int)b.X, (int)b.Y);
+            return;
+        }
+        ZoneSelected?.Invoke(new PixelRect(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
+    }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
@@ -68,6 +140,7 @@ public partial class FrozenFrame : Window
     /// <summary>Back to the game: hides the still and lets its picture go (a 1440p frame is ~15 MB).</summary>
     public void Leave()
     {
+        SelectZone(false);
         Hide();
         Shot.Source = null;
         Highlight.Visibility = Visibility.Collapsed;
@@ -181,6 +254,11 @@ public partial class FrozenFrame : Window
 
     private void OnClick(object sender, MouseButtonEventArgs e)
     {
+        if (Selecting)
+        {
+            OnReleased(e);
+            return;
+        }
         var p = PointToScreen(e.GetPosition(this)); // physical screen pixels
         Clicked?.Invoke((int)p.X, (int)p.Y);
     }

@@ -25,7 +25,8 @@ internal static class SelfTest
 
     /// <param name="X">The point to look up at, when the case gives it (ocr_hard.json: words the recognizer misreads,
     /// which the locator below could not find by their text).</param>
-    private sealed record Case(string Id, string? Image, string Word, double? X = null, double? Y = null);
+    /// <param name="Zone">«Зона»: the rectangle drawn around the text [left, top, right, bottom], else 900x120 around the point.</param>
+    private sealed record Case(string Id, string? Image, string Word, double? X = null, double? Y = null, double[]? Zone = null);
 
     private sealed record Result(string Id, string Word, string Outcome, bool Ok, LookupStages? Stages, double GlossaCpu, double ServerCpu,
         double GlossaMb, double ServerMb, int VramFreeMb)
@@ -40,7 +41,8 @@ internal static class SelfTest
         var json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var cases = JsonSerializer.Deserialize<List<Case>>(await File.ReadAllTextAsync(casesPath), json)!
             .Where(c => c.Image is not null && File.Exists(c.Image)).Take(count).ToList();
-        // GLOSSA_SELFTEST_MODE: line — «Только перевод → Реплика» instead of the word card; screen — «Весь экран».
+        // GLOSSA_SELFTEST_MODE: line — the paragraph under the point (a click in «Зона»); zone — «Только перевод → Зона» on
+        // a 900x120 rectangle around the point; screen — «Весь экран».
         var mode = Environment.GetEnvironmentVariable("GLOSSA_SELFTEST_MODE");
         log.Info($"selftest: {cases.Count} cases, mode {mode ?? "card"}");
         if (mode == "screen")
@@ -100,6 +102,10 @@ internal static class SelfTest
             {
                 if (mode == "line")
                     await controller.TranslateLineAsync(frame, x, y, new LookupContext("selftest", "selftest", "selftest.exe"), Stopwatch.StartNew());
+                else if (mode == "zone")
+                    await controller.TranslateZoneAsync(frame,
+                        c.Zone is [var zl, var zt, var zr, var zb] ? new PixelRect(zl, zt, zr, zb) : new PixelRect(x - 450, y - 60, x + 450, y + 60),
+                        new LookupContext("selftest", "selftest", "selftest.exe"), Stopwatch.StartNew());
                 else
                     await controller.RunAsync(frame, x, y, "selftest", "selftest.exe", Stopwatch.StartNew());
             }
@@ -110,7 +116,7 @@ internal static class SelfTest
             var after = LoadMeter.Sample(host);
             minFree = Math.Min(minFree, after.VramFreeMb);
             var outcome = last?.Result ?? "нет отчёта";
-            if (mode == "line" && controller.LastTranslation is { } tr) outcome += $" | {tr.Original} => {tr.Translation}";
+            if (mode is "line" or "zone" && controller.LastTranslation is { } tr) outcome += $" | {tr.Original} => {tr.Translation}";
             results.Add(new Result(c.Id, c.Word, outcome, last?.Ok ?? false, last?.Stages,
                 after.GlossaCpu - before.GlossaCpu, after.ServerCpu - before.ServerCpu, after.GlossaMb, after.ServerMb, after.VramFreeMb));
         }
