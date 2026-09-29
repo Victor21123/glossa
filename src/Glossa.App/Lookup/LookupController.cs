@@ -104,7 +104,7 @@ public sealed class LookupController(
         try
         {
             if (!await speech.SpeakAsync(text, p.Card.Language))
-                vm.Status = $"Нет голоса для языка «{Languages.RussianName(p.Card.Language)}» — установите его: Параметры → Время и язык → Речь.";
+                vm.Status = $"Нет голоса для языка \"{Languages.RussianName(p.Card.Language)}\" - установите его: Параметры -> Время и язык -> Речь.";
         }
         catch (Exception ex)
         {
@@ -198,8 +198,8 @@ public sealed class LookupController(
             pending.Card = known;
             if (DictionaryCheck.Of(known.Translation, sections, target) is { } knownCheck) vm.SetDictionaryMark(knownCheck.Matches);
             vm.IsBusy = false;
-            vm.Timing = string.Format(Russian, "готовая карточка · {0:0.0} с", sw.Elapsed.TotalSeconds);
-            Report($"слово «{hit.Word}» · готовая карточка", ok: true, stages: Stages(sw.ElapsedMilliseconds, sw.ElapsedMilliseconds));
+            vm.Timing = string.Format(Russian, "готовая карточка, {0:0.0} с", sw.Elapsed.TotalSeconds);
+            Report($"слово \"{hit.Word}\", готовая карточка", ok: true, stages: Stages(sw.ElapsedMilliseconds, sw.ElapsedMilliseconds));
             if (s.AutoSaveWords) Save(pending);
             return;
         }
@@ -208,9 +208,9 @@ public sealed class LookupController(
         if (s.Performance.AiOnDemand && sections.Count > 0)
         {
             vm.IsBusy = false;
-            vm.Status = "Tab — спросить ИИ";
+            vm.Status = "Tab - спросить ИИ";
             _deferred = CardAsync;
-            Report($"слово «{hit.Word}» · справочники, ИИ по Tab", ok: true, stages: Stages());
+            Report($"слово \"{hit.Word}\", справочники, ИИ по Tab", ok: true, stages: Stages());
             return;
         }
         await CardAsync();
@@ -220,16 +220,16 @@ public sealed class LookupController(
         // «ИИ в этой игре → Только справочники»: the video card stays the game's.
         if (context.Choices?.Ai == "off")
         {
-            vm.Status = sections.Count > 0 ? "ИИ в этой игре выключен — показаны справочники" : "ИИ в этой игре выключен";
+            vm.Status = sections.Count > 0 ? "ИИ в этой игре выключен - показаны справочники" : "ИИ в этой игре выключен";
             vm.IsBusy = false;
-            Report($"слово «{hit.Word}» · только справочники (профиль игры)", ok: true, stages: Stages());
+            Report($"слово \"{hit.Word}\", только справочники (профиль игры)", ok: true, stages: Stages());
             return;
         }
         using var busy = ai.Use();
         AiClients clients;
         try
         {
-            if (ai.Current is null) vm.Status = "Загружаю модель…";
+            if (ai.Current is null) vm.Status = "Загружаю модель...";
             clients = await ai.GetAsync(ct, context.Choices?.Ai == "lowvram" ? "lowvram" : null);
             ct.ThrowIfCancellationRequested();
         }
@@ -237,16 +237,16 @@ public sealed class LookupController(
         {
             vm.Error = ex.Message;
             vm.IsBusy = false;
-            Report($"слово «{hit.Word}» · ИИ: {ex.Message}", ok: false, stages: Stages());
+            Report($"слово \"{hit.Word}\", ИИ: {ex.Message}", ok: false, stages: Stages());
             return;
         }
         if (clients.Dictionary is null)
         {
             vm.Status = sections.Count > 0
-                ? "ИИ выключен (мало видеопамяти или режим «выкл.») — показаны словари"
-                : "ИИ выключен — мало видеопамяти или режим «выкл.»";
+                ? "ИИ выключен (мало видеопамяти или режим \"выкл.\") - показаны словари"
+                : "ИИ выключен - мало видеопамяти или режим \"выкл.\"";
             vm.IsBusy = false;
-            Report($"слово «{hit.Word}» · только справочники", ok: true, stages: Stages());
+            Report($"слово \"{hit.Word}\", только справочники", ok: true, stages: Stages());
             return;
         }
         vm.Status = null;
@@ -303,10 +303,10 @@ public sealed class LookupController(
         vm.IsBusy = false;
         // "ИИ 2,1 с · gemma26b": the local profile name or the user's endpoint name, as in the mockups.
         var endpoint = clients.Dictionary.Endpoint;
-        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с · {1}", sw.Elapsed.TotalSeconds, endpoint.IsLocal ? s.LocalAi.Profile : endpoint.Name);
+        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, endpoint.IsLocal ? s.LocalAi.Profile : endpoint.Name);
         log.Info($"lookup '{hit.Word}' done in {sw.ElapsedMilliseconds} ms via {clients.Description}");
         var model = endpoint.IsLocal ? s.LocalAi.Profile : endpoint.Name;
-        Report(string.Format(Russian, "слово «{0}» · {1:0.0} с", hit.Word, sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds, model,
+        Report(string.Format(Russian, "слово \"{0}\", {1:0.0} с", hit.Word, sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds, model,
             Stages(tFirst, sw.ElapsedMilliseconds));
 
         if (pending.Card.Error is null && !ct.IsCancellationRequested) _cache.Put(cacheKey, pending.Card);
@@ -373,14 +373,14 @@ public sealed class LookupController(
         LastAppExe = context.Exe;
         log.Info($"translate line [{lang}] {block.Text.Length} chars, ocr {tOcr} ms, card {tCard} ms");
 
-        if (ai.Current is null && context.Choices?.Ai != "off") vm.Status = "Загружаю модель…";
+        if (ai.Current is null && context.Choices?.Ai != "off") vm.Status = "Загружаю модель...";
         var (text, model) = await TranslateTextAsync(block.Text, lang, target, context.Choices?.Ai, t => vm.ContextTranslation = t, ct);
         vm.ContextTranslation = text;
         LastTranslation = (block.Text, text);
         vm.IsBusy = false;
         vm.Status = null;
-        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с · {1}", sw.Elapsed.TotalSeconds, model);
-        Report(context.Trigger, string.Format(Russian, "перевод реплики · {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
+        vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
+        Report(context.Trigger, string.Format(Russian, "перевод реплики, {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
             model, new LookupStages(0, tOcr, 0, tCard, null, sw.ElapsedMilliseconds));
     }
 
@@ -401,10 +401,10 @@ public sealed class LookupController(
                 return (known, "готовый перевод");
             }
         }
-        if (gameAi == "off") throw new LlmException("ИИ в этой игре выключен — Игры и профили.");
+        if (gameAi == "off") throw new LlmException("ИИ в этой игре выключен - Игры и профили.");
         using var busy = ai.Use();
         var clients = await ai.GetAsync(ct, gameAi == "lowvram" ? "lowvram" : null);
-        if (clients.Translator is not { } llm) throw new LlmException("ИИ выключен: режим «Выключен» или мало видеопамяти.");
+        if (clients.Translator is not { } llm) throw new LlmException("ИИ выключен: режим \"Выключен\" или мало видеопамяти.");
         var result = "";
         await foreach (var sofar in _translator.StreamAsync(llm, text, lang, target, ct))
         {

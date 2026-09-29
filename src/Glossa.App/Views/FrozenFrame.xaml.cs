@@ -89,14 +89,14 @@ public partial class FrozenFrame : Window
         if (lines == 1) width = Math.Max(width, Math.Min(width * 1.8, 420));
         var text = new TextBlock
         {
-            Text = "…", TextWrapping = TextWrapping.Wrap, Width = width - inset * 2,
+            Text = "...", TextWrapping = TextWrapping.Wrap, Width = width - inset * 2,
             FontSize = Math.Clamp(box.Height / Math.Max(1, lines) / scale * 0.58, 11, 22),
         };
         text.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         var plate = new Border
         {
             CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(1), Padding = new Thickness(inset, 3, inset, 3),
-            Cursor = Cursors.Hand, ToolTip = "Щелчок — оригинал",
+            Cursor = Cursors.Hand, ToolTip = "Щелчок - оригинал",
             Child = new Viewbox { Child = text, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly,
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top },
         };

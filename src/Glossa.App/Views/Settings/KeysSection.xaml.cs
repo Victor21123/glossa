@@ -68,7 +68,7 @@ public partial class KeysSection : UserControl
         HotkeyState.Style = (Style)FindResource(_model.HotkeyActive ? "OkText" : "WarnText");
         HotkeyState.Content = _model.HotkeyActive
             ? $"{KeyCaps.Display(_model.Hotkey)} свободно, Glossa его слушает"
-            : $"{KeyCaps.Display(_model.Hotkey)} занято другой программой — выбери другое";
+            : $"{KeyCaps.Display(_model.Hotkey)} занято другой программой - выбери другое";
 
         var window = _model.WindowHotkey;
         WindowCaps.Content = window.Length > 0 ? KeyCaps.Build(window, big: true) : NotSet();
@@ -107,7 +107,7 @@ public partial class KeysSection : UserControl
         _forWindow = forWindow;
         Capturing = true;
         var (change, cancel, result) = forWindow ? (WindowChangeButton, WindowCancelButton, WindowResult) : (ChangeButton, CancelButton, HotkeyResult);
-        change.Content = "Нажми новое сочетание…";
+        change.Content = "Нажми новое сочетание...";
         change.IsEnabled = false;
         cancel.Visibility = Visibility.Visible;
         result.Visibility = Visibility.Collapsed;
@@ -138,7 +138,7 @@ public partial class KeysSection : UserControl
     private void OnRecordPad(object sender, RoutedEventArgs e)
     {
         if (_services.RecordGamepad is null) return;
-        PadRecordButton.Content = "Нажми сочетание на геймпаде…";
+        PadRecordButton.Content = "Нажми сочетание на геймпаде...";
         PadRecordButton.IsEnabled = false;
         PadResult.Visibility = Visibility.Collapsed;
         _services.RecordGamepad((combo, error) =>
@@ -218,7 +218,7 @@ public partial class KeysSection : UserControl
             ShowHotkey();
             Result(target, ok, ok
                 ? $"Готово: теперь поиск по {KeyCaps.Display(spec)}."
-                : $"{KeyCaps.Display(spec)} занято другой программой — осталось {KeyCaps.Display(_model.Hotkey)}.");
+                : $"{KeyCaps.Display(spec)} занято другой программой - осталось {KeyCaps.Display(_model.Hotkey)}.");
         }
     }
 

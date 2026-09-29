@@ -12,7 +12,7 @@
 
         <TextBlock x:Name="Empty" Style="{StaticResource Note}" FontSize="14.5" Visibility="Collapsed" TextWrapping="Wrap" MaxWidth="620"
                    HorizontalAlignment="Left"
-                   Text="Профилей пока нет. Наведи курсор на слово в игре и нажми сочетание поиска — профиль игры появится здесь сам." />
+                   Text="Профилей пока нет. Наведи курсор на слово в игре и нажми сочетание поиска - профиль игры появится здесь сам." />
 
         <Grid x:Name="Body">
             <Grid.ColumnDefinitions>
@@ -106,7 +106,7 @@
                                     <ListBoxItem Content="Только справочники" Tag="off" />
                                 </ListBox>
                                 <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                           Text="для тяжёлых игр: в «Минимуме» модель уходит в оперативную память, карточка 7–9 с; «Только справочники» не трогают видеокарту вовсе" />
+                                           Text='для тяжёлых игр: в "Минимуме" модель уходит в оперативную память, карточка 7-9 с; "Только справочники" не трогают видеокарту вовсе' />
                             </StackPanel>
                         </HeaderedContentControl>
 

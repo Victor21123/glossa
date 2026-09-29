@@ -263,7 +263,7 @@ public sealed class CardService
         var error = card.Error;
         if (req.Target == "ru" && (HasCjk(card.Translation) || HasCjk(card.ContextTranslation) || HasCjk(card.DefinitionTranslation)
                                    || card.Components.Any(c => HasCjk(c.Meaning))))
-            error = "Модель ответила не на русском — попробуйте ещё раз или смените модель.";
+            error = "Модель ответила не на русском - попробуйте ещё раз или смените модель.";
 
         return card with { Synonyms = synonyms, Error = error, IsPartial = false };
 
@@ -288,7 +288,7 @@ public sealed class TranslationService
             var so = sb.ToString();
             if (LoopStart(so) is { } at)
             {
-                yield return so[..at].TrimEnd() + "…";
+                yield return so[..at].TrimEnd() + "...";
                 yield break;
             }
             yield return so;

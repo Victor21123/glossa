@@ -117,8 +117,8 @@ public static class DictionaryCatalog
 
     public static IReadOnlyList<CatalogItem> Items { get; } =
     [
-        new("warodai", "Warodai — большой японско-русский словарь",
-            "Около 100 тысяч статей с примерами, основной словарь японский → русский.",
+        new("warodai", "Warodai - большой японско-русский словарь",
+            "Около 100 тысяч статей с примерами, основной словарь японский -> русский.",
             "ja", "CC BY-NC-ND 3.0, warodai.ru", 6, async ctx =>
             {
                 var zip = await ctx.DownloadAsync("https://warodai.ru/download/warodai_txt.zip", "warodai_txt.zip");
@@ -132,7 +132,7 @@ public static class DictionaryCatalog
                 Directory.Delete(dir, true);
             }),
 
-        new("jmdict", "JMdict — японско-английский (+ русский)",
+        new("jmdict", "JMdict - японско-английский (+ русский)",
             "Около 220 тысяч слов; у трети есть русские значения. Пометы частей речи.",
             "ja", "CC BY-SA 4.0, EDRDG", 22, async ctx =>
             {
@@ -140,7 +140,7 @@ public static class DictionaryCatalog
                 await Task.Run(() => JmdictBuilder.Build(gz, ctx.PackPath("jmdict"), ctx.Stage("Сборка JMdict"), ctx.Ct), ctx.Ct);
             }),
 
-        new("bkrs", "БКРС — большой китайско-русский словарь",
+        new("bkrs", "БКРС - большой китайско-русский словарь",
             "Более 2 миллионов статей, обновляется ежедневно. Пиньинь, примеры.",
             "zh", "Свободное использование, bkrs.info", 85, async ctx =>
             {
@@ -153,7 +153,7 @@ public static class DictionaryCatalog
                     new Progress(ctx, "Сборка БКРС"), ctx.Ct), ctx.Ct);
             }),
 
-        new("cedict", "CC-CEDICT — китайско-английский",
+        new("cedict", "CC-CEDICT - китайско-английский",
             "Около 120 тысяч слов, упрощённые и традиционные иероглифы.",
             "zh", "CC BY-SA 4.0, MDBG", 4, async ctx =>
             {
@@ -168,7 +168,7 @@ public static class DictionaryCatalog
                 await Task.Run(() => CedictBuilder.Build(ctx.CedictPath, ctx.PackPath("cedict"), ctx.Stage("Сборка CC-CEDICT"), ctx.Ct), ctx.Ct);
             }),
 
-        new("wiktionary-en", "Wiktionary — английский",
+        new("wiktionary-en", "Wiktionary - английский",
             "Толкования на английском, транскрипция, русские переводы по значениям; все формы слов и фразовые глаголы.",
             "en", "CC BY-SA 4.0, Wiktionary / kaikki.org", 500, async ctx =>
             {
@@ -177,7 +177,7 @@ public static class DictionaryCatalog
                 await Task.Run(() => WiktionaryBuilder.Build(gz, ctx.PackPath("wiktionary-en"), ctx.Stage("Сборка Wiktionary"), ctx.Ct), ctx.Ct);
             }),
 
-        new("wiktionary-ja", "Wiktionary — японский (сленг, 18+)",
+        new("wiktionary-ja", "Wiktionary - японский (сленг, 18+)",
             "Значения на английском: разговорное, интернет-сленг, мат и 18+, включая цензурные написания (ま○こ).",
             "ja", "CC BY-SA 4.0, Wiktionary / kaikki.org", 48, async ctx =>
             {
@@ -186,7 +186,7 @@ public static class DictionaryCatalog
                 await Task.Run(() => WiktionaryBuilder.Build(gz, ctx.PackPath("wiktionary-ja"), ctx.Stage("Сборка Wiktionary (японский)"), ctx.Ct, "ja"), ctx.Ct);
             }),
 
-        new("wiktionary-zh", "Wiktionary — китайский (сленг, 18+)",
+        new("wiktionary-zh", "Wiktionary - китайский (сленг, 18+)",
             "Значения на английском: сленг, интернет-сленг и мат (傻屄, 舔狗, 屌丝), пиньинь.",
             "zh", "CC BY-SA 4.0, Wiktionary / kaikki.org", 155, async ctx =>
             {

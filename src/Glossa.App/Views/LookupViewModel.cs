@@ -102,7 +102,7 @@ public sealed class LookupViewModel : ObservableObject
     public FontFamily PlateFont => _language is "ja" or "zh" ? UiFonts.For(_language) : UiFonts.Serif;
 
     /// <summary>The Less card's second line after the word: "がったいする · N4 · гл. suru".</summary>
-    public string Meta => string.Join(" · ", new[] { ShownReading, ShownLevel, ShownPartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
+    public string Meta => string.Join(", ", new[] { ShownReading, ShownLevel, ShownPartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
 
     public string? Level
     {
@@ -159,13 +159,13 @@ public sealed class LookupViewModel : ObservableObject
     }
 
     /// <summary>The Less card's footer has room for "✓ есть в словаре" / "нет в словаре" only.</summary>
-    public string? DictionaryMarkShort => _dictionaryMark is null ? null : _dictionaryMarkMatches ? "✓ есть в словаре" : "нет в словаре";
+    public string? DictionaryMarkShort => _dictionaryMark is null ? null : _dictionaryMarkMatches ? "есть в словаре" : "нет в словаре";
     public bool DictionaryMarkMatches { get => _dictionaryMarkMatches; private set => SetProperty(ref _dictionaryMarkMatches, value); }
 
     public void SetDictionaryMark(bool matches)
     {
         DictionaryMarkMatches = matches;
-        DictionaryMark = matches ? "✓ есть в словаре" : "нет в словаре — перевод по контексту";
+        DictionaryMark = matches ? "есть в словаре" : "нет в словаре - перевод по контексту";
     }
 
     public string? Translation { get => _translation; set => SetProperty(ref _translation, value); }
@@ -240,7 +240,7 @@ public sealed class LookupViewModel : ObservableObject
                 (2 or 3 or 4, not (12 or 13 or 14)) => "статьи",
                 _ => "статей",
             };
-            return $"{n} {word} {(_dictionariesOpen ? "▾" : "▸")}";
+            return $"{n} {word}";
         }
     }
 
@@ -417,7 +417,7 @@ public sealed class LookupViewModel : ObservableObject
         DefinitionTranslation = card.DefinitionTranslation;
         if (card.ContextTranslation is not null) ContextTranslation = card.ContextTranslation;
         Synonyms = card.Synonyms.Count > 0 ? string.Join(", ", card.Synonyms) : null;
-        KeyForms = card.KeyForms.Count > 0 ? string.Join(" · ", card.KeyForms) : null;
+        KeyForms = card.KeyForms.Count > 0 ? string.Join(", ", card.KeyForms) : null;
         if (card.Components.Count > 0) Components = card.Components;
         if (card.Error is not null) Error = card.Error;
     }

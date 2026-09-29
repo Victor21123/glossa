@@ -74,7 +74,7 @@
                         <DockPanel>
                             <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AutoPlayAudio}" VerticalAlignment="Center" />
                             <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
-                                       Text="иначе — клавиша P или кнопка в карточке" />
+                                       Text="иначе - клавиша P или кнопка в карточке" />
                         </DockPanel>
                     </HeaderedContentControl>
 
@@ -99,13 +99,13 @@
                         <TextBox x:Name="SayBox" Text="reconsider" theme:Hint.Text="слово или фраза" />
                     </DockPanel>
                     <TextBlock x:Name="SayNote" Style="{StaticResource Note}" Margin="0,8,0,0"
-                               Text="Язык определяется по тексту: латиница — английский, кана — японский, иероглифы без каны — китайский." />
+                               Text="Язык определяется по тексту: латиница - английский, кана - японский, иероглифы без каны - китайский." />
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
                     <TextBlock Text="КАК ДОБАВИТЬ ГОЛОС" Style="{StaticResource SectionCaption}" Margin="0,0,0,10" />
                     <TextBlock FontSize="14" LineHeight="21" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap">
-                        1. Параметры Windows → Время и язык → Речь.<LineBreak />
-                        2. «Добавить голоса»: японский — Microsoft Haruka, китайский — Microsoft Huihui.<LineBreak />
-                        3. Вернись сюда и нажми «Проверить снова».
+                        1. Параметры Windows -> Время и язык -> Речь.<LineBreak />
+                        2. "Добавить голоса": японский - Microsoft Haruka, китайский - Microsoft Huihui.<LineBreak />
+                        3. Вернись сюда и нажми "Проверить снова".
                     </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <Button Content="Открыть параметры речи" Click="OnOpenSpeechSettings" />

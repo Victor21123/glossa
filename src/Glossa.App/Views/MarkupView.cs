@@ -45,7 +45,7 @@ public sealed class MarkupView : StackPanel
         }
         if (lines.Count > MaxLines)
         {
-            var more = new TextBlock { Text = $"… ещё строк: {lines.Count - MaxLines}", FontSize = 11.5 };
+            var more = new TextBlock { Text = $"... ещё строк: {lines.Count - MaxLines}", FontSize = 11.5 };
             more.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
             Children.Add(more);
         }

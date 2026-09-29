@@ -389,7 +389,7 @@ public sealed class WarodaiImporter : IDictionaryImporter
     private static readonly char[] Separators = [',', '･', '・'];
 
     public SourceInfo Probe(string path) =>
-        new("Warodai — большой японско-русский словарь", "ja", "ru", "warodai.ru, CC BY-NC-ND 3.0");
+        new("Warodai - большой японско-русский словарь", "ja", "ru", "warodai.ru, CC BY-NC-ND 3.0");
 
     public void Import(string path, DictionaryPackWriter writer, string workDir, IProgress<double>? progress, CancellationToken ct)
     {

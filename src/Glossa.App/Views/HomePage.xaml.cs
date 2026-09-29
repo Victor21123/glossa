@@ -69,7 +69,7 @@ public partial class HomePage : UserControl
         if (translate)
         {
             Stats.Visibility = Visibility.Collapsed;
-            TranslateCall.Text = $"{Settings.KeyCaps.Display(services.Settings.Hotkey)} · {TranslateModeName(services.Settings.TranslateMode)}";
+            TranslateCall.Text = $"{Settings.KeyCaps.Display(services.Settings.Hotkey)} - {TranslateModeName(services.Settings.TranslateMode)}";
             return;
         }
 
@@ -92,15 +92,15 @@ public partial class HomePage : UserControl
         var s = services.Settings;
         var ai = s.LocalAi;
         var loaded = services.Ai.Current?.Dictionary is not null;
-        AiState.Text = s.DictionaryEngine != "local" ? $"Карточку делает «{s.DictionaryEngine}»"
+        AiState.Text = s.DictionaryEngine != "local" ? $"Карточку делает \"{s.DictionaryEngine}\""
             : ai.Mode == "off" ? "Выключен - только справочники"
             : loaded ? "Загружена и готова"
             : !ai.HasModel(ai.Profile) ? $"Модель {Settings.ProfileTile.Absent(ai.Profile)}"
             : !ai.HasRuntime() ? "Движок не скачан"
             : "Выгружена - загрузится при поиске";
         string? missing = s.DictionaryEngine != "local" || ai.Mode == "off" ? null
-            : !ai.HasModel(ai.Profile) ? (ai.Profile == "custom" ? "Выбери файл модели в «Настройках ИИ»." : "Скачай модель в «Настройках ИИ».")
-            : !ai.HasRuntime() ? "Скачай движок в «Настройках ИИ»."
+            : !ai.HasModel(ai.Profile) ? (ai.Profile == "custom" ? "Выбери файл модели в \"Настройках ИИ\"." : "Скачай модель в \"Настройках ИИ\".")
+            : !ai.HasRuntime() ? "Скачай движок в \"Настройках ИИ\"."
             : null;
         AiMissing.Content = missing;
         AiMissing.Visibility = Shown(missing is not null);
@@ -114,7 +114,7 @@ public partial class HomePage : UserControl
         AiMode.Text = ai.Mode switch { "lowvram" => "Минимум видеопамяти", "off" => "Выключен", _ => "Авто" };
         var runtime = RuntimeCatalog.For(model.Runtime);
         AiEngine.Text = ai.LlamaServerPath.Length > 0 ? "свой llama-server"
-            : $"llama.cpp {runtime?.Release} · {(runtime?.Id == "vulkan" ? "Vulkan" : "CUDA")}{(ai.HasRuntime() ? "" : ", не скачан")}";
+            : $"llama.cpp {runtime?.Release}, {(runtime?.Id == "vulkan" ? "Vulkan" : "CUDA")}{(ai.HasRuntime() ? "" : ", не скачан")}";
         var free = AiRouter.FreeVramMb();
         AiVram.Text = free >= 0 ? string.Format(Russian, "свободно {0:0.0} ГБ", free / 1024.0) : "нет данных";
     }
@@ -130,7 +130,7 @@ public partial class HomePage : UserControl
         if (words.Count == 0)
         {
             WordsTotal.Text = "Пока пусто";
-            WordsNote.Text = $"Наведи курсор на слово в игре и нажми {_services!.Settings.Hotkey} — слово попадёт сюда.";
+            WordsNote.Text = $"Наведи курсор на слово в игре и нажми {_services!.Settings.Hotkey} - слово попадёт сюда.";
             return;
         }
         WordsTotal.Text = $"{words.Count.ToString("N0", Russian)} {Plural(words.Count, "слово", "слова", "слов")}";

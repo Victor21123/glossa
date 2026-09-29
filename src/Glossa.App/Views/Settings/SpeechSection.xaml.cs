@@ -41,7 +41,7 @@ public partial class SpeechSection : UserControl
         try
         {
             if (!await _services.Speech.SpeakAsync(text, language))
-                SayNote.Text = $"Нет голоса для языка «{language}» — как добавить, написано ниже.";
+                SayNote.Text = $"Нет голоса для языка \"{language}\" - как добавить, написано ниже.";
             await ShowCache();
         }
         catch (Exception ex)

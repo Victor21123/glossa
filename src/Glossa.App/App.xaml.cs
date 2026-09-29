@@ -220,7 +220,7 @@ public partial class App : Application
         _hotkeys.Pressed += OnHotkey;
         _tray = CreateTray();
         if (!_hotkeys.Register(HotkeyLookup, _settings.Hotkey))
-            _tray.ShowBalloonTip(5000, "Glossa", $"Не удалось занять {_settings.Hotkey} — клавиша занята другой программой. Смените её в настройках.", WinForms.ToolTipIcon.Warning);
+            _tray.ShowBalloonTip(5000, "Glossa", $"Не удалось занять {_settings.Hotkey} - клавиша занята другой программой. Смените её в настройках.", WinForms.ToolTipIcon.Warning);
         else
             _tray.ShowBalloonTip(3000, "Glossa", $"Наведите курсор на слово и нажмите {_settings.Hotkey}.", WinForms.ToolTipIcon.Info);
         if (_settings.WindowHotkey.Length > 0 && !_hotkeys.Register(HotkeyWindow, _settings.WindowHotkey))
@@ -394,7 +394,7 @@ public partial class App : Application
     /// <summary>The icon itself stays a Windows tray icon; its menu is Glossa's own window (mockup «Меню в трее»).</summary>
     private WinForms.NotifyIcon CreateTray()
     {
-        var tray = new WinForms.NotifyIcon { Icon = TrayIcon(), Text = "Glossa — экранный словарь", Visible = true };
+        var tray = new WinForms.NotifyIcon { Icon = TrayIcon(), Text = "Glossa - экранный словарь", Visible = true };
         tray.MouseUp += (_, e) =>
         {
             if (e.Button == WinForms.MouseButtons.Right) ShowTrayMenu();
@@ -428,13 +428,13 @@ public partial class App : Application
     {
         var s = _settings;
         var loaded = _router?.Current?.Dictionary is not null;
-        var status = s.DictionaryEngine != "local" ? $"ИИ: «{s.DictionaryEngine}»"
-            : s.LocalAi.Mode == "off" ? "ИИ выключен · только справочники"
-            : loaded ? $"ИИ готова · {Views.Settings.ProfileTile.Title(s.LocalAi.Profile)}"
+        var status = s.DictionaryEngine != "local" ? $"ИИ: \"{s.DictionaryEngine}\""
+            : s.LocalAi.Mode == "off" ? "ИИ выключен, только справочники"
+            : loaded ? $"ИИ готова, {Views.Settings.ProfileTile.Title(s.LocalAi.Profile)}"
             : !s.LocalAi.HasModel(s.LocalAi.Profile)
-                ? $"ИИ {Views.Settings.ProfileTile.Absent(s.LocalAi.Profile)} · {Views.Settings.ProfileTile.Title(s.LocalAi.Profile)}"
+                ? $"ИИ {Views.Settings.ProfileTile.Absent(s.LocalAi.Profile)}, {Views.Settings.ProfileTile.Title(s.LocalAi.Profile)}"
             : !s.LocalAi.HasRuntime() ? "ИИ: движок llama.cpp не скачан"
-            : "ИИ выгружена · загрузится при поиске";
+            : "ИИ выгружена, загрузится при поиске";
         var mode = s.LocalAi.Mode;
         return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn, s.Purpose == "translate");
     }

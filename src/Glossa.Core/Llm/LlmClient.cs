@@ -206,7 +206,7 @@ public sealed class OpenAiCompatibleClient(HttpClient http, LlmEndpoint endpoint
         }
     }
 
-    private static string Trim(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+    private static string Trim(string s, int max) => s.Length <= max ? s : s[..max] + "...";
 }
 
 public static class LlmClientExtensions

@@ -82,7 +82,7 @@ public partial class CardSection : UserControl
         if (word is null)
         {
             Example(_card);
-            PreviewNote.Text = "Пример: в словаре пока нет слов с кадром из игры. «Как у окна» повторяет тему Glossa.";
+            PreviewNote.Text = "Пример: в словаре пока нет слов с кадром из игры. \"Как у окна\" повторяет тему Glossa.";
             return;
         }
 
@@ -108,7 +108,7 @@ public partial class CardSection : UserControl
         _card.Dictionaries = sections.Select(s => new DictSectionItem(s.Pack.Title,
             s.Entries.Select(e => new DictEntryItem(e.Headword, e.Reading == e.Headword ? null : e.Reading, e.Body)).ToList())).ToList();
         if (_services.RecentLookups.FirstOrDefault(r => r.AiSeconds is not null) is { } last)
-            _card.Timing = string.Format(CultureInfo.GetCultureInfo("ru-RU"), "ИИ {0:0.0} с · {1}", last.AiSeconds, last.Model);
+            _card.Timing = string.Format(CultureInfo.GetCultureInfo("ru-RU"), "ИИ {0:0.0} с, {1}", last.AiSeconds, last.Model);
 
         _shot = new BitmapImage();
         _shot.BeginInit();
@@ -118,7 +118,7 @@ public partial class CardSection : UserControl
         _box = word.WordBox;
         Shot.Source = _shot;
         var game = word.WindowTitle ?? word.AppExe;
-        PreviewNote.Text = $"Твоё последнее слово{(game is { Length: > 0 } ? " из «" + game + "»" : "")}. «Как у окна» повторяет тему Glossa.";
+        PreviewNote.Text = $"Твоё последнее слово{(game is { Length: > 0 } ? " из \"" + game + "\"" : "")}. \"Как у окна\" повторяет тему Glossa.";
     }
 
     /// <summary>
@@ -204,7 +204,7 @@ public partial class CardSection : UserControl
         vm.ContextTranslation = "Тебе стоит пересмотреть свою позицию, смертный.";
         vm.Synonyms = "rethink, review, think better of";
         vm.SetDictionaryMark(true);
-        vm.Timing = "ИИ 2,1 с · gemma26b";
+        vm.Timing = "ИИ 2,1 с, gemma26b";
     }
 }
 
@@ -216,7 +216,7 @@ public sealed record PresetTile(string Key, string Name, string Description, dou
         new("less", "Меньше", "перевод и реплика; остальное по Tab", 8, 0.8, 0),
         new("standard", "Стандарт", "всё о слове сразу, словари свёрнуты", 6, 0.7, 0.6),
         new("more", "Больше", "плюс статья словаря, разбор, синонимы", 6, 0.9, 0.9),
-        new("custom", "Свой", "ширина, прозрачность и что показывать — как хочешь", 7, 0.5, 0.75),
+        new("custom", "Свой", "ширина, прозрачность и что показывать - как хочешь", 7, 0.5, 0.75),
     ];
 
     public GridLength Line3 => new(L3, GridUnitType.Star);

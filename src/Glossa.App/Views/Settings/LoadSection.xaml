@@ -39,7 +39,7 @@
                                 <ComboBoxItem Content="8"><ComboBoxItem.Tag><sys:Int32>8</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
                             </ComboBox>
                             <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
-                                       Text="больше — быстрее распознавание, но сильнее нагрузка во время поиска" />
+                                       Text="больше - быстрее распознавание, но сильнее нагрузка во время поиска" />
                         </StackPanel>
                     </HeaderedContentControl>
 

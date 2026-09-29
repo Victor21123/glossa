@@ -27,8 +27,8 @@ public sealed class PackItem : ObservableObject
     public PackInfo Info { get; }
     public string Title => Info.Title;
     public int Number { get => _number; set => SetProperty(ref _number, value); }
-    public string Pair => $"{Info.SourceLanguage} → {Info.TargetLanguage}";
-    public string Summary => $"{Pair} · {DictionariesViewModel.Count(Info.Entries)} статей · {DictionariesViewModel.Size(Info.SizeBytes)}";
+    public string Pair => $"{Info.SourceLanguage} -> {Info.TargetLanguage}";
+    public string Summary => $"{Pair}, {DictionariesViewModel.Count(Info.Entries)} статей, {DictionariesViewModel.Size(Info.SizeBytes)}";
     public bool IsImported => Info.Id.StartsWith("user-", StringComparison.Ordinal);
 
     public bool Enabled
@@ -56,8 +56,8 @@ public sealed class CatalogEntry : ObservableObject
     public string Title => Item.Title;
     public string Description => Item.Description;
     public string Group => Item.IsLevels ? "УРОВНИ" : Languages.RussianName(Item.Language).ToUpperInvariant();
-    public string Pair => Item.IsLevels ? "все языки" : Item.Language + " → " + (Item.Id is "jmdict" ? "ru, en" : Item.Id is "cedict" or "wiktionary-en" or "wiktionary-ja" or "wiktionary-zh" ? "en" : "ru");
-    public string Download => $"≈ {Item.DownloadMb} МБ";
+    public string Pair => Item.IsLevels ? "все языки" : Item.Language + " -> " + (Item.Id is "jmdict" ? "ru, en" : Item.Id is "cedict" or "wiktionary-en" or "wiktionary-ja" or "wiktionary-zh" ? "en" : "ru");
+    public string Download => $"~{Item.DownloadMb} МБ";
 
     public bool Installed
     {
@@ -93,7 +93,7 @@ public sealed class CatalogEntry : ObservableObject
     public bool CanInstall => !Installed && !Busy;
     public bool ShowInstalled => Installed && !Busy;
     public string InstalledText => Enabled ? "установлен" : "установлен, выключен";
-    public string ActionText => Installed ? $"Обновить · {Item.DownloadMb} МБ" : $"Установить · {Item.DownloadMb} МБ";
+    public string ActionText => Installed ? $"Обновить ({Item.DownloadMb} МБ)" : $"Установить ({Item.DownloadMb} МБ)";
 
     private void Changed()
     {
@@ -232,7 +232,7 @@ public sealed class DictionariesViewModel : ObservableObject
     public string? ImportStatus { get => _importStatus; set => SetProperty(ref _importStatus, value); }
 
     public string InstalledSummary =>
-        $"{Packs.Count} {Plural(Packs.Count, "словарь", "словаря", "словарей")} · {Size(Packs.Sum(p => p.Info.SizeBytes))} на диске";
+        $"{Packs.Count} {Plural(Packs.Count, "словарь", "словаря", "словарей")}, {Size(Packs.Sum(p => p.Info.SizeBytes))} на диске";
 
     public bool HintAi
     {
@@ -287,7 +287,7 @@ public sealed class DictionariesViewModel : ObservableObject
         if (Busy) return;
         Busy = entry.Busy = true;
         var cts = _cts = new CancellationTokenSource();
-        entry.Status = "Подготовка…";
+        entry.Status = "Подготовка...";
         entry.Progress = 0;
         // Report on the UI thread; builders report from worker threads.
         var progress = new Progress<ImportProgress>(p =>
@@ -303,7 +303,7 @@ public sealed class DictionariesViewModel : ObservableObject
                 DataPaths.Work, DataPaths.Levels, DataPaths.Cedict, progress, cts.Token);
             await Task.Run(() => DictionaryCatalog.InstallAsync(entry.Item, ctx, KeepSources), cts.Token);
             entry.Status = null;
-            Status = $"«{entry.Title}» установлен.";
+            Status = $"\"{entry.Title}\" установлен.";
             _services.Log.Info($"Dictionary installed: {entry.Item.Id}");
         }
         catch (OperationCanceledException)
@@ -354,7 +354,7 @@ public sealed class DictionariesViewModel : ObservableObject
             var meta = draft.Edited;
             _services.Dictionaries.Close(meta.Id);
             var info = await Task.Run(() => DictionaryImport.Import(draft.Path, DataPaths.Packs, DataPaths.Work, meta, progress, cts.Token), cts.Token);
-            ImportStatus = $"Собран «{info.Title}»: {Count(info.Entries)} статей, {info.SourceLanguage} → {info.TargetLanguage}. Он уже в «Установленных».";
+            ImportStatus = $"Собран \"{info.Title}\": {Count(info.Entries)} статей, {info.SourceLanguage} -> {info.TargetLanguage}. Он уже в \"Установленных\".";
             Draft = null;
             _services.Log.Info($"Dictionary imported: {info.Id} from {draft.Path}");
         }
@@ -398,7 +398,7 @@ public sealed class DictionariesViewModel : ObservableObject
         Save();
         _services.ReloadDictionaries();
         Refresh();
-        Status = $"«{item.Title}» удалён.";
+        Status = $"\"{item.Title}\" удалён.";
     }
 
     private bool Matches(CatalogEntry e)
@@ -448,9 +448,9 @@ public sealed record PackDetails(PackInfo Info, CatalogItem? Source)
     public string Description => Source?.Description ?? Info.Description ?? "Словарь из твоего файла.";
     public string Entries => DictionariesViewModel.Count(Info.Entries);
     public string Size => DictionariesViewModel.Size(Info.SizeBytes);
-    public string Pair => $"{Info.SourceLanguage} → {Info.TargetLanguage}";
-    public string Origin => Info.Origin is { Length: > 0 } o ? o.Replace("https://", "").Replace("http://", "").TrimEnd('/') : "—";
-    public string Built => File.Exists(Info.Path) ? File.GetLastWriteTime(Info.Path).ToString("d MMMM yyyy", Russian) : "—";
+    public string Pair => $"{Info.SourceLanguage} -> {Info.TargetLanguage}";
+    public string Origin => Info.Origin is { Length: > 0 } o ? o.Replace("https://", "").Replace("http://", "").TrimEnd('/') : "-";
+    public string Built => File.Exists(Info.Path) ? File.GetLastWriteTime(Info.Path).ToString("d MMMM yyyy", Russian) : "-";
     public string Folder => System.IO.Path.GetDirectoryName(Info.Path) ?? "";
     public string? License => Info.License;
     public bool CanUpdate => Source is not null;

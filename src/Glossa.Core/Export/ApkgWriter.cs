@@ -63,7 +63,7 @@ public static class ApkgWriter
                 tx.Commit();
             }
 
-            progress?.Report("Упаковка…");
+            progress?.Report("Упаковка...");
             if (File.Exists(apkgPath)) File.Delete(apkgPath);
             using (var zip = ZipFile.Open(apkgPath, ZipArchiveMode.Create))
             {

@@ -45,7 +45,7 @@
                                                 Visibility="{Binding CanDownload, Converter={StaticResource BoolToVis}}" />
                                         <Button Content="Отмена" Style="{StaticResource GhostButton}" Click="OnCancelDownload" Margin="0,0,8,0"
                                                 Visibility="{Binding Downloading, Converter={StaticResource BoolToVis}}" />
-                                        <Button Content="Выбрать файл…" Click="OnPickModel"
+                                        <Button Content="Выбрать файл..." Click="OnPickModel"
                                                 Visibility="{Binding IsCustom, Converter={StaticResource BoolToVis}}" />
                                     </StackPanel>
                                 </StackPanel>
@@ -99,7 +99,7 @@
                     </HeaderedContentControl>
 
                     <!-- llama.cpp: the official build for this card, downloaded by a button like the models. -->
-                    <HeaderedContentControl Header="Движок" Tag="llama.cpp — запускает локальную модель" Style="{StaticResource SettingRowTop}">
+                    <HeaderedContentControl Header="Движок" Tag="llama.cpp - запускает локальную модель" Style="{StaticResource SettingRowTop}">
                         <StackPanel>
                             <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding Runtime}" HorizontalAlignment="Left">
                                 <ListBoxItem Content="NVIDIA (CUDA)" Tag="cuda" />
@@ -126,7 +126,7 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="Оставлять свободной" Tag="видеопамять для системы и игры в режиме «Авто»"
+                    <HeaderedContentControl Header="Оставлять свободной" Tag='видеопамять для системы и игры в режиме "Авто"'
                                             Style="{StaticResource SettingRow}">
                         <ComboBox Width="160" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding VramReserveMb}">
                             <ComboBoxItem Content="0,5 ГБ"><ComboBoxItem.Tag><sys:Int32>512</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
@@ -150,7 +150,7 @@
                                 <ComboBoxItem Content="никогда"><ComboBoxItem.Tag><sys:Int32>0</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
                             </ComboBox>
                             <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
-                                       Text="первый поиск после выгрузки загружает модель 5–10 с" />
+                                       Text="первый поиск после выгрузки загружает модель 5-10 с" />
                         </StackPanel>
                     </HeaderedContentControl>
 
@@ -189,7 +189,7 @@
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="2">
                                                         <TextBlock Text="АДРЕС API" Style="{StaticResource FieldCaption}" />
-                                                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=LostFocus}" theme:Hint.Text="для OpenAI-совместимых — до /v1" />
+                                                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=LostFocus}" theme:Hint.Text="для OpenAI-совместимых - до /v1" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="2" Grid.Column="2">
                                                         <TextBlock Text="МОДЕЛЬ" Style="{StaticResource FieldCaption}" />
@@ -249,7 +249,7 @@
                         <StackPanel x:Name="Files">
                             <TextBlock Text="СВОЙ LLAMA-SERVER.EXE" Style="{StaticResource FieldCaption}" />
                             <TextBox Text="{Binding LlamaServerPath, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas" FontSize="13"
-                                     theme:Hint.Text="пусто — скачанный движок" />
+                                     theme:Hint.Text="пусто - скачанный движок" />
                         </StackPanel>
                     </HeaderedContentControl>
                 </StackPanel>

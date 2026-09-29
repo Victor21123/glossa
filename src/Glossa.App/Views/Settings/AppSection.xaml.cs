@@ -21,7 +21,7 @@ public partial class AppSection : UserControl
         DataContext = model;
         DataFolder.Content = DataPaths.Root;
         var exe = Environment.ProcessPath ?? "";
-        Build.Text = "Glossa · сборка " + File.GetLastWriteTime(exe).ToString("d MMMM yyyy", Russian);
+        Build.Text = "Glossa, сборка " + File.GetLastWriteTime(exe).ToString("d MMMM yyyy", Russian);
         Location.Text = Path.GetDirectoryName(exe);
         Loaded += async (_, _) =>
         {
@@ -71,8 +71,8 @@ public partial class AppSection : UserControl
             DiskBar.Children.Add(piece);
         }
         DiskBar.Clip = new RectangleGeometry(new Rect(0, 0, 4000, 14), 4, 4);
-        DiskNote.Text = $"Модели ИИ лежат в {_services.Settings.LocalAi.ModelsFolderResolved()}, программа — в {Location.Text}, " +
-                        $"остальное — в папке данных.";
+        DiskNote.Text = $"Модели ИИ лежат в {_services.Settings.LocalAi.ModelsFolderResolved()}, программа - в {Location.Text}, " +
+                        $"остальное - в папке данных.";
     }
 
     private void OnOpenData(object sender, RoutedEventArgs e) => Process.Start("explorer.exe", DataPaths.Root);

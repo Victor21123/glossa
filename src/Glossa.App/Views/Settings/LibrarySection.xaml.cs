@@ -51,7 +51,7 @@ public partial class LibrarySection : UserControl
             FaceContext.Text = "You should reconsider your position, mortal.";
             BackTranslation.Text = "передумать";
             BackContext.Text = "Тебе стоит пересмотреть свою позицию, смертный.";
-            BackMeta.Text = "B2 · гл.";
+            BackMeta.Text = "B2, гл.";
             PreviewNote.Text = "Пример: в словаре пока нет слов.";
             FaceShot.Visibility = Visibility.Collapsed;
             return;
@@ -64,7 +64,7 @@ public partial class LibrarySection : UserControl
         BackDefinition.Text = w.Definition ?? "";
         BackDefinition.Visibility = string.IsNullOrEmpty(w.Definition) ? Visibility.Collapsed : Visibility.Visible;
         BackContext.Text = w.ContextTranslation ?? "";
-        BackMeta.Text = string.Join(" · ", new[] { w.Level, w.PartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
+        BackMeta.Text = string.Join(", ", new[] { w.Level, w.PartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
         PreviewNote.Text = "Так заметка с последним словом выглядит в Anki с нынешними галочками.";
 
         if (w.ShotFile is { } file && File.Exists(Path.Combine(DataPaths.Root, file)))

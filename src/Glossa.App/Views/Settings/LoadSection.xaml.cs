@@ -44,15 +44,15 @@ public partial class LoadSection : UserControl
         Waterfall.Children.Clear();
         if (_services.RecentLookups.FirstOrDefault(r => r.Stages is not null) is not { Stages: { } s } report)
         {
-            LastTotal.Text = "—";
+            LastTotal.Text = "-";
             LastNote.Text = "поисков пока не было";
             return;
         }
         var total = s.AiMs ?? s.CardMs;
         LastTotal.Text = Seconds(total);
         // "слово «reconsider» · 3,0 с" → the word only: the time is already the big number.
-        var what = report.Result.Split(" · ")[0];
-        LastNote.Text = report.Model is { } m ? $"{what} · {m}" : what;
+        var what = report.Result.Split(", ")[0];
+        LastNote.Text = report.Model is { } m ? $"{what}, {m}" : what;
         var rows = new List<(string Name, long From, long To)>
         {
             ("Снимок экрана", 0, s.CaptureMs),
@@ -102,7 +102,7 @@ public partial class LoadSection : UserControl
     {
         if (_services.SampleLoad?.Invoke() is not { } now) return;
         RamText.Text = Megabytes(now.GlossaMb + now.ServerMb);
-        CpuText.Text = _previous is { } before ? string.Format(Russian, "{0:0.#}%", now.CpuPercentSince(before)) : "…";
+        CpuText.Text = _previous is { } before ? string.Format(Russian, "{0:0.#}%", now.CpuPercentSince(before)) : "...";
         VramText.Text = now.VramFreeMb >= 0 ? string.Format(Russian, "{0:0.0} ГБ свободно", now.VramFreeMb / 1024.0) : "нет данных";
         _previous = now;
         var loaded = _services.Ai.Current?.Dictionary is { Endpoint.IsLocal: true };

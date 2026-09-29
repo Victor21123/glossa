@@ -57,7 +57,7 @@ public sealed class ModelDownloads(HttpClient proxied, HttpClient direct, ILog l
         }
         catch (OperationCanceledException)
         {
-            _errors[key] = "Загрузка остановлена — продолжится с того же места.";
+            _errors[key] = "Загрузка остановлена - продолжится с того же места.";
         }
         catch (Exception ex)
         {

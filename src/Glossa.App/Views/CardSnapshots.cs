@@ -37,7 +37,7 @@ internal static class CardSnapshots
                 vm.BeginTranslation("GARTE, THE CAFETERIA MANAGER - \"Not so fast.\" He points to you. \"You owe me 130 real.\"", "en");
                 vm.ContextTranslation = "ГАРТЕ, ЗАВЕДУЮЩИЙ СТОЛОВОЙ — «Не так быстро». Он указывает на тебя. «Ты должен мне 130 реалов».";
                 vm.IsBusy = false;
-                vm.Timing = "ИИ 0,6 с · gemma26b";
+                vm.Timing = "ИИ 0,6 с, gemma26b";
                 popup.ApplyLook(new PopupSettings(), theme);
                 Save(popup, Path.Combine(folder, $"{themeName}-translation.png"));
                 popup.Close();
@@ -109,7 +109,7 @@ internal static class CardSnapshots
 
         // One lookup as the selftest measured it, and a load sample, so the settings panels show real shapes.
         services.SampleLoad = () => new Diagnostics.LoadSample(DateTime.Now, 520, 2700, 1, 1, 13100, 16311);
-        services.Report(new Lookup.LookupReport(DateTime.Now, "Alt+Q", "слово «reconsider» · 3,0 с", true, 3.04, "gemma26b",
+        services.Report(new Lookup.LookupReport(DateTime.Now, "Alt+Q", "слово \"reconsider\", 3,0 с", true, 3.04, "gemma26b",
             new Lookup.LookupStages(18, 362, 364, 372, 1076, 3040)));
 
         foreach (var themeName in new[] { "dark", "light" })
@@ -179,7 +179,7 @@ internal static class CardSnapshots
             }
 
             var tray = new TrayMenu();
-            tray.Fill(new TrayState("ИИ выгружена · загрузится при поиске", false, "auto", "Alt+Q", true));
+            tray.Fill(new TrayState("ИИ выгружена, загрузится при поиске", false, "auto", "Alt+Q", true));
             Save(tray, Path.Combine(folder, $"tray-{themeName}.png"));
             tray.Close();
         }
@@ -333,7 +333,7 @@ internal static class CardSnapshots
             vm.Synonyms = "soiled, filthy, feculent";
             vm.SetDictionaryMark(false);
             vm.IsSaved = true;
-            vm.Timing = "ИИ 2,1 с · gemma26b";
+            vm.Timing = "ИИ 2,1 с, gemma26b";
         }),
         ("ja", vm =>
         {
@@ -354,7 +354,7 @@ internal static class CardSnapshots
                 new DictSectionItem("Warodai", [new DictEntryItem("合体", "がったい", "слияние, объединение; ～する сливаться")]),
             ];
             vm.SetDictionaryMark(true);
-            vm.Timing = "ИИ 2,4 с · gemma26b";
+            vm.Timing = "ИИ 2,4 с, gemma26b";
         }),
     ];
 }

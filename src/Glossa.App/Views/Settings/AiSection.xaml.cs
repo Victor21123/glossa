@@ -100,20 +100,20 @@ public partial class AiSection : UserControl
         string? ok = null, warn = null;
         if (ai.LlamaServerPath.Length > 0)
         {
-            if (File.Exists(ai.LlamaServerPath)) ok = "работает свой llama-server из «Файлов»; очисти поле, чтобы работать на скачанном";
-            else warn = $"нет файла {ai.LlamaServerPath} — исправь путь в «Файлах» или очисти поле";
+            if (File.Exists(ai.LlamaServerPath)) ok = "работает свой llama-server из \"Файлов\"; очисти поле, чтобы работать на скачанном";
+            else warn = $"нет файла {ai.LlamaServerPath} - исправь путь в \"Файлах\" или очисти поле";
         }
-        else if (installed) ok = $"llama.cpp {entry.Release} · {entry.Title} · готов";
+        else if (installed) ok = $"llama.cpp {entry.Release}, {entry.Title}, готов";
         else if (!running)
             warn = downloads.ErrorOf(ModelDownloads.Runtime)
-                ?? string.Format(Russian, "не скачан · {0:0} МБ · github.com/ggml-org/llama.cpp, релиз {1}", entry.Size / 1048576.0, entry.Release);
+                ?? string.Format(Russian, "не скачан, {0:0} МБ, github.com/ggml-org/llama.cpp, релиз {1}", entry.Size / 1048576.0, entry.Release);
         RuntimeOk.Content = ok;
         RuntimeOk.Visibility = ok is null ? Visibility.Collapsed : Visibility.Visible;
         RuntimeWarn.Content = warn;
         RuntimeWarn.Visibility = warn is null ? Visibility.Collapsed : Visibility.Visible;
         var progress = downloads.ProgressOf(ModelDownloads.Runtime) is not { } p ? null
-            : p.Verifying ? "Проверяю и распаковываю…"
-            : string.Format(Russian, "Загрузка {0:0} из {1:0} МБ · {2:0}%", p.Done / 1048576.0, p.Total / 1048576.0, 100.0 * p.Done / Math.Max(1, p.Total));
+            : p.Verifying ? "Проверяю и распаковываю..."
+            : string.Format(Russian, "Загрузка {0:0} из {1:0} МБ, {2:0}%", p.Done / 1048576.0, p.Total / 1048576.0, 100.0 * p.Done / Math.Max(1, p.Total));
         RuntimeProgress.Text = progress ?? "";
         RuntimeProgress.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
         RuntimeDownload.Visibility = !running && !installed ? Visibility.Visible : Visibility.Collapsed;
@@ -154,7 +154,7 @@ public partial class AiSection : UserControl
         (string Caption, string Property)[] fields = _model.AiProfile switch
         {
             "gemma12b" => [("GEMMA 4 12B", nameof(SettingsViewModel.Gemma12bModel))],
-            "light" => [("ЛЁГКАЯ — GEMMA 4 E4B", nameof(SettingsViewModel.LightModel))],
+            "light" => [("ЛЁГКАЯ - GEMMA 4 E4B", nameof(SettingsViewModel.LightModel))],
             "custom" => [("СВОЯ МОДЕЛЬ (GGUF)", nameof(SettingsViewModel.CustomModel))],
             _ => [("GEMMA 4 26B", nameof(SettingsViewModel.Gemma26bModel))],
         };
@@ -182,8 +182,8 @@ public partial class AiSection : UserControl
         var current = _services.Ai.Current;
         var title = ProfileTile.Title(s.LocalAi.Profile);
         var profile = char.ToUpperInvariant(title[0]) + title[1..];
-        StateText.Text = s.LocalAi.Mode == "off" && s.DictionaryEngine == "local" ? "ИИ выключен — только справочники"
-            : s.DictionaryEngine != "local" ? $"Карточку делает «{s.DictionaryEngine}»"
+        StateText.Text = s.LocalAi.Mode == "off" && s.DictionaryEngine == "local" ? "ИИ выключен - только справочники"
+            : s.DictionaryEngine != "local" ? $"Карточку делает \"{s.DictionaryEngine}\""
             : current?.Dictionary is not null ? $"{profile} загружена"
             : !s.LocalAi.HasModel(s.LocalAi.Profile) ? $"{profile} {ProfileTile.Absent(s.LocalAi.Profile)}"
             : !s.LocalAi.HasRuntime() ? "Движок llama.cpp не скачан"
@@ -200,7 +200,7 @@ public partial class AiSection : UserControl
     {
         _model.Flush();
         TestButton.IsEnabled = false;
-        TestNote.Text = _services.Ai.Current is null ? "Загружаю модель…" : "Перевожу пробную реплику…";
+        TestNote.Text = _services.Ai.Current is null ? "Загружаю модель..." : "Перевожу пробную реплику...";
         var sw = Stopwatch.StartNew();
         try
         {
@@ -209,14 +209,14 @@ public partial class AiSection : UserControl
             var clients = await _services.Ai.GetAsync(cts.Token);
             if (clients.Dictionary is null)
             {
-                TestNote.Text = "ИИ выключен: режим «Выключен» или мало видеопамяти.";
+                TestNote.Text = "ИИ выключен: режим \"Выключен\" или мало видеопамяти.";
                 return;
             }
             var loaded = sw.Elapsed;
             var reply = await clients.Dictionary.CompleteAsync(new LlmRequest(
                 [new LlmMessage("user", "Translate into Russian, reply with the translation only: You should reconsider your position, mortal.")],
                 MaxTokens: 80), cts.Token);
-            TestNote.Text = string.Format(Russian, "«{0}» — {1:0.0} с, из них загрузка {2:0.0} с.", reply.Trim(), sw.Elapsed.TotalSeconds,
+            TestNote.Text = string.Format(Russian, "\"{0}\" - {1:0.0} с, из них загрузка {2:0.0} с.", reply.Trim(), sw.Elapsed.TotalSeconds,
                 loaded.TotalSeconds);
         }
         catch (Exception ex)
@@ -291,8 +291,8 @@ public sealed class ProfileTile(string key, string name, string note, string spe
 
     /// <summary>The download in progress: received so far, then the check of the file.</summary>
     public string? Progress => services.ModelDownloads.ProgressOf(Key) is not { } p ? null
-        : p.Verifying ? "Проверяю файл…"
-        : string.Format(Russian, "Загрузка {0:0.0} из {1:0.0} ГБ · {2:0}%", p.Done / 1e9, p.Total / 1e9, 100.0 * p.Done / Math.Max(1, p.Total));
+        : p.Verifying ? "Проверяю файл..."
+        : string.Format(Russian, "Загрузка {0:0.0} из {1:0.0} ГБ, {2:0}%", p.Done / 1e9, p.Total / 1e9, 100.0 * p.Done / Math.Max(1, p.Total));
 
     public bool HasProgress => Progress is not null;
 
@@ -305,7 +305,7 @@ public sealed class ProfileTile(string key, string name, string note, string spe
             if (services.ModelDownloads.ErrorOf(Key) is { } error && !Installed) return error;
             if (Installed) return null;
             if (Key == "custom") return File is { Length: > 0 } f ? $"нет файла {Path.GetFileName(f)}" : "выбери GGUF-файл своей модели";
-            return Entry is { } e ? string.Format(Russian, "не скачана · {0:0.0} ГБ · {1}", e.Size / 1e9, e.Page) : "нет файла";
+            return Entry is { } e ? string.Format(Russian, "не скачана, {0:0.0} ГБ, {1}", e.Size / 1e9, e.Page) : "нет файла";
         }
     }
 
@@ -330,9 +330,9 @@ public sealed class ProfileTile(string key, string name, string note, string spe
     [
         new("gemma26b", "Gemma 4 26B", "по умолчанию; лучшая по тесту на 62 репликах (93%), без цензуры", "2,5 с", "около 13 ГБ", services),
         new("gemma12b", "Gemma 4 12B heretic", "меньше видеопамяти, та же точность (94%), но медленнее", "4,0 с", "около 7 ГБ", services),
-        new("light", "Лёгкая — Gemma 4 E4B", "для слабых ПК: видеокарта от 4 ГБ; проще и чаще ошибается (75%), без цензуры", "2,1 с", "около 3 ГБ",
+        new("light", "Лёгкая - Gemma 4 E4B", "для слабых ПК: видеокарта от 4 ГБ; проще и чаще ошибается (75%), без цензуры", "2,1 с", "около 3 ГБ",
             services),
-        new("custom", "Своя модель", "любой GGUF-файл: карточку и перевод делает твоя модель", "—", "—", services),
+        new("custom", "Своя модель", "любой GGUF-файл: карточку и перевод делает твоя модель", "-", "-", services),
     ];
 }
 
@@ -446,14 +446,14 @@ public sealed class EndpointEditor : ObservableObject
         ILlmClient client = e.Kind == LlmProviderKind.Anthropic
             ? new AnthropicLlmClient(ep)
             : new OpenAiCompatibleClient(ep.IsLocal ? _services.LocalHttp : _services.RemoteHttp, ep);
-        Status = "Проверяю…";
+        Status = "Проверяю...";
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             var sw = Stopwatch.StartNew();
             var reply = await client.CompleteAsync(new LlmRequest(
                 [new LlmMessage("user", "Translate into Russian, reply with the translation only: Good morning")], MaxTokens: 50), cts.Token);
-            Status = string.Format(CultureInfo.GetCultureInfo("ru-RU"), "Работает: «{0}» за {1:0.0} с.", reply.Trim(), sw.Elapsed.TotalSeconds);
+            Status = string.Format(CultureInfo.GetCultureInfo("ru-RU"), "Работает: \"{0}\" за {1:0.0} с.", reply.Trim(), sw.Elapsed.TotalSeconds);
         }
         catch (Exception ex)
         {

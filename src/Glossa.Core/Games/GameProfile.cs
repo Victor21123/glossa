@@ -130,8 +130,8 @@ public static class GameProfiles
         string? refused = null;
         if (during == "pause")
         {
-            refused = profile?.AntiCheat is { } ac ? $"в игре античит ({ac}) — пауза недоступна"
-                : !CanPause(exePath) ? "это программа Windows — её не останавливаем"
+            refused = profile?.AntiCheat is { } ac ? $"в игре античит ({ac}) - пауза недоступна"
+                : !CanPause(exePath) ? "это программа Windows - её не останавливаем"
                 : null;
             if (refused is not null) during = "frame";
         }

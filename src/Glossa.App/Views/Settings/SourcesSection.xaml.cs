@@ -82,7 +82,7 @@ public partial class SourcesSection : UserControl
     private void OnRemovePack(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedPack is not { } pack) return;
-        var answer = MessageBox.Show(Window.GetWindow(this), $"Удалить словарь «{pack.Title}»? Его можно будет поставить снова из каталога.",
+        var answer = MessageBox.Show(Window.GetWindow(this), $"Удалить словарь \"{pack.Title}\"? Его можно будет поставить снова из каталога.",
             "Glossa", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.OK) _vm.Remove(pack);
     }

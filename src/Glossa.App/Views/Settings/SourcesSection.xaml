@@ -111,10 +111,10 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <TextBlock Style="{StaticResource Note}" Margin="0,8,0,0" Visibility="{Binding HasPacks, Converter={StaticResource FalseToVis}}"
-                           Text="Словарей пока нет — они во вкладке «Каталог»." />
+                           Text='Словарей пока нет - они во вкладке "Каталог".' />
                 <Border Style="{StaticResource SettingRows}" Margin="0,22,0,0">
                     <StackPanel>
-                        <HeaderedContentControl Header="Статей на словарь в карточке" Tag="в пресете «Больше»; в «Стандарте» словари свёрнуты"
+                        <HeaderedContentControl Header="Статей на словарь в карточке" Tag='в пресете "Больше"; в "Стандарте" словари свёрнуты'
                                                 Style="{StaticResource SettingRow}">
                             <ComboBox Width="110" HorizontalAlignment="Left" SelectedItem="{Binding EntriesPerDictionary}" x:Name="EntryCounts" />
                         </HeaderedContentControl>
@@ -140,7 +140,7 @@
                         <HeaderedContentControl Header="ИСТОЧНИК" Style="{StaticResource Stat}" Content="{Binding Origin}" />
                         <HeaderedContentControl Header="СОБРАН" Style="{StaticResource Stat}" Content="{Binding Built}" />
                         <HeaderedContentControl Header="ЛИЦЕНЗИЯ" Style="{StaticResource Stat}">
-                            <TextBlock Text="{Binding License, TargetNullValue=—}" TextWrapping="Wrap" FontSize="13" />
+                            <TextBlock Text="{Binding License, TargetNullValue=-}" TextWrapping="Wrap" FontSize="13" />
                         </HeaderedContentControl>
                     </UniformGrid>
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4,0,16" />
@@ -224,7 +224,7 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                <CheckBox Content="Хранить скачанные исходники — пересборка без новой загрузки" IsChecked="{Binding KeepSources}" Margin="14,18,0,0" />
+                <CheckBox Content="Хранить скачанные исходники - пересборка без новой загрузки" IsChecked="{Binding KeepSources}" Margin="14,18,0,0" />
             </StackPanel>
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}" DataContext="{Binding SelectedEntry}"
@@ -258,7 +258,7 @@
                         <Button Content="{Binding ActionText}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Click="OnInstall" />
                     </Border>
                     <TextBlock Style="{StaticResource Note}" Margin="0,12,0,0"
-                               Text="Загрузка идёт через системный прокси, при ошибке — напрямую. Словарь собирается в D:\GlossaData\dict\packs, скачанный исходник потом удаляется." />
+                               Text="Загрузка идёт через системный прокси, при ошибке - напрямую. Словарь собирается в D:\GlossaData\dict\packs, скачанный исходник потом удаляется." />
                 </StackPanel>
             </Border>
         </Grid>
@@ -284,10 +284,10 @@
                         <TextBlock Text="Перетащи файл словаря сюда" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,10" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <TextBlock Text="или" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <Button Content="Выбрать файл…" MinHeight="32" Height="32" Click="OnChooseFile" />
+                            <Button Content="Выбрать файл..." MinHeight="32" Height="32" Click="OnChooseFile" />
                         </StackPanel>
                         <TextBlock Style="{StaticResource Note}" HorizontalAlignment="Center" Margin="0,10,0,0"
-                                   Text="DSL (ABBYY Lingvo) · StarDict · MDX (MDict) · Yomitan · zip с ними" />
+                                   Text="DSL (ABBYY Lingvo), StarDict, MDX (MDict), Yomitan, zip с ними" />
                     </StackPanel>
                 </Grid>
 
@@ -323,7 +323,7 @@
                             <TextBlock Grid.Row="2" Text="Языки" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
                             <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBox Width="80" Text="{Binding Source, UpdateSourceTrigger=PropertyChanged}" theme:Hint.Text="en" />
-                                <TextBlock Text="→" FontSize="14" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="10,0" />
+                                <TextBlock Text="->" FontSize="14" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="10,0" />
                                 <TextBox Width="80" Text="{Binding Target, UpdateSourceTrigger=PropertyChanged}" theme:Hint.Text="ru" />
                                 <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center" Margin="14,0,0,0"
                                            Text="угадано по заголовку файла; en, ja, zh, ru" />
@@ -355,7 +355,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <TextBlock Style="{StaticResource Note}" FontSize="13.5" Visibility="{Binding HasImported, Converter={StaticResource FalseToVis}}"
-                           Text="Пока ничего. Собранные словари появятся во вкладке «Установленные» рядом со скачанными." />
+                           Text='Пока ничего. Собранные словари появятся во вкладке "Установленные" рядом со скачанными.' />
             </StackPanel>
 
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
@@ -363,7 +363,7 @@
                     <TextBlock Text="ПОДХОДЯЩИЕ ФОРМАТЫ" Style="{StaticResource SectionCaption}" Margin="0,0,0,6" />
                     <StackPanel x:Name="Formats" />
                     <TextBlock Style="{StaticResource Note}" Margin="0,14,0,0"
-                               Text="Файл не уходит в интернет. Язык статей Glossa угадывает по заголовку; если ошиблась — поправь перед сборкой." />
+                               Text="Файл не уходит в интернет. Язык статей Glossa угадывает по заголовку; если ошиблась - поправь перед сборкой." />
                 </StackPanel>
             </Border>
         </Grid>

@@ -26,7 +26,7 @@ public sealed class GamepadHub
         _dispatcher = dispatcher;
         input.PadChanged += state => _dispatcher.BeginInvoke(() => OnPad(state));
         input.MouseButton += button => _dispatcher.BeginInvoke(() => OnMouse(button));
-        _recordLimit.Tick += (_, _) => Finish(null, "Геймпад не ответил — проверь, что он подключён, и нажми «Записать» ещё раз.");
+        _recordLimit.Tick += (_, _) => Finish(null, "Геймпад не ответил - проверь, что он подключён, и нажми \"Записать\" ещё раз.");
         Apply();
     }
 

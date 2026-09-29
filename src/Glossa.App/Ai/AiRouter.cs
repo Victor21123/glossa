@@ -137,13 +137,13 @@ public sealed class AiRouter : IDisposable
             var model = local.SingleModel(local.Profile) ?? "";
             if (!File.Exists(model))
                 throw new LlmException(model.Length == 0
-                    ? "Не выбран файл своей модели — Настройки → ИИ и модели."
-                    : $"Модель не скачана ({Path.GetFileName(model)}) — Настройки → ИИ и модели → «Скачать».");
+                    ? "Не выбран файл своей модели - Настройки -> ИИ и модели."
+                    : $"Модель не скачана ({Path.GetFileName(model)}) - Настройки -> ИИ и модели -> \"Скачать\".");
             var server = local.LlamaServerResolved();
             if (!File.Exists(server))
                 throw new LlmException(local.LlamaServerPath.Length > 0
-                    ? $"Не найден свой llama-server ({server}) — Настройки → ИИ и модели → Файлы."
-                    : "Движок llama.cpp не скачан — Настройки → ИИ и модели → Движок → «Скачать».");
+                    ? $"Не найден свой llama-server ({server}) - Настройки -> ИИ и модели -> Файлы."
+                    : "Движок llama.cpp не скачан - Настройки -> ИИ и модели -> Движок -> \"Скачать\".");
             // Only the MoE model has experts to keep in RAM; the dense and small ones are fitted to free VRAM either way.
             IReadOnlyList<string> placement = lowVram && local.Profile == "gemma26b"
                 ? ["--n-gpu-layers", "99", "--cpu-moe"]

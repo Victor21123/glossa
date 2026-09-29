@@ -71,7 +71,7 @@ public partial class GamesSection : UserControl
         {
             var has = stats.TryGetValue(p.Name, out var s);
             var words = has ? s.Words.Count : 0;
-            var meta = has ? $"{Words(words)} · {Day(s.Last)}" : $"слов пока нет · профиль с {Date(p.CreatedUtc)}";
+            var meta = has ? $"{Words(words)}, {Day(s.Last)}" : $"слов пока нет, профиль с {Date(p.CreatedUtc)}";
             return new GameRow(p, p.Name, meta, words, has ? s.First : null, has ? s.Last : null);
         }).OrderByDescending(r => r.LastUtc ?? r.Profile.CreatedUtc).ToList();
 
@@ -111,10 +111,10 @@ public partial class GamesSection : UserControl
         {
             Title.Text = p.Name;
             Stats.Text = row.FirstUtc is { } first && row.LastUtc is { } last
-                ? $"{Words(row.Words)} · первый поиск {Date(first)}, последний {When(last)}"
-                : $"слов пока нет · профиль с {Date(p.CreatedUtc)}";
+                ? $"{Words(row.Words)}, первый поиск {Date(first)}, последний {When(last)}"
+                : $"слов пока нет, профиль с {Date(p.CreatedUtc)}";
             if (!NameBox.IsKeyboardFocused) NameBox.Text = p.Name;
-            FirstTitle.Text = p.FirstTitle.Length > 0 && p.FirstTitle != p.Name ? $"заголовок окна был «{p.FirstTitle}»" : "";
+            FirstTitle.Text = p.FirstTitle.Length > 0 && p.FirstTitle != p.Name ? $"заголовок окна был \"{p.FirstTitle}\"" : "";
 
             Programs.Children.Clear();
             foreach (var program in p.Programs)
@@ -137,14 +137,14 @@ public partial class GamesSection : UserControl
             PauseItem.IsEnabled = !p.IsProtected;
             var general = _services.Settings.DuringLookup switch { "frame" => "остановить кадр", "pause" => "пауза игры", _ => "не трогать" };
             DuringNote.Text = p.IsProtected
-                ? $"В игре античит ({p.AntiCheat}) — пауза недоступна, вместо неё стоп-кадр. Стоп-кадр в игру не вмешивается."
-                : $"«Как в общих» — как в «Вызове и клавишах»: сейчас «{general}».";
+                ? $"В игре античит ({p.AntiCheat}) - пауза недоступна, вместо неё стоп-кадр. Стоп-кадр в игру не вмешивается."
+                : $"\"Как в общих\" - как в \"Вызове и клавишах\": сейчас \"{general}\".";
 
             ShowWindow(p);
             if (p.AntiCheat is { } ac)
             {
                 AntiCheatStatus.Style = (Style)FindResource("WarnText");
-                AntiCheatStatus.Content = $"{ac} — пауза и растягивание окна выключены";
+                AntiCheatStatus.Content = $"{ac} - пауза и растягивание окна выключены";
             }
             else
             {
@@ -168,9 +168,9 @@ public partial class GamesSection : UserControl
         var mode = running?.Mode ?? WindowModes.Parse(p.WindowMode);
         (string Style, string Text)? status = mode switch
         {
-            WindowMode.Borderless => ("OkText", "без рамки — карточка видна поверх игры"),
-            WindowMode.Windowed => ("OkText", "в окне — карточка видна поверх игры"),
-            WindowMode.Exclusive => ("WarnText", "эксклюзивный полноэкранный режим — карточку может быть не видно"),
+            WindowMode.Borderless => ("OkText", "без рамки - карточка видна поверх игры"),
+            WindowMode.Windowed => ("OkText", "в окне - карточка видна поверх игры"),
+            WindowMode.Exclusive => ("WarnText", "эксклюзивный полноэкранный режим - карточку может быть не видно"),
             _ => null,
         };
         if (status is { } s)
@@ -188,11 +188,11 @@ public partial class GamesSection : UserControl
         BorderlessSwitch.IsChecked = p.Borderless;
         BorderlessSwitch.IsEnabled = !p.IsProtected;
         var notes = new List<string>();
-        if (mode == WindowMode.Exclusive) notes.Add("Включи в настройках игры «Окно без рамки» (Borderless) — тогда и карточка, и стоп-кадр будут поверх неё.");
+        if (mode == WindowMode.Exclusive) notes.Add("Включи в настройках игры \"Окно без рамки\" (Borderless) - тогда и карточка, и стоп-кадр будут поверх неё.");
         notes.Add(p.IsProtected
             ? "В игре с античитом окно не трогаем."
             : "Для игр, которые умеют только окно с рамкой: Glossa снимет рамку и растянет окно при следующем поиске.");
-        notes.Add(running is null ? "Сейчас игра не запущена — показано по последнему поиску." : "Игра запущена сейчас.");
+        notes.Add(running is null ? "Сейчас игра не запущена - показано по последнему поиску." : "Игра запущена сейчас.");
         WindowNote.Text = string.Join(" ", notes);
     }
 

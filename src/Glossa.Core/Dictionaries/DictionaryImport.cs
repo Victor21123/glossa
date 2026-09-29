@@ -63,7 +63,7 @@ public static class DictionaryImport
                 }
                 catch (InvalidDataException ex)
                 {
-                    throw new InvalidDataException("Архив не распаковывается (возможно, он защищён паролем) — распакуйте его и выберите файл словаря.", ex);
+                    throw new InvalidDataException("Архив не распаковывается (возможно, он защищён паролем) - распакуйте его и выберите файл словаря.", ex);
                 }
                 foreach (var f in Directory.EnumerateFiles(unpacked, "*", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase))
                 {

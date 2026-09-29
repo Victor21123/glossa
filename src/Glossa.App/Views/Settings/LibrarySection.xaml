@@ -22,7 +22,7 @@
             <StackPanel>
                 <Border Style="{StaticResource SettingRows}">
                     <StackPanel>
-                        <HeaderedContentControl Header="Сохранять найденные слова" Tag="в «Словарь»" Style="{StaticResource SettingRow}">
+                        <HeaderedContentControl Header="Сохранять найденные слова" Tag='в "Словарь"' Style="{StaticResource SettingRow}">
                             <DockPanel>
                                 <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Settings.AutoSaveWords}" VerticalAlignment="Center" />
                                 <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
@@ -55,7 +55,7 @@
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Колоды" Style="{StaticResource SettingRow}">
                             <TextBlock Style="{StaticResource Note}" FontSize="13.5"
-                                       Text="Glossa::Английский, Glossa::Японский, Glossa::Китайский — по языку слова; тип заметки «Glossa Word v1»." />
+                                       Text='Glossa::Английский, Glossa::Японский, Glossa::Китайский - по языку слова; тип заметки "Glossa Word v1".' />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Отправить в Anki" Tag="через AnkiConnect" Style="{StaticResource SettingRow}">
                             <StackPanel Orientation="Horizontal">
@@ -64,7 +64,7 @@
                                            Text="нужна запущенная Anki с дополнением AnkiConnect (код 2055492159)" />
                             </StackPanel>
                         </HeaderedContentControl>
-                        <HeaderedContentControl Header="Экспорт" Tag="всё или то, что отфильтровано в «Словаре»" Style="{StaticResource SettingRow}">
+                        <HeaderedContentControl Header="Экспорт" Tag='всё или то, что отфильтровано в "Словаре"' Style="{StaticResource SettingRow}">
                             <StackPanel Orientation="Horizontal">
                                 <Button Content="Колода .apkg" Click="OnExportApkg" />
                                 <Button Content="Quizlet" Click="OnExportQuizlet" Margin="8,0,0,0" />

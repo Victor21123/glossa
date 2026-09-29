@@ -33,23 +33,23 @@ public partial class LanguagesSection : UserControl
         string Packs(string lang)
         {
             var titles = _services.Dictionaries.Installed.Where(p => p.SourceLanguage == lang && !disabled.Contains(p.Id)).Select(p => p.Title).ToList();
-            return titles.Count > 0 ? string.Join(", ", titles) : "нет — каталог в «Справочниках»";
+            return titles.Count > 0 ? string.Join(", ", titles) : "нет - каталог в \"Справочниках\"";
         }
         string Voice(string lang) => _services.Speech.VoiceFor(lang)?.DisplayName ?? "не установлен";
 
         LanguageCards.Children.Add(Card("EN", "Английский",
         [
-            ("Уровень", levels ? "CEFR A1–C2" : "списки не установлены"), ("Справочники", Packs("en")), ("Голос", Voice("en")),
+            ("Уровень", levels ? "CEFR A1-C2" : "списки не установлены"), ("Справочники", Packs("en")), ("Голос", Voice("en")),
         ]));
         LanguageCards.Children.Add(Card("JA", "Японский",
         [
             ("Разбор", Directory.Exists(DataPaths.UniDic) ? "UniDic: слова и чтения" : "UniDic не найден"),
-            ("Уровень", levels ? "JLPT N5–N1" : "списки не установлены"), ("Справочники", Packs("ja")), ("Голос", Voice("ja")),
+            ("Уровень", levels ? "JLPT N5-N1" : "списки не установлены"), ("Справочники", Packs("ja")), ("Голос", Voice("ja")),
         ]));
         LanguageCards.Children.Add(Card("ZH", "Китайский",
         [
             ("Разбор", File.Exists(DataPaths.Cedict) ? "CC-CEDICT: слова и пиньинь" : "CC-CEDICT не найден"),
-            ("Уровень", levels ? "HSK 3.0, 1–9" : "списки не установлены"), ("Справочники", Packs("zh")), ("Голос", Voice("zh")),
+            ("Уровень", levels ? "HSK 3.0, 1-9" : "списки не установлены"), ("Справочники", Packs("zh")), ("Голос", Voice("zh")),
         ]));
     }
 
@@ -61,10 +61,10 @@ public partial class LanguagesSection : UserControl
         (string, string, bool) Data(string name, long bytes) => bytes > 0 ? (name, Sizes.Format(bytes), true) : (name, "не найден", false);
         return
         [
-            Model("PP-OCRv5 · иероглифы, кана, латиница", "ch_PP-OCRv5_rec_mobile.onnx"),
-            Model("PP-OCRv5 · кириллица и латиница", "eslav_PP-OCRv5_rec_mobile.onnx"),
-            Data("UniDic · разбор японского", Sizes.Folder(DataPaths.UniDic)),
-            Data("CC-CEDICT · слова в китайском", Sizes.File(DataPaths.Cedict)),
+            Model("PP-OCRv5 - иероглифы, кана, латиница", "ch_PP-OCRv5_rec_mobile.onnx"),
+            Model("PP-OCRv5 - кириллица и латиница", "eslav_PP-OCRv5_rec_mobile.onnx"),
+            Data("UniDic - разбор японского", Sizes.Folder(DataPaths.UniDic)),
+            Data("CC-CEDICT - слова в китайском", Sizes.File(DataPaths.Cedict)),
         ];
     }
 

@@ -25,8 +25,8 @@ namespace Glossa.App.Lookup;
 /// </summary>
 public sealed class LookupSessions
 {
-    internal const string MouseHint = "Щёлкни слово · Esc или правый щелчок — вернуться в игру";
-    internal const string PadHint = "Крестовина — слово · A — искать · B — назад · X — сохранить · Y — произнести";
+    internal const string MouseHint = "Щёлкни слово, Esc или правый щелчок - вернуться в игру";
+    internal const string PadHint = "Крестовина - слово, A - искать, B - назад, X - сохранить, Y - произнести";
 
     private readonly Func<AppSettings> _settings;
     private readonly GameRegistry _games;
@@ -177,7 +177,7 @@ public sealed class LookupSessions
             }
             else
             {
-                _frame!.SetHint("На снимке нет текста · B — вернуться в игру");
+                _frame!.SetHint("На снимке нет текста, B - вернуться в игру");
             }
         }
         catch (Exception ex)
@@ -226,10 +226,10 @@ public sealed class LookupSessions
                 game = GameWindow.Of(game.Hwnd);
             }
             if (game.Mode == WindowMode.Exclusive && _games.WarnExclusiveOnce(profile))
-                Notice?.Invoke($"«{profile.Name}» идёт в эксклюзивном полноэкранном режиме — карточку может быть не видно. " +
-                               "Включите в настройках игры «Окно без рамки» (Borderless).");
+                Notice?.Invoke($"\"{profile.Name}\" идёт в эксклюзивном полноэкранном режиме - карточку может быть не видно. " +
+                               "Включите в настройках игры \"Окно без рамки\" (Borderless).");
             if (choices.PauseRefused is { } why && _told.Add(profile.Name + why))
-                Notice?.Invoke($"«{profile.Name}»: {why}. Вместо паузы — стоп-кадр.");
+                Notice?.Invoke($"\"{profile.Name}\": {why}. Вместо паузы - стоп-кадр.");
         }
         var s = _settings();
         var cjk = choices.Language is "ja" or "zh" ? choices.Language : s.PreferredCjk;
@@ -253,7 +253,7 @@ public sealed class LookupSessions
             Page = _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
         };
         _session = session;
-        _frame.SetHint(pad ? "Распознаю текст…" : MouseHint);
+        _frame.SetHint(pad ? "Распознаю текст..." : MouseHint);
         _frame.ShowFrame(still, _settings().Popup.HideFromCapture);
         _pad.Steering = pad;
         return session;
@@ -289,7 +289,7 @@ public sealed class LookupSessions
         if (_words.Hit(page, x, y, s.Cjk) is null)
         {
             _popup.Dismiss();
-            _frame?.SetHint("Здесь нет текста — " + (s.Pad ? PadHint : MouseHint));
+            _frame?.SetHint("Здесь нет текста - " + (s.Pad ? PadHint : MouseHint));
             return;
         }
         _frame?.SetHint(s.Pad ? PadHint : MouseHint);
@@ -313,7 +313,7 @@ public sealed class LookupSessions
         var (game, context, cjk) = await BeginAsync(trigger);
         if (mode == "live" && context.Choices?.IsProtected == true)
         {
-            Notice?.Invoke($"«{game.Title}»: игра под античитом — живой перевод поверх неё не включается. Перевожу реплику под курсором.");
+            Notice?.Invoke($"\"{game.Title}\": игра под античитом - живой перевод поверх неё не включается. Перевожу реплику под курсором.");
             mode = "line";
         }
         switch (mode)
@@ -340,7 +340,7 @@ public sealed class LookupSessions
     {
         var still = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
         var session = OpenFrame(game, context, cjk, still, pad: false, paused: false, translating: true);
-        _frame!.SetHint("Распознаю текст…");
+        _frame!.SetHint("Распознаю текст...");
         try
         {
             var page = await session.Page!;
@@ -355,28 +355,28 @@ public sealed class LookupSessions
             var order = blocks.OrderBy(b => b == first ? 0 : b == dialogue ? 1 : 2).ThenBy(b => b.Box.Top).ToList();
             if (order.Count == 0)
             {
-                _frame.SetHint("На снимке нет текста для перевода · Esc — вернуться в игру");
+                _frame.SetHint("На снимке нет текста для перевода, Esc - вернуться в игру");
                 return;
             }
             var done = 0;
             foreach (var block in order)
             {
                 var show = _frame.AddTranslation(block.Box, block.Lines);
-                _frame.SetHint($"Перевожу {done + 1} из {order.Count}…");
+                _frame.SetHint($"Перевожу {done + 1} из {order.Count}...");
                 var lang = Lang(block);
                 var (text, _) = await _controller.TranslateTextAsync(block.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),
                     context.Choices?.Ai, show, session.Stop.Token);
                 show(text);
                 done++;
             }
-            _frame.SetHint($"Переведено: {done} · щелчок по переводу — оригинал · Esc — вернуться в игру");
+            _frame.SetHint($"Переведено: {done}, щелчок по переводу - оригинал, Esc - вернуться в игру");
         }
         catch (OperationCanceledException)
         {
         }
         catch (LlmException ex)
         {
-            if (_session == session) _frame?.SetHint(ex.Message + " · Esc — вернуться в игру");
+            if (_session == session) _frame?.SetHint(ex.Message.TrimEnd('.') + ". Esc - вернуться в игру");
         }
     }
 

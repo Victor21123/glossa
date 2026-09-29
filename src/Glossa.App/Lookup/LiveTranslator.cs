@@ -36,7 +36,7 @@ public sealed class LiveTranslator(
         _overlay ??= new SubtitleOverlay();
         var cts = _cts = new CancellationTokenSource();
         var hint = new PixelRect(game.Bounds.Left + game.Bounds.Width * 0.1, game.Bounds.Bottom - 40, game.Bounds.Right - game.Bounds.Width * 0.1, game.Bounds.Bottom);
-        _overlay.ShowFor(hint, game.Bounds, "ЖИВОЙ ПЕРЕВОД", $"Включён. Новые реплики появятся здесь; {settings().Hotkey} — выключить.");
+        _overlay.ShowFor(hint, game.Bounds, "ЖИВОЙ ПЕРЕВОД", $"Включён. Новые реплики появятся здесь; {settings().Hotkey} - выключить.");
         log.Info($"live translation on: {game.ExeName}");
         _ = Task.Run(() => LoopAsync(game, context, cjk, cts));
     }
@@ -77,7 +77,7 @@ public sealed class LiveTranslator(
                 }
                 if (!Native.IsWindow(game.Hwnd))
                 {
-                    ui.Invoke(() => StopRun(cts, "Игра закрыта — живой перевод выключен."));
+                    ui.Invoke(() => StopRun(cts, "Игра закрыта - живой перевод выключен."));
                     return;
                 }
                 // Only the game in front is read; its subtitle waits while another window is.
@@ -94,7 +94,7 @@ public sealed class LiveTranslator(
                 watch ??= capture.Watch((int)bounds.CenterX, (int)bounds.CenterY);
                 if (watch is null)
                 {
-                    ui.Invoke(() => StopRun(cts, "Экран этой игры не удаётся снимать непрерывно — живой перевод выключен."));
+                    ui.Invoke(() => StopRun(cts, "Экран этой игры не удаётся снимать непрерывно - живой перевод выключен."));
                     return;
                 }
                 CapturedFrame? frame;
@@ -122,7 +122,7 @@ public sealed class LiveTranslator(
                 if (watcher.NewLine(TextBlocks.Of(page), b => Languages.TargetFor(Lang(b), s.NativeLanguage)) is not { } line) continue;
 
                 var lang = Lang(line);
-                ui.Invoke(() => _overlay?.ShowFor(line.Box, bounds, "ПЕРЕВОД", "…"));
+                ui.Invoke(() => _overlay?.ShowFor(line.Box, bounds, "ПЕРЕВОД", "..."));
                 var (text, _) = await controller.TranslateTextAsync(line.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),
                     context.Choices?.Ai, t => ui.BeginInvoke(() => _overlay?.SetText(t)), ct);
                 _ = ui.BeginInvoke(() => _overlay?.SetText(text));
@@ -139,7 +139,7 @@ public sealed class LiveTranslator(
         catch (Exception ex)
         {
             log.Error("live translation", ex);
-            ui.Invoke(() => StopRun(cts, "Живой перевод остановился из-за ошибки — подробности в журнале."));
+            ui.Invoke(() => StopRun(cts, "Живой перевод остановился из-за ошибки - подробности в журнале."));
         }
         finally
         {

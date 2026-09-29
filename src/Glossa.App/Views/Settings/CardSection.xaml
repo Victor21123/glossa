@@ -206,7 +206,7 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="Фон карточки" Tag="свой оттенок вместо серого; в «Диско» свой" Style="{StaticResource SettingRowTop}">
+                    <HeaderedContentControl Header="Фон карточки" Tag='свой оттенок вместо серого; в "Диско" свой' Style="{StaticResource SettingRowTop}">
                         <StackPanel>
                             <DockPanel>
                                 <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Tint}" VerticalAlignment="Center" />

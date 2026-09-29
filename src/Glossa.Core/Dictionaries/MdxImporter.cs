@@ -55,7 +55,7 @@ public sealed class MdxImporter : IDictionaryImporter
             var e => int.TryParse(e, out var x) ? x : 0,
         };
         if ((encrypted & 1) != 0)
-            throw new NotSupportedException("Словарь MDX зашифрован (нужен ключ регистрации) — такой импорт не поддерживается.");
+            throw new NotSupportedException("Словарь MDX зашифрован (нужен ключ регистрации) - такой импорт не поддерживается.");
 
         var encoding = EncodingOf(h.Get("Encoding"));
         var utf16 = encoding.CodePage == Encoding.Unicode.CodePage;
@@ -221,7 +221,7 @@ public sealed class MdxImporter : IDictionaryImporter
                 return ms.ToArray();
             }
             case 1:
-                throw new NotSupportedException("Словарь MDX сжат LZO — такой формат не поддерживается, пересохраните его с zlib.");
+                throw new NotSupportedException("Словарь MDX сжат LZO - такой формат не поддерживается, пересохраните его с zlib.");
             default:
                 throw new InvalidDataException($"Неизвестное сжатие блока MDX: {type}.");
         }

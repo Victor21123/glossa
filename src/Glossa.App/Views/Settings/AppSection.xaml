@@ -28,10 +28,10 @@
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Запуск" Style="{StaticResource SettingRow}">
-                        <CheckBox Content="Запускать вместе с Windows — сразу в трей" IsChecked="{Binding StartWithWindows}" />
+                        <CheckBox Content="Запускать вместе с Windows - сразу в трей" IsChecked="{Binding StartWithWindows}" />
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="Кнопка «Закрыть»" Style="{StaticResource SettingRow}">
+                    <HeaderedContentControl Header='Кнопка "Закрыть"' Style="{StaticResource SettingRow}">
                         <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding CloseToTray}">
                             <ListBoxItem Content="Сворачивает в трей">
                                 <ListBoxItem.Tag><sys:Boolean>True</sys:Boolean></ListBoxItem.Tag>
@@ -55,7 +55,7 @@
 
                     <HeaderedContentControl Header="Сеть" Style="{StaticResource SettingRow}">
                         <TextBlock Style="{StaticResource Note}" FontSize="13.5"
-                                   Text="Словари скачиваются через системный прокси, при ошибке — напрямую. Кроме загрузок словарей и своего API, если оно подключено, Glossa в интернет не ходит." />
+                                   Text="Словари скачиваются через системный прокси, при ошибке - напрямую. Кроме загрузок словарей и своего API, если оно подключено, Glossa в интернет не ходит." />
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Журнал" Tag="для разбора ошибок" Style="{StaticResource SettingRow}">
@@ -70,7 +70,7 @@
             <Border Grid.Column="2" Style="{StaticResource SidePanel}">
                 <StackPanel>
                     <TextBlock Text="НА ДИСКЕ" Style="{StaticResource SectionCaption}" />
-                    <TextBlock x:Name="DiskTotal" Text="считаю…" FontSize="28" FontWeight="Bold" Margin="0,10,0,12" />
+                    <TextBlock x:Name="DiskTotal" Text="считаю..." FontSize="28" FontWeight="Bold" Margin="0,10,0,12" />
                     <Grid x:Name="DiskBar" Height="14" ClipToBounds="True" />
                     <ItemsControl x:Name="DiskLegend" Margin="0,10,0,0">
                         <ItemsControl.ItemTemplate>

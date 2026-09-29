@@ -114,7 +114,7 @@ public sealed class LlamaServerHost : IDisposable
             while (sw.Elapsed < TimeSpan.FromSeconds(300))
             {
                 ct.ThrowIfCancellationRequested();
-                if (process.HasExited) throw new LlmException($"llama-server завершился с кодом {process.ExitCode} — см. лог");
+                if (process.HasExited) throw new LlmException($"llama-server завершился с кодом {process.ExitCode} - см. лог");
                 try
                 {
                     using var resp = await _http.GetAsync($"http://127.0.0.1:{port}/health", ct).ConfigureAwait(false);

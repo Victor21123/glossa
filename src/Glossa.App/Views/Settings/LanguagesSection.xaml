@@ -47,7 +47,7 @@
                                     <ListBoxItem Content="Японский" Tag="ja" />
                                 </ListBox>
                                 <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0"
-                                           Text="В японской реплике почти всегда есть кана. Без неё Glossa читает строку как китайскую — поменяй для японской игры с короткими надписями." />
+                                           Text="В японской реплике почти всегда есть кана. Без неё Glossa читает строку как китайскую - поменяй для японской игры с короткими надписями." />
                             </StackPanel>
                         </HeaderedContentControl>
                     </StackPanel>

@@ -149,7 +149,7 @@ public sealed class ComboRecorder
         _seen = PadButtons.None;
         if (Pad.Count(taken) < 2)
         {
-            error = $"{string.Join(" + ", Pad.Captions(taken))} — одна кнопка; нужно сочетание из двух, например LB + RB.";
+            error = $"{string.Join(" + ", Pad.Captions(taken))} - одна кнопка; нужно сочетание из двух, например LB + RB.";
             return null;
         }
         return taken;

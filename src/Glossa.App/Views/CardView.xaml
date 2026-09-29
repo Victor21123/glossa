@@ -14,6 +14,7 @@
         <Geometry x:Key="IconSpeaker">M11,5 L6,9 H3 V15 H6 L11,19 Z M15.5,8.5 A5,5 0 0 1 15.5,15.5 M18.5,5.5 A9,9 0 0 1 18.5,18.5</Geometry>
         <Geometry x:Key="IconBookmark">M6,3 H18 V21 L12,17 L6,21 Z</Geometry>
         <Geometry x:Key="IconClock">M4,13 A8,8 0 1 1 20,13 A8,8 0 1 1 4,13 Z M12,9 V13 L14.5,15.5 M9.5,2 H14.5</Geometry>
+        <Geometry x:Key="IconRight">M9,5 L16,12 L9,19</Geometry>
 
         <DropShadowEffect x:Key="CardShadow" BlurRadius="36" ShadowDepth="10" Direction="270" Opacity="1"
                           Color="{DynamicResource ShadowColor}" />
@@ -197,7 +198,7 @@
                 <StackPanel>
                     <TextBlock x:Name="ContextOnly" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
                                FontFamily="{Binding WordFont}" />
-                    <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontSize="17" LineHeight="25" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding ContextTranslation, TargetNullValue='...'}" FontSize="17" LineHeight="25" TextWrapping="Wrap" Margin="0,8,0,0" />
                     <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource Danger}"
                                Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
                     <DockPanel Margin="0,12,0,0" TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Muted}"
@@ -221,7 +222,7 @@
                             <Button Style="{StaticResource SaveButton}" Click="OnSave" />
                         </StackPanel>
                         <Grid>
-                            <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontSize="28" FontWeight="ExtraBold" LineHeight="32"
+                            <TextBlock Text="{Binding Translation, TargetNullValue='...'}" FontSize="28" FontWeight="ExtraBold" LineHeight="32"
                                        TextWrapping="Wrap" Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
                             <Border Style="{StaticResource RevealHint}">
                                 <TextBlock Text="Пробел: показать перевод" FontSize="12.5" Foreground="{DynamicResource Muted}" />
@@ -243,7 +244,9 @@
                         <DockPanel TextElement.FontSize="12.5" TextElement.Foreground="{DynamicResource Muted}">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <TextBlock Text="{Binding Footer}" />
-                                <TextBlock Text="  ·  Tab подробнее" />
+                                <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1,0,0,0" Margin="10,2,0,2" Padding="10,0,0,0">
+                                    <TextBlock Text="Tab подробнее" VerticalAlignment="Center" />
+                                </Border>
                             </StackPanel>
                             <TextBlock Text="{Binding DictionaryMarkShort}" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
                         </DockPanel>
@@ -283,7 +286,7 @@
                     <StackPanel Margin="22,16,22,3">
                         <HeaderedContentControl Header="ПЕРЕВОД" Style="{StaticResource Row}">
                             <StackPanel>
-                                <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding Translation, TargetNullValue='...'}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
                                            Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
                                 <Border Style="{StaticResource RevealHint}">
                                     <TextBlock Text="Пробел: показать перевод" FontSize="12.5" Foreground="{DynamicResource Muted}" />
@@ -319,7 +322,7 @@
                             <StackPanel>
                                 <TextBlock x:Name="ContextStandard" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
                                            FontFamily="{Binding WordFont}" Visibility="{Binding Show[line], Converter={StaticResource BoolToVis}}" />
-                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue='...'}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
                                            Margin="0,5,0,0" Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}" />
                             </StackPanel>
                         </HeaderedContentControl>
@@ -371,7 +374,26 @@
                                         IsEnabled="{Binding HasDictionaries}">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
-                                            <TextBlock Text="{TemplateBinding Content}" Foreground="{DynamicResource Muted}" />
+                                            <StackPanel Orientation="Horizontal" Background="Transparent">
+                                                <TextBlock Text="{TemplateBinding Content}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                                <!-- Folded: the chevron points right; open: down. -->
+                                                <Viewbox x:Name="Chevron" Width="9" Height="9" Margin="6,1,0,0" VerticalAlignment="Center"
+                                                         RenderTransformOrigin="0.5,0.5" Visibility="{Binding HasDictionaries, Converter={StaticResource BoolToVis}}">
+                                                    <Canvas Width="24" Height="24">
+                                                        <Path Data="{StaticResource IconRight}" Stroke="{DynamicResource Muted}" StrokeThickness="2.8"
+                                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                                    </Canvas>
+                                                </Viewbox>
+                                            </StackPanel>
+                                            <ControlTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding DictionariesOpen}" Value="True">
+                                                    <Setter TargetName="Chevron" Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="90" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Button.Template>
                                 </Button>
@@ -393,7 +415,7 @@
                             </StackPanel>
                             <StackPanel>
                                 <Grid Margin="0,0,64,0">
-                                    <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontFamily="{DynamicResource SerifFont}" FontSize="25"
+                                    <TextBlock Text="{Binding Translation, TargetNullValue='...'}" FontFamily="{DynamicResource SerifFont}" FontSize="25"
                                                FontWeight="SemiBold" LineHeight="30" TextWrapping="Wrap"
                                                Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
                                     <Border Style="{StaticResource RevealHint}">
@@ -413,7 +435,7 @@
                                 <Border Height="1" Background="{DynamicResource RuleSoft}" Margin="0,14,0,12" Visibility="{Binding ShowLineRow, Converter={StaticResource BoolToVis}}" />
                                 <TextBlock x:Name="ContextMore" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
                                            FontFamily="{Binding WordFont}" Visibility="{Binding Show[line], Converter={StaticResource BoolToVis}}" />
-                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontFamily="{DynamicResource SerifFont}" FontSize="15.5"
+                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue='...'}" FontFamily="{DynamicResource SerifFont}" FontSize="15.5"
                                            LineHeight="22" TextWrapping="Wrap" Margin="0,6,0,12" Visibility="{Binding Show[lineTranslation], Converter={StaticResource BoolToVis}}" />
                                 <HeaderedContentControl Header="РАЗБОР" Style="{StaticResource SmallRow}"
                                                         Visibility="{Binding ShowComponents, Converter={StaticResource BoolToVis}}">

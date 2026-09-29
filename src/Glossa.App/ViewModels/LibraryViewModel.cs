@@ -51,7 +51,7 @@ public sealed class WordEntry : ObservableObject
     public bool Pinned => Word.Pinned;
 
     /// <summary>"прил. · B1" next to the word.</summary>
-    public string Meta => string.Join(" · ", new[] { Word.PartOfSpeech, Word.Level }.Where(s => !string.IsNullOrEmpty(s)));
+    public string Meta => string.Join(", ", new[] { Word.PartOfSpeech, Word.Level }.Where(s => !string.IsNullOrEmpty(s)));
 
     /// <summary>Every game the word was met in, newest first.</summary>
     public IReadOnlyList<string> Games =>
@@ -103,7 +103,7 @@ public sealed class WordEntry : ObservableObject
                 : at.Date == DateTime.Today.AddDays(-1) ? "вчера"
                 : at.ToString(at.Year == DateTime.Today.Year ? "d MMMM" : "d MMMM yyyy", Ru);
             var game = Current is { } c ? GameOf(c) : GameOf(Word);
-            return (game is null ? "" : game + " · ") + day + at.ToString(", HH:mm", Ru);
+            return (game is null ? "" : game + ", ") + day + at.ToString(", HH:mm", Ru);
         }
     }
 
@@ -118,7 +118,7 @@ public sealed class WordEntry : ObservableObject
                 (2 or 3 or 4, not (12 or 13 or 14)) => "раза",
                 _ => "раз",
             };
-            var games = Games.Count > 0 ? string.Join(", ", Games) + " · " : "";
+            var games = Games.Count > 0 ? string.Join(", ", Games) + " - " : "";
             return $"{games}искал {n} {times}";
         }
     }
@@ -516,7 +516,7 @@ public sealed class LibraryViewModel : ObservableObject
     {
         foreach (var e in entries) _services.Library.AddToCollection(collectionId, e.Word.Id);
         Reload();
-        Status = "Добавлено в коллекцию «" + _collections.FirstOrDefault(c => c.Id == collectionId)?.Name + "»";
+        Status = "Добавлено в коллекцию \"" + _collections.FirstOrDefault(c => c.Id == collectionId)?.Name + "\"";
     }
 
     public void RemoveFromCollection(string collectionId, WordEntry entry)
@@ -534,14 +534,14 @@ public sealed class LibraryViewModel : ObservableObject
     public async Task AddWordAsync(NewWord input, string? collectionId)
     {
         if (_services.AddWord is not { } add || string.IsNullOrWhiteSpace(input.Word)) return;
-        Status = $"Добавляю «{input.Word.Trim()}»…";
+        Status = $"Добавляю \"{input.Word.Trim()}\"...";
         try
         {
             var id = await add(input, CancellationToken.None);
             if (collectionId is not null) _services.Library.AddToCollection(collectionId, id);
             Reload();
             Selected = Items.FirstOrDefault(i => i.Word.Id == id) ?? Selected;
-            Status = $"«{Selected?.Headword}» в словаре";
+            Status = $"\"{Selected?.Headword}\" в словаре";
         }
         catch (Exception ex)
         {
@@ -614,7 +614,7 @@ public sealed class LibraryViewModel : ObservableObject
     {
         if (Selected is not { } w) return;
         if (!await _services.Speech.SpeakAsync(w.Headword, w.Word.Language))
-            Status = $"Нет голоса для языка «{Languages.RussianName(w.Word.Language)}» — Параметры → Время и язык → Речь.";
+            Status = $"Нет голоса для языка \"{Languages.RussianName(w.Word.Language)}\" - Параметры -> Время и язык -> Речь.";
     }
 
     private IReadOnlyList<SavedWord> Visible() => View.Cast<WordEntry>().Select(i => i.Word).ToList();
@@ -635,14 +635,14 @@ public sealed class LibraryViewModel : ObservableObject
         await Run(async p =>
         {
             await Task.Run(() => ApkgWriter.Write(path, DataPaths.Root, words, options, p));
-            return $"Колода сохранена: {words.Count} слов → {path}. Откройте файл двойным щелчком, Anki импортирует его.";
+            return $"Колода сохранена: {words.Count} слов -> {path}. Откройте файл двойным щелчком, Anki импортирует его.";
         });
     }
 
     public Task ExportQuizlet(string path) => Run(_ =>
     {
         TextExport.WriteQuizlet(path, Visible());
-        return Task.FromResult($"Набор для Quizlet сохранён: {path}. В Quizlet: «Импорт» → вставьте текст файла.");
+        return Task.FromResult($"Набор для Quizlet сохранён: {path}. В Quizlet: \"Импорт\" -> вставьте текст файла.");
     });
 
     public Task ExportCsv(string path) => Run(_ =>

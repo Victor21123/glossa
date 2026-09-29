@@ -61,7 +61,7 @@ public static class JmdictBuilder
     public static PackInfo Build(string jmdictGz, string packPath, IProgress<double>? progress, CancellationToken ct)
     {
         var meta = new PackMeta("jmdict", "JMdict", "ja", "ru", Priority: 20,
-            Description: "Японско-английский словарь EDRDG, русские значения — где они есть",
+            Description: "Японско-английский словарь EDRDG, русские значения - где они есть",
             License: "CC BY-SA 4.0, EDRDG", Origin: "http://ftp.edrdg.org/pub/Nihongo/JMdict.gz");
         using var writer = new DictionaryPackWriter(packPath, meta);
         using var file = File.OpenRead(jmdictGz);

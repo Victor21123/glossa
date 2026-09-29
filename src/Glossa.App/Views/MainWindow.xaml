@@ -232,7 +232,7 @@
                                                               StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
                                                     </Canvas>
                                                 </Viewbox>
-                                                <TextBlock Text="Экспорт…" Foreground="{DynamicResource InkSoft}" />
+                                                <TextBlock Text="Экспорт..." Foreground="{DynamicResource InkSoft}" />
                                             </StackPanel>
                                             <Button.ContextMenu>
                                                 <ContextMenu>
@@ -283,7 +283,7 @@
                                 <StackPanel>
                                     <Grid>
                                         <TextBox x:Name="SearchBox" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="36,8,11,8"
-                                                 theme:Hint.Text="Слово, перевод, реплика… или app:, lang:, cefr:" />
+                                                 theme:Hint.Text="Слово, перевод, реплика... или app:, lang:, cefr:" />
                                         <Viewbox Width="16" Height="16" HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False">
                                             <Canvas Width="24" Height="24">
                                                 <Path Data="{StaticResource IconSearch}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
@@ -311,7 +311,7 @@
                                             <GroupStyle.HeaderTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Style="{StaticResource Caption}" Margin="10,12,0,6">
-                                                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding ItemCount, Mode=OneWay}" />
+                                                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" (" /><Run Text="{Binding ItemCount, Mode=OneWay}" /><Run Text=")" />
                                                     </TextBlock>
                                                 </DataTemplate>
                                             </GroupStyle.HeaderTemplate>
@@ -349,14 +349,14 @@
                                                 </DockPanel>
                                                 <TextBlock Grid.Row="1" Margin="30,3,0,0" FontSize="13.5" TextTrimming="CharacterEllipsis">
                                                     <Run Text="{Binding Translation, Mode=OneWay}" Foreground="{DynamicResource InkSoft}" /><Run
-                                                        Text="{Binding Game, Mode=OneWay, StringFormat='  ·  {0}'}" Foreground="{DynamicResource Faint}" />
+                                                        Text="{Binding Game, Mode=OneWay, StringFormat=' - {0}'}" Foreground="{DynamicResource Faint}" />
                                                 </TextBlock>
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 <TextBlock x:Name="EmptyList" Style="{StaticResource Note}" Margin="28,24" FontSize="14" Visibility="Collapsed"
-                                           Text="Словарь пуст. Наведи курсор на слово в игре и нажми Alt+Q — слово появится здесь." />
+                                           Text="Словарь пуст. Наведи курсор на слово в игре и нажми Alt+Q - слово появится здесь." />
                             </Grid>
                         </DockPanel>
                     </Border>
@@ -491,7 +491,7 @@
                                             <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="{Binding HereTranslation}" FontSize="15.5" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,3"
                                                            Visibility="{Binding HereTranslation, Converter={StaticResource NullToCollapsed}}" />
-                                                <TextBlock Text="{Binding UsageNote, TargetNullValue=—}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                                <TextBlock Text="{Binding UsageNote, TargetNullValue=-}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
                                                            Foreground="{DynamicResource InkSoft}" />
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
@@ -505,7 +505,7 @@
                                     <HeaderedContentControl Header="ЗНАЧЕНИЕ" Style="{StaticResource DetailRow}">
                                         <Grid>
                                             <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="{Binding Definition, TargetNullValue=—}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                                <TextBlock Text="{Binding Definition, TargetNullValue=-}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
                                                            Foreground="{DynamicResource InkSoft}" />
                                                 <TextBlock Text="{Binding DefinitionTranslation}" FontSize="14" LineHeight="20" TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Foreground="{DynamicResource Muted}" Visibility="{Binding DefinitionTranslation, Converter={StaticResource NullToCollapsed}}" />
@@ -533,7 +533,7 @@
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource DetailRow}">
                                         <Grid>
-                                            <TextBlock Text="{Binding Synonyms, TargetNullValue=—}" FontSize="14" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}"
+                                            <TextBlock Text="{Binding Synonyms, TargetNullValue=-}" FontSize="14" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}"
                                                        FontFamily="{Binding WordFont}" Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}" />
                                             <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditSynonyms}" FontFamily="{Binding WordFont}"
                                                      Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="через запятую" />
@@ -563,8 +563,8 @@
                                             BorderThickness="1" Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                                <Button Content="Отмена  ·  Esc" Click="OnCancelEdit" Margin="0,0,8,0" />
-                                                <Button Style="{StaticResource PrimaryButton}" Content="Сохранить  ·  Ctrl+S" Click="OnSaveEdit" />
+                                                <Button Content="Отмена (Esc)" Click="OnCancelEdit" Margin="0,0,8,0" />
+                                                <Button Style="{StaticResource PrimaryButton}" Content="Сохранить (Ctrl+S)" Click="OnSaveEdit" />
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Viewbox Width="14" Height="14" Margin="0,0,8,0">
@@ -574,7 +574,7 @@
                                                     </Canvas>
                                                 </Viewbox>
                                                 <TextBlock FontSize="13.5" Foreground="{DynamicResource InkSoft}">
-                                                    <Run Text="Правка" /><Run Text="{Binding Pager, Mode=OneWay, StringFormat='  ·  {0}'}" />
+                                                    <Run Text="Правка" /><Run Text="{Binding Pager, Mode=OneWay, StringFormat=', {0}'}" />
                                                 </TextBlock>
                                             </StackPanel>
                                         </DockPanel>
@@ -655,14 +655,14 @@
                     </DockPanel>
                     <Border Background="{DynamicResource Band}" CornerRadius="10" Padding="14,12" Margin="0,14,0,0">
                         <StackPanel>
-                            <TextBlock Text="ИЗ СПРАВОЧНИКОВ · СРАЗУ" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                            <TextBlock Text="ИЗ СПРАВОЧНИКОВ, СРАЗУ" Style="{StaticResource Caption}" Margin="0,0,0,6" />
                             <ItemsControl x:Name="AddPreview" ItemTemplate="{StaticResource DictSection}" />
-                            <TextBlock x:Name="AddPreviewEmpty" Style="{StaticResource Note}" Text="Статей нет — перевод сделает ИИ." />
+                            <TextBlock x:Name="AddPreviewEmpty" Style="{StaticResource Note}" Text="Статей нет - перевод сделает ИИ." />
                         </StackPanel>
                     </Border>
-                    <TextBlock Text="РЕПЛИКА · НЕОБЯЗАТЕЛЬНО" Style="{StaticResource Caption}" Margin="0,16,0,6" />
+                    <TextBlock Text="РЕПЛИКА, НЕОБЯЗАТЕЛЬНО" Style="{StaticResource Caption}" Margin="0,16,0,6" />
                     <TextBox x:Name="AddSentence" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" VerticalContentAlignment="Top"
-                             theme:Hint.Text="Вставь фразу, где встретил слово, — перевод и контекст сцены будут точнее" />
+                             theme:Hint.Text="Вставь фразу, где встретил слово, - перевод и контекст сцены будут точнее" />
                     <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -745,7 +745,7 @@
                                 <ComboBox x:Name="FilterDays" MinHeight="38" SelectionChanged="OnCollectionChanged" />
                             </StackPanel>
                         </Grid>
-                        <CheckBox x:Name="FilterPinned" Content="Только «Не могу запомнить»" Margin="0,16,0,0" Click="OnCollectionChanged" />
+                        <CheckBox x:Name="FilterPinned" Content='Только "Не могу запомнить"' Margin="0,16,0,0" Click="OnCollectionChanged" />
                         <TextBlock x:Name="FilterCount" FontSize="14" FontWeight="SemiBold" Margin="0,14,0,0" />
                     </StackPanel>
                     <DockPanel Margin="0,22,0,0">

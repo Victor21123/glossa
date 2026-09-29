@@ -226,7 +226,7 @@ public partial class MainWindow : Window
             : !s.HasModel(s.Profile) ? Settings.ProfileTile.Absent(s.Profile)
             : !s.HasRuntime() ? "без движка llama.cpp" : "выгружена";
         var free = AiRouter.FreeVramMb();
-        var vram = free >= 0 ? string.Format(CultureInfo.GetCultureInfo("ru-RU"), " · свободно {0:0.0} ГБ видеопамяти", free / 1024.0) : "";
+        var vram = free >= 0 ? string.Format(CultureInfo.GetCultureInfo("ru-RU"), ", свободно {0:0.0} ГБ видеопамяти", free / 1024.0) : "";
         var title = Settings.ProfileTile.Title(s.Profile);
         AiStatus.Text = $"ИИ: {char.ToUpper(title[0])}{title[1..]} {state}{vram}";
         AiDot.SetResourceReference(Shape.FillProperty, loaded ? "Good" : "Page");
@@ -307,7 +307,7 @@ public partial class MainWindow : Window
         var items = WordsList.SelectedItems.Cast<WordEntry>().ToList();
         if (items.Count == 0 && _library.Selected is { } one) items.Add(one);
         if (items.Count == 0) return;
-        var text = items.Count == 1 ? $"Удалить «{items[0].Headword}» из словаря?" : $"Удалить слов: {items.Count}?";
+        var text = items.Count == 1 ? $"Удалить \"{items[0].Headword}\" из словаря?" : $"Удалить слов: {items.Count}?";
         if (MessageBox.Show(this, text, "Glossa", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK)
             _library.Delete(items);
     }
@@ -490,8 +490,8 @@ public partial class MainWindow : Window
         if (SmartFields is null || FilterLookups.ItemsSource is null) return;
         SmartFields.Visibility = CollectionIsSmart ? Visibility.Visible : Visibility.Collapsed;
         CollectionKindNote.Text = CollectionIsSmart
-            ? "Слова попадают сами — по тому, что Glossa записала при поиске: игра, помета от ИИ, уровень, сколько раз искал. Интернет не нужен."
-            : "Слова кладёшь сам: «+ добавить» у слова или правый клик по выделенным в списке.";
+            ? "Слова попадают сами - по тому, что Glossa записала при поиске: игра, помета от ИИ, уровень, сколько раз искал. Интернет не нужен."
+            : "Слова кладёшь сам: \"+ добавить\" у слова или правый клик по выделенным в списке.";
         if (CollectionIsSmart)
         {
             var n = _library.CountMatching(ReadFilter());
@@ -511,7 +511,7 @@ public partial class MainWindow : Window
     private void OnCollectionDelete(object sender, RoutedEventArgs e)
     {
         if (_editingCollection is not { } c) return;
-        if (MessageBox.Show(this, $"Удалить коллекцию «{c.Name}»? Слова останутся в словаре.", "Glossa",
+        if (MessageBox.Show(this, $"Удалить коллекцию \"{c.Name}\"? Слова останутся в словаре.", "Glossa",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         _library.DeleteCollection(c.Id);
         CloseModal();
@@ -544,7 +544,7 @@ public partial class MainWindow : Window
             item.Click += (_, _) => _library.AddToCollection(c.Id, words);
             into.Items.Add(item);
         }
-        var fresh = new MenuItem { Header = "Новая коллекция…" };
+        var fresh = new MenuItem { Header = "Новая коллекция..." };
         fresh.Click += (_, _) => OpenCollection(null, words);
         into.Items.Add(fresh);
         menu.Items.Add(into);
@@ -565,7 +565,7 @@ public partial class MainWindow : Window
             item.Click += (_, _) => _library.AddToCollection(c.Id, [word]);
             menu.Items.Add(item);
         }
-        var fresh = new MenuItem { Header = "Новая коллекция…" };
+        var fresh = new MenuItem { Header = "Новая коллекция..." };
         fresh.Click += (_, _) => OpenCollection(null, [word]);
         menu.Items.Add(fresh);
         menu.PlacementTarget = AddToCollectionButton;
