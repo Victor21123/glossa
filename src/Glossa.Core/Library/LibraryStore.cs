@@ -52,6 +52,9 @@ public sealed record SavedWord
     /// <summary>«Не могу запомнить»: the word goes into every study session until unpinned.</summary>
     public bool Pinned { get; init; }
 
+    /// <summary>When the word was pinned: answers after it count towards suggesting to unpin it.</summary>
+    public DateTime? PinnedUtc { get; init; }
+
     /// <summary>Every sentence the word was found in, newest first.</summary>
     public IReadOnlyList<WordContext> Contexts { get; init; } = [];
 
@@ -111,9 +114,9 @@ public sealed record WordContext
     public PixelRect? WordBox { get; init; }
 }
 
-public sealed class LibraryStore : IDisposable
+public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 5;
+    private const int SchemaVersion = 6;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -205,6 +208,43 @@ public sealed class LibraryStore : IDisposable
         {
             // The definition in the user's language beside a monolingual (English) one.
             Exec("ALTER TABLE words ADD COLUMN definition_tr TEXT;");
+        }
+        if (version < 6)
+        {
+            // Study: Anki's card state per word (a word without a row is new), its review log, and when a word was pinned.
+            // Ease is kept in thousandths, as Anki keeps it, so a saved state reads back to the same float.
+            // One transaction: a migration cut short must not leave half the tables for the next start to trip over.
+            using var tx = _db.BeginTransaction();
+            Exec("""
+                CREATE TABLE review_state(
+                  word_id TEXT PRIMARY KEY,
+                  queue TEXT NOT NULL,
+                  remaining_steps INTEGER NOT NULL DEFAULT 0,
+                  due_at TEXT, due_day TEXT,
+                  interval_days INTEGER NOT NULL DEFAULT 0,
+                  ease INTEGER NOT NULL DEFAULT 0,
+                  reps INTEGER NOT NULL DEFAULT 0,
+                  lapses INTEGER NOT NULL DEFAULT 0,
+                  leech INTEGER NOT NULL DEFAULT 0,
+                  answered_utc TEXT);
+                CREATE TABLE review_log(
+                  id TEXT PRIMARY KEY,
+                  word_id TEXT NOT NULL,
+                  answered_utc TEXT NOT NULL,
+                  rating INTEGER NOT NULL,
+                  queue_before TEXT NOT NULL,
+                  early INTEGER NOT NULL DEFAULT 0,
+                  interval_before INTEGER NOT NULL,
+                  interval_after INTEGER NOT NULL,
+                  ease INTEGER NOT NULL,
+                  taken_ms INTEGER NOT NULL DEFAULT 0);
+                CREATE INDEX review_log_word ON review_log(word_id, answered_utc);
+                CREATE INDEX review_log_time ON review_log(answered_utc);
+                ALTER TABLE words ADD COLUMN pinned_utc TEXT;
+                UPDATE words SET pinned_utc = updated_utc WHERE pinned = 1;
+                PRAGMA user_version = 6;
+                """);
+            tx.Commit();
         }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }
@@ -304,8 +344,12 @@ public sealed class LibraryStore : IDisposable
 
     public void SetPinned(string id, bool pinned)
     {
-        lock (_gate) Run("UPDATE words SET pinned = $p, updated_utc = $now WHERE id = $id",
-            ("$p", pinned ? 1 : 0), ("$now", Iso(DateTime.UtcNow)), ("$id", id));
+        // Pinning again keeps the first time; unpinning forgets it.
+        lock (_gate) Run("""
+            UPDATE words SET pinned = $p, updated_utc = $now,
+              pinned_utc = CASE WHEN $p = 1 THEN COALESCE(CASE WHEN pinned = 1 THEN pinned_utc END, $now) END
+            WHERE id = $id
+            """, ("$p", pinned ? 1 : 0), ("$now", Iso(DateTime.UtcNow)), ("$id", id));
     }
 
     public IReadOnlyList<WordCollection> Collections()
@@ -598,6 +642,7 @@ public sealed class LibraryStore : IDisposable
             WordBox = S("word_box") is { } box ? JsonSerializer.Deserialize<PixelRect>(box) : null,
             Lookups = Convert.ToInt32(r["lookups"], CultureInfo.InvariantCulture),
             Pinned = Convert.ToInt32(r["pinned"], CultureInfo.InvariantCulture) != 0,
+            PinnedUtc = S("pinned_utc") is { } pinned ? Date(pinned) : null,
         };
     }
 

@@ -84,6 +84,8 @@ public sealed class AppSettings
 
     public PerformanceSettings Performance { get; set; } = new();
 
+    public StudySettings Study { get; set; } = new();
+
     /// <summary>Saves each OCR input image to the logs folder and logs lookup geometry.</summary>
     public bool DebugOcrDumps { get; set; }
 }
@@ -108,6 +110,62 @@ public sealed class PerformanceSettings
 
     /// <summary>The same word in the same line opens from memory, without the AI.</summary>
     public bool CacheCards { get; set; } = true;
+}
+
+/// <summary>Настройки → Учёба: the session around Anki's scheduler and what the card shows (Anki's defaults).</summary>
+public sealed class StudySettings
+{
+    /// <summary>Cards in one session; pinned words take up to half of it.</summary>
+    public int SessionSize { get; set; } = 20;
+
+    public int NewPerDay { get; set; } = 20;
+    public int ReviewsPerDay { get; set; } = 200;
+
+    /// <summary>Learning steps in minutes (Anki: 1 and 10).</summary>
+    public List<float> LearnSteps { get; set; } = [1, 10];
+
+    /// <summary>Steps after "Снова" on a learned word, in minutes.</summary>
+    public List<float> RelearnSteps { get; set; } = [10];
+
+    /// <summary>Days after the last learning step with "Нормально" and at once with "Легко".</summary>
+    public int GraduatingInterval { get; set; } = 1;
+
+    public int EasyInterval { get; set; } = 4;
+
+    /// <summary>lookups (looked up most often first), recent or random: which new words come first.</summary>
+    public string NewOrder { get; set; } = "lookups";
+
+    /// <summary>Offer to unpin a word after right answers on three different days.</summary>
+    public bool SuggestUnpin { get; set; } = true;
+
+    /// <summary>The front of the card: the game frame around the word, the line, the reading.</summary>
+    public bool FrontShot { get; set; } = true;
+
+    public bool FrontLine { get; set; } = true;
+    public bool FrontReading { get; set; } = true;
+
+    /// <summary>The back: the meaning picture, the line's translation, speaking the word as it opens.</summary>
+    public bool BackPicture { get; set; } = true;
+
+    public bool BackLineTranslation { get; set; } = true;
+    public bool SpeakOnFlip { get; set; }
+
+    /// <summary>Evening reminders by the computer's clock, only on a day with nothing studied yet.</summary>
+    public bool Reminders { get; set; } = true;
+
+    public List<string> ReminderTimes { get; set; } = ["18:00", "20:00"];
+
+    public Study.StudyConfig Config() => new()
+    {
+        LearnSteps = [.. LearnSteps.Where(s => s > 0)],
+        RelearnSteps = [.. RelearnSteps.Where(s => s > 0)],
+        GraduatingInterval = Math.Max(GraduatingInterval, 1),
+        EasyInterval = Math.Max(EasyInterval, 1),
+    };
+
+    public Study.StudyLimits Limits() => new(
+        Math.Clamp(SessionSize, 1, 500), Math.Max(NewPerDay, 0), Math.Max(ReviewsPerDay, 0), 0.5,
+        NewOrder switch { "recent" => Study.NewWordOrder.Recent, "random" => Study.NewWordOrder.Random, _ => Study.NewWordOrder.Lookups });
 }
 
 public sealed class SpeechSettings
