@@ -42,6 +42,10 @@
                         </ListBox>
                     </HeaderedContentControl>
 
+                    <HeaderedContentControl Header="Статистика на главной" Tag="дни с поиском, языки, игры" Style="{StaticResource SettingRow}">
+                        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding HomeStats}" />
+                    </HeaderedContentControl>
+
                     <HeaderedContentControl Header="Папка данных" Tag="словарь, кадры, справочники" Style="{StaticResource SettingRow}">
                         <StackPanel Orientation="Horizontal">
                             <ContentControl x:Name="DataFolder" Style="{StaticResource PathBox}" MaxWidth="460" />

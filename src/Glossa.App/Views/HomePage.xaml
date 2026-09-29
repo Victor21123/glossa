@@ -1,0 +1,159 @@
+<UserControl x:Class="Glossa.App.Views.HomePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- «Главная»: where the window opens. The dictionary and its numbers on the left; the model and the main settings on
+         the right (the same settings model as Настройки, so a change shows in both). Study joins with its stage. -->
+    <UserControl.Resources>
+        <Style x:Key="Figure" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="26" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <Style x:Key="PanelCaption" TargetType="TextBlock" BasedOn="{StaticResource StatLabel}">
+            <Setter Property="Margin" Value="0,18,0,8" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="40,30,40,40">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.55*" MaxWidth="1080" />
+                <ColumnDefinition Width="40" />
+                <ColumnDefinition Width="*" MinWidth="380" MaxWidth="560" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="Главная" Style="{StaticResource PageTitle}" />
+                <TextBlock x:Name="Today" Style="{StaticResource SectionDescription}" />
+
+                <!-- The dictionary: how big, the newest words (a click opens one), the way in. -->
+                <Border Style="{StaticResource SidePanel}" Margin="0,22,0,0">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Открыть словарь" Style="{StaticResource PrimaryButton}" VerticalAlignment="Top"
+                                Click="OnOpenWords" />
+                        <StackPanel>
+                            <TextBlock Text="СЛОВАРЬ" Style="{StaticResource Caption}" />
+                            <TextBlock x:Name="WordsTotal" Style="{StaticResource Figure}" />
+                            <TextBlock x:Name="WordsNote" Style="{StaticResource Note}" Margin="0,4,0,0" />
+                            <WrapPanel x:Name="Recent" Margin="0,16,0,-8" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Статистика (Приложение → «Статистика на главной»). -->
+                <StackPanel x:Name="Stats" Margin="0,30,0,0">
+                    <TextBlock Text="Статистика" FontSize="18" FontWeight="Bold" />
+                    <UniformGrid Columns="4" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Text="ДНЕЙ ПОДРЯД С ПОИСКОМ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="Streak" Style="{StaticResource Figure}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ЛУЧШАЯ СЕРИЯ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="Best" Style="{StaticResource Figure}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ПОИСКОВ ВСЕГО" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="Lookups" Style="{StaticResource Figure}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="НЕ МОГУ ЗАПОМНИТЬ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="Pinned" Style="{StaticResource Figure}" />
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <TextBlock Text="СЛОВА ПО ДНЯМ, ПОЛГОДА" Style="{StaticResource PanelCaption}" Margin="0,26,0,10" />
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="пн" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" Margin="0,0,0,20" />
+                            <TextBlock Text="ср" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" Margin="0,0,0,20" />
+                            <TextBlock Text="пт" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" Margin="0,0,0,20" />
+                            <TextBlock Text="вс" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" />
+                        </StackPanel>
+                        <UniformGrid x:Name="Heat" Rows="7" Columns="26" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="32,10,0,0">
+                        <TextBlock Text="меньше" FontSize="11.5" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+                        <StackPanel x:Name="Legend" Orientation="Horizontal" />
+                        <TextBlock Text="больше" FontSize="11.5" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" />
+                    </StackPanel>
+
+                    <Grid Margin="0,26,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="ЯЗЫКИ" Style="{StaticResource StatLabel}" Margin="0,0,0,10" />
+                            <StackPanel x:Name="Languages" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="ИГРЫ" Style="{StaticResource StatLabel}" Margin="0,0,0,10" />
+                            <StackPanel x:Name="Games" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2">
+                <Border Style="{StaticResource SidePanel}">
+                    <StackPanel>
+                        <TextBlock Text="ИИ" Style="{StaticResource Caption}" />
+                        <TextBlock x:Name="AiState" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,0" TextWrapping="Wrap" />
+                        <TextBlock Text="МОДЕЛЬ" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding AiProfile}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Gemma 26B" Tag="gemma26b" />
+                            <ListBoxItem Content="12B" Tag="gemma12b" />
+                            <ListBoxItem Content="Лёгкая" Tag="light" />
+                            <ListBoxItem Content="Своя" Tag="custom" />
+                        </ListBox>
+                        <ContentControl x:Name="ModelNote" Style="{StaticResource WarnText}" FontSize="12.5" Margin="0,10,0,0" />
+                        <TextBlock Text="РЕЖИМ" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding AiMode}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Авто" Tag="auto" />
+                            <ListBoxItem Content="Минимум видеопамяти" Tag="lowvram" />
+                            <ListBoxItem Content="Выключен" Tag="off" />
+                        </ListBox>
+                        <Button Content="Все настройки ИИ" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="-12,16,0,-6"
+                                Tag="ai" Click="OnOpenSettings" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SidePanel}" Margin="0,18,0,0">
+                    <StackPanel>
+                        <TextBlock Text="ОСНОВНОЕ" Style="{StaticResource Caption}" />
+                        <TextBlock Text="ПОИСК СЛОВА" Style="{StaticResource PanelCaption}" Margin="0,14,0,6" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Изменить" Style="{StaticResource GhostButton}" Tag="keys" Click="OnOpenSettings" />
+                            <TextBlock Text="{Binding Hotkey}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock Text="КАРТОЧКА" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding Preset}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Меньше" Tag="less" />
+                            <ListBoxItem Content="Стандарт" Tag="standard" />
+                            <ListBoxItem Content="Больше" Tag="more" />
+                            <ListBoxItem Content="Свой" Tag="custom" />
+                        </ListBox>
+                        <TextBlock Text="ВО ВРЕМЯ ПОИСКА" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding DuringLookup}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Не трогать" Tag="none" />
+                            <ListBoxItem Content="Остановить кадр" Tag="frame" />
+                            <ListBoxItem Content="Пауза игры" Tag="pause" />
+                        </ListBox>
+                        <TextBlock Text="ТЕМА ОКНА" Style="{StaticResource PanelCaption}" />
+                        <ListBox Style="{StaticResource SegmentedSmall}" SelectedValuePath="Tag" SelectedValue="{Binding Theme}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Как в Windows" Tag="system" />
+                            <ListBoxItem Content="Тёмная" Tag="dark" />
+                            <ListBoxItem Content="Светлая" Tag="light" />
+                            <ListBoxItem Content="Диско" Tag="disco" />
+                        </ListBox>
+                        <Button Content="Все настройки" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="-12,16,0,-6"
+                                Tag="card" Click="OnOpenSettings" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

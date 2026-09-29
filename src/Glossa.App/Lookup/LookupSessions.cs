@@ -8,6 +8,7 @@ using Glossa.App.Views;
 using Glossa.Core.Config;
 using Glossa.Core.Games;
 using Glossa.Core.Input;
+using Glossa.Core.Library;
 using Glossa.Core.Logging;
 using Glossa.Core.Lookup;
 using Glossa.Core.Ocr;
@@ -36,6 +37,7 @@ public sealed class LookupSessions
     private readonly ResumeGuardClient _guard;
     private readonly GamepadHub _pad;
     private readonly ILog _log;
+    private readonly Func<IEnumerable<SavedWord>> _saved;
     private readonly PadRepeat _repeat = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly DispatcherTimer _repeatTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
@@ -57,8 +59,9 @@ public sealed class LookupSessions
     }
 
     public LookupSessions(Func<AppSettings> settings, GameRegistry games, ScreenCapture capture, OcrEngine ocr, WordLookup words,
-        LookupController controller, LookupPopup popup, ResumeGuardClient guard, GamepadHub pad, ILog log)
+        LookupController controller, LookupPopup popup, ResumeGuardClient guard, GamepadHub pad, ILog log, Func<IEnumerable<SavedWord>> saved)
     {
+        _saved = saved;
         _settings = settings;
         _games = games;
         _capture = capture;
@@ -101,6 +104,7 @@ public sealed class LookupSessions
                     var session = OpenFrame(game, context, cjk, frame, pad: false, paused: false);
                     var page = await session.Page!;
                     if (_session != session) return;
+                    MarkKnown(session, FrameWords.Build(page, _words.Matcher(cjk)));
                     if (_words.Hit(page, cursor.X, cursor.Y, cjk) is null) return; // nothing under the cursor: click a word
                     await _controller.LookupAsync(frame, cursor.X, cursor.Y, context, sw, page);
                     break;
@@ -144,6 +148,7 @@ public sealed class LookupSessions
             var page = await session.Page!;
             if (_session != session) return;
             session.Words = FrameWords.Build(page, _words.Matcher(cjk));
+            MarkKnown(session, session.Words);
             if (session.Words.Current is { } first)
             {
                 _frame!.Mark(first.Box);
@@ -229,6 +234,26 @@ public sealed class LookupSessions
         _frame.ShowFrame(still, _settings().Popup.HideFromCapture);
         _pad.Steering = pad;
         return session;
+    }
+
+    /// <summary>The words of the still that are already in the dictionary get a frame (Во время поиска: «Отмечать слова из словаря»).</summary>
+    private void MarkKnown(Session session, FrameWords words)
+    {
+        if (!_settings().MarkKnownWords || _frame is null || _session != session) return;
+        try
+        {
+            var known = new KnownWords(_saved());
+            var marks = words.All
+                .Select(w => (w.Box, Pinned: known.Find(w.Text)))
+                .Where(m => m.Pinned is not null)
+                .Select(m => (m.Box, m.Pinned!.Value))
+                .ToList();
+            _frame.ShowKnown(marks);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("known words", ex); // the still works without the marks
+        }
     }
 
     /// <summary>A word clicked on the still, or chosen with A.</summary>

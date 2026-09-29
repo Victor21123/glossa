@@ -32,11 +32,27 @@ public partial class MainWindow : Window
         _library.CollectionDialogRequested += c => OpenCollection(c);
         SettingsPage.Attach(services, _library);
         Closing += (_, _) => SettingsPage.Flush();
+        HomePage.Attach(services, SettingsPage.Model!);
+        HomePage.OpenWords += () => ShowTab(MainTab.Words);
+        HomePage.OpenWord += id =>
+        {
+            if (_library.Items.FirstOrDefault(w => w.Word.Id == id) is { } entry) _library.Selected = entry;
+            ShowTab(MainTab.Words);
+        };
+        HomePage.OpenSettings += key =>
+        {
+            NavSettings.IsChecked = true;
+            SettingsPage.Show(key);
+        };
 
         _library.PropertyChanged += OnLibraryChanged;
         _library.Items.CollectionChanged += (_, _) => UpdateEmpty();
         // The app outlives this window: listen only while it is open.
-        Action reload = () => Dispatcher.Invoke(_library.Reload);
+        Action reload = () => Dispatcher.Invoke(() =>
+        {
+            _library.Reload();
+            if (HomePage.IsVisible) HomePage.Refresh();
+        });
         services.LibraryChanged += reload;
         // A game profile created or renamed: the catalogue names the game by its profile.
         if (services.Games is { } games) games.Changed += reload;
@@ -45,10 +61,15 @@ public partial class MainWindow : Window
             services.LibraryChanged -= reload;
             if (services.Games is { } g) g.Changed -= reload;
             SettingsPage.Detach();
+            HomePage.Detach();
         };
         StateChanged += (_, _) => Frame.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
         SizeChanged += (_, _) => FrameBorder.Height = Math.Clamp(ActualHeight * 0.45, 240, 560);
-        _aiTimer.Tick += (_, _) => UpdateAiStatus();
+        _aiTimer.Tick += (_, _) =>
+        {
+            UpdateAiStatus();
+            if (HomePage.IsVisible) HomePage.RefreshAi();
+        };
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible) { UpdateAiStatus(); _aiTimer.Start(); }
@@ -63,26 +84,36 @@ public partial class MainWindow : Window
     public void ShowGameWords(string game)
     {
         _library.ShowGame(game);
-        ShowTab(0);
+        ShowTab(MainTab.Words);
     }
 
-    /// <summary>0 — «Словарь», 1 — Настройки → Справочники, 2 — настройки (последний открытый раздел).</summary>
-    public void ShowTab(int index)
+    /// <summary>Главная, Словарь, Настройки → Справочники, or Настройки at the section last open.</summary>
+    public void ShowTab(MainTab tab)
     {
-        if (index == 0) NavWords.IsChecked = true;
-        else
+        switch (tab)
         {
-            NavSettings.IsChecked = true;
-            SettingsPage.Show(index == 1 ? "sources" : SettingsPage.Current);
+            case MainTab.Home:
+                NavHome.IsChecked = true;
+                break;
+            case MainTab.Words:
+                NavWords.IsChecked = true;
+                break;
+            default:
+                NavSettings.IsChecked = true;
+                SettingsPage.Show(tab == MainTab.Sources ? "sources" : SettingsPage.Current);
+                break;
         }
     }
 
     private void OnNav(object sender, RoutedEventArgs e)
     {
-        if (WordsPage is null) return;
+        if (WordsPage is null || HomePage is null) return;
+        var home = NavHome.IsChecked == true;
         var words = NavWords.IsChecked == true;
+        HomePage.Visibility = home ? Visibility.Visible : Visibility.Collapsed;
         WordsPage.Visibility = words ? Visibility.Visible : Visibility.Collapsed;
-        SettingsPage.Visibility = words ? Visibility.Collapsed : Visibility.Visible;
+        SettingsPage.Visibility = home || words ? Visibility.Collapsed : Visibility.Visible;
+        if (home) HomePage.Refresh();
     }
 
     // ---- the selected word ----
@@ -540,3 +571,6 @@ public partial class MainWindow : Window
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
     }
 }
+
+/// <summary>The main window's pages.</summary>
+public enum MainTab { Home, Words, Sources, Settings }

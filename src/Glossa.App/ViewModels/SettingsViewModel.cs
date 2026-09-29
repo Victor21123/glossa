@@ -142,6 +142,9 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>none, frame or pause: what a lookup does to the game (a game's profile may choose otherwise).</summary>
     public string DuringLookup { get => S.DuringLookup; set => Set(() => S.DuringLookup = value); }
 
+    /// <summary>Frames on the still frame around words already in the dictionary.</summary>
+    public bool MarkKnownWords { get => S.MarkKnownWords; set => Set(() => S.MarkKnownWords = value); }
+
     // ---- ИИ и модели ----
 
     /// <summary>gemma26b, gemma12b, light or custom.</summary>
@@ -294,6 +297,9 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public bool CloseToTray { get => S.CloseToTray; set => Set(() => S.CloseToTray = value); }
+
+    /// <summary>Statistics on «Главная».</summary>
+    public bool HomeStats { get => S.HomeStats; set => Set(() => S.HomeStats = value); }
 
     public bool DebugOcrDumps { get => S.DebugOcrDumps; set => Set(() => S.DebugOcrDumps = value); }
 

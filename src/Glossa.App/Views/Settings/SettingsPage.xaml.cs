@@ -27,6 +27,9 @@ public partial class SettingsPage : UserControl
 
     public string Current { get; private set; } = "card";
 
+    /// <summary>The settings model, shared with «Главная» so a choice made there shows here.</summary>
+    public SettingsViewModel? Model => _model;
+
     /// <summary>The «Словарь» model comes along: exports in «Словарь и Anki» take what is filtered there.</summary>
     public void Attach(AppServices services, LibraryViewModel library)
     {

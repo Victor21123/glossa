@@ -98,6 +98,8 @@ internal static class CardSnapshots
         {
             theme.Apply(themeName);
             var window = new MainWindow(services);
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}.png"));
+            window.ShowTab(MainTab.Words);
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}.png"));
             var vm = (ViewModels.LibraryViewModel)window.WordsPage.DataContext;
             vm.Selected = vm.Items.First(i => i.Headword == "reconsider");
@@ -112,7 +114,7 @@ internal static class CardSnapshots
             window.CloseModal();
             foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "speech", "games", "load", "app" })
             {
-                window.ShowTab(2);
+                window.ShowTab(MainTab.Settings);
                 window.SettingsPage.Show(section);
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-{section}.png"));
             }
@@ -125,7 +127,7 @@ internal static class CardSnapshots
                 Custom = new CustomCard { Width = 480, Transparency = 25, Hidden = ["pos", "forms", "synonyms", "footer"] },
             };
             var custom = new MainWindow(services);
-            custom.ShowTab(2);
+            custom.ShowTab(MainTab.Settings);
             custom.SettingsPage.Show("card");
             SaveWindow(custom, Path.Combine(folder, $"settings-{themeName}-card-custom.png"));
             custom.Close();
@@ -137,6 +139,10 @@ internal static class CardSnapshots
             {
                 var still = new FrozenFrame();
                 still.Preview(walk.Picture, walk.Word, Lookup.LookupSessions.PadHint);
+                // The sample words that are on this frame get their frames, as over a game.
+                var known = new Glossa.Core.Library.KnownWords(library.List());
+                still.ShowKnown(walk.Words.All.Select(w => (w.Box, Pinned: known.Find(w.Text)))
+                    .Where(m => m.Pinned is not null).Select(m => (m.Box, m.Pinned!.Value)).ToList());
                 SaveWindow(still, Path.Combine(folder, $"still-{themeName}.png"), walk.Picture.PixelWidth, walk.Picture.PixelHeight);
                 still.Close();
             }
@@ -186,13 +192,13 @@ internal static class CardSnapshots
             "характер «колючая снаружи, нежная внутри»", "HuniePop 2", now.AddDays(-1).AddHours(-2), register: "slang"), true);
     }
 
-    private static (BitmapSource Picture, PixelRect Word)? _walk;
+    private static (BitmapSource Picture, PixelRect Word, Glossa.Core.Text.FrameWords Words)? _walk;
 
     /// <summary>
     /// Recognizes the scene with the real OCR models and steps over its words as the D-pad would; the words visited go to
     /// still.txt beside the pictures. Null without the models.
     /// </summary>
-    private static (BitmapSource Picture, PixelRect Word)? StillWords(string jpeg, string folder)
+    private static (BitmapSource Picture, PixelRect Word, Glossa.Core.Text.FrameWords Words)? StillWords(string jpeg, string folder)
     {
         if (_walk is not null) return _walk;
         const string models = @"D:\GlossaData\models\ocr";
@@ -215,7 +221,7 @@ internal static class CardSnapshots
         for (var i = 0; i < 2 && words.Move(Glossa.Core.Input.PadButtons.DPadRight); i++) visited.Add(words.Current.Text);
         File.WriteAllText(Path.Combine(folder, "still.txt"),
             $"{page.Lines.Count} lines in {page.Elapsed.TotalMilliseconds:F0} ms; words visited: {string.Join(" → ", visited)}; box {words.Current.Box}");
-        return _walk = (picture, words.Current.Box);
+        return _walk = (picture, words.Current.Box, words);
     }
 
     /// <summary>Sample profiles for Игры и профили: the games of the sample words, one of them behind an anti-cheat.</summary>

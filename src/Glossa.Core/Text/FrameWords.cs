@@ -28,6 +28,9 @@ public sealed class FrameWords
     public int LineCount => _lines.Count;
     public FrameWord? Current => _lines.Count == 0 ? null : _lines[LineIndex][Index];
 
+    /// <summary>Every word on the frame, line by line.</summary>
+    public IEnumerable<FrameWord> All => _lines.SelectMany(l => l);
+
     /// <summary>
     /// The words of a page, starting at the first word of the lowest block with real text in it: a dialogue box, the
     /// newest lines of a log or the answers to choose from sit low, while short HUD labels («Menu», «Day 3») do not count.

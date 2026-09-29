@@ -78,6 +78,11 @@
                             </ListBox>
                             <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap"
                                        Text="Остановить кадр: карточка на снимке экрана, игра идёт дальше; щёлкни другое слово на снимке. Пауза игры: процесс игры замирает, пока открыта карточка, — для игр на время. В играх с античитом вместо паузы — стоп-кадр. Игра проснётся сама, если что-то пойдёт не так: через 5 минут или по Ctrl+Alt+R. Для отдельной игры — в «Играх и профилях»." />
+                            <DockPanel Margin="0,14,0,0">
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding MarkKnownWords}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" TextWrapping="Wrap"
+                                           Text="Отмечать на стоп-кадре слова из словаря: тонкой пунктирной рамкой, а «Не могу запомнить» — жирной янтарной." />
+                            </DockPanel>
                         </StackPanel>
                     </HeaderedContentControl>
 

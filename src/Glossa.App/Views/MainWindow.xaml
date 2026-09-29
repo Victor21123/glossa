@@ -8,7 +8,7 @@
         Title="Glossa" Width="1600" Height="1000" MinWidth="1100" MinHeight="660" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Page}" Foreground="{DynamicResource Ink}" FontFamily="{DynamicResource UiFont}" FontSize="14"
         TextOptions.TextFormattingMode="Display" UseLayoutRounding="True" PreviewKeyDown="OnPreviewKeyDown">
-    <!-- Main window after the approved mockups (canvas «Главное окно»): its own title bar, «Словарь» first. -->
+    <!-- Main window after the approved mockups (canvas «Главное окно»): its own title bar; opens on «Главная» (2026-09-29). -->
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="56" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
@@ -184,15 +184,19 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Glossa" FontSize="18" FontWeight="ExtraBold" VerticalAlignment="Center" Margin="24,0,40,0" />
-                        <RadioButton x:Name="NavWords" Style="{StaticResource NavTab}" Content="Словарь" GroupName="Nav" IsChecked="True" Checked="OnNav" />
+                        <RadioButton x:Name="NavHome" Style="{StaticResource NavTab}" Content="Главная" GroupName="Nav" IsChecked="True" Checked="OnNav" />
+                        <RadioButton x:Name="NavWords" Style="{StaticResource NavTab}" Content="Словарь" GroupName="Nav" Checked="OnNav" />
                         <RadioButton x:Name="NavSettings" Style="{StaticResource NavTab}" Content="Настройки" GroupName="Nav" Checked="OnNav" />
                     </StackPanel>
                 </DockPanel>
             </Border>
 
             <Grid>
+                <!-- ============ Главная ============ -->
+                <v:HomePage x:Name="HomePage" />
+
                 <!-- ============ Словарь ============ -->
-                <Grid x:Name="WordsPage">
+                <Grid x:Name="WordsPage" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="264" />
                         <ColumnDefinition Width="540" />

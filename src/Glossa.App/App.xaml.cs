@@ -209,7 +209,7 @@ public partial class App : Application
         _guard = new Games.ResumeGuardClient(log);
         _input = new InputThread(log);
         _pad = new GamepadHub(_input, () => _settings, Dispatcher);
-        _sessions = new LookupSessions(() => _settings, _games, _capture, _ocr, words, _controller, _popup, _guard, _pad, log);
+        _sessions = new LookupSessions(() => _settings, _games, _capture, _ocr, words, _controller, _popup, _guard, _pad, log, () => _library!.List());
         _pad.ComboPressed += _sessions.PadCombo;
         _pad.MousePressed += _sessions.Pointer;
         _sessions.Notice += text => _tray?.ShowBalloonTip(6000, "Glossa", text, WinForms.ToolTipIcon.Warning);
@@ -245,7 +245,7 @@ public partial class App : Application
         _ = Task.Run(() => Warm(log));
 
         // Started by hand: show the window. Autostart passes --tray and stays quiet.
-        if (!e.Args.Contains("--tray", StringComparer.OrdinalIgnoreCase)) ShowMain(0);
+        if (!e.Args.Contains("--tray", StringComparer.OrdinalIgnoreCase)) ShowMain();
     }
 
     /// <summary>
@@ -270,7 +270,7 @@ public partial class App : Application
             while (true)
             {
                 var which = WaitHandle.WaitAny(signals);
-                try { Dispatcher.Invoke(() => { if (which == 0) ShowMain(0); else Shutdown(); }); }
+                try { Dispatcher.Invoke(() => { if (which == 0) ShowMain(); else Shutdown(); }); }
                 catch (TaskCanceledException) { return; }
                 if (which == 1) return;
             }
@@ -347,7 +347,7 @@ public partial class App : Application
         {
             case HotkeyLookup: _sessions?.Pointer(_settings.Hotkey); break;
             case HotkeyClose: _sessions?.Escape(); break;
-            case HotkeyWindow: ShowMain(0); break;
+            case HotkeyWindow: ShowMain(); break;
             case HotkeySave: _controller?.SaveCurrent(); break;
             case HotkeySpeak: _controller?.Speak(); break;
             case HotkeyDetails: _controller?.OnDetails(); break;
@@ -355,8 +355,8 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Opens (or brings back) the main window on the given tab: 0 words, 1 dictionaries, 2 settings.</summary>
-    private void ShowMain(int tab = 0)
+    /// <summary>Opens (or brings back) the main window on the given page, «Главная» unless another is asked for.</summary>
+    private void ShowMain(MainTab tab = MainTab.Home)
     {
         if (_main is null)
         {
@@ -399,7 +399,7 @@ public partial class App : Application
         {
             if (e.Button == WinForms.MouseButtons.Right) ShowTrayMenu();
         };
-        tray.DoubleClick += (_, _) => ShowMain(0);
+        tray.DoubleClick += (_, _) => ShowMain();
         return tray;
     }
 
@@ -408,8 +408,8 @@ public partial class App : Application
         if (_trayMenu is null)
         {
             var menu = _trayMenu = new TrayMenu();
-            menu.OpenRequested += () => ShowMain(0);
-            menu.SettingsRequested += () => ShowMain(2);
+            menu.OpenRequested += () => ShowMain(MainTab.Words); // «Открыть словарь»
+            menu.SettingsRequested += () => ShowMain(MainTab.Settings);
             menu.ExitRequested += Shutdown;
             menu.LookupToggled += SetLookup;
             menu.ModeChanged += mode =>

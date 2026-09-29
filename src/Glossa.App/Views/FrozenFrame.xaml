@@ -9,6 +9,8 @@
          Words are chosen on it with the mouse (a click) or the gamepad (the highlight). -->
     <Grid>
         <Image x:Name="Shot" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+        <!-- Words already in the dictionary: a thin dashed frame; «Не могу запомнить»: a bold amber one. Under the highlight. -->
+        <Canvas x:Name="Known" IsHitTestVisible="False" />
         <Canvas x:Name="Marks" IsHitTestVisible="False">
             <!-- Over a game, not over Glossa: white with a dark halo reads on any scene, whatever the window theme. -->
             <Border x:Name="Highlight" Visibility="Collapsed" BorderThickness="3" CornerRadius="5" BorderBrush="White">
@@ -24,6 +26,8 @@
                 <TextBlock Text="СТОП-КАДР" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource Muted}"
                            VerticalAlignment="Center" Margin="0,0,14,0" />
                 <TextBlock x:Name="HintText" Foreground="{DynamicResource Ink}" VerticalAlignment="Center" />
+                <TextBlock x:Name="KnownText" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="14,0,0,0"
+                           Visibility="Collapsed" />
             </StackPanel>
         </Border>
     </Grid>

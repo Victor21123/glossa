@@ -22,6 +22,9 @@ public sealed class AppSettings
     /// <summary>What happens to the game during a lookup: none, frame (a still of the screen) or pause (its process sleeps).</summary>
     public string DuringLookup { get; set; } = "none";
 
+    /// <summary>On a still frame, words already in the dictionary get a thin frame, «Не могу запомнить» ones a bold one.</summary>
+    public bool MarkKnownWords { get; set; } = true;
+
     /// <summary>Настройки → Игры и профили: the programs words were looked up in, each created at its first lookup.</summary>
     public List<GameProfile> Games { get; set; } = [];
 
@@ -60,6 +63,9 @@ public sealed class AppSettings
 
     /// <summary>The window's close button hides Glossa to the tray (true) or quits it.</summary>
     public bool CloseToTray { get; set; } = true;
+
+    /// <summary>«Главная» shows the statistics (days in a row, lookups by day, languages, games).</summary>
+    public bool HomeStats { get; set; } = true;
 
     /// <summary>Window theme: system (follow Windows), dark, light or disco.</summary>
     public string Theme { get; set; } = "system";
