@@ -39,6 +39,17 @@ public partial class MainWindow : Window
             if (_library.Items.FirstOrDefault(w => w.Word.Id == id) is { } entry) _library.Selected = entry;
             ShowTab(MainTab.Words);
         };
+        HomePage.OpenSettings += section =>
+        {
+            NavSettings.IsChecked = true;
+            SettingsPage.Show(section);
+        };
+        PropertyChangedEventHandler purpose = (_, e) =>
+        {
+            if (e.PropertyName is nameof(SettingsViewModel.Purpose) or "") ApplyPurpose();
+        };
+        SettingsPage.Model!.PropertyChanged += purpose;
+        ApplyPurpose();
 
         _library.PropertyChanged += OnLibraryChanged;
         _library.Items.CollectionChanged += (_, _) => UpdateEmpty();
@@ -55,6 +66,7 @@ public partial class MainWindow : Window
         {
             services.LibraryChanged -= reload;
             if (services.Games is { } g) g.Changed -= reload;
+            SettingsPage.Model!.PropertyChanged -= purpose;
             SettingsPage.Detach();
             HomePage.Detach();
         };
@@ -78,12 +90,25 @@ public partial class MainWindow : Window
         ShowTab(MainTab.Words);
     }
 
-    /// <summary>Главная, Словарь, Настройки → Справочники, or Настройки at the section last open.</summary>
+    /// <summary>«Только перевод»: Glossa saves nothing, so the dictionary is out of sight.</summary>
+    private bool TranslateOnly => _services.Settings.Purpose == "translate";
+
+    /// <summary>«Только перевод» hides «Словарь» (and «Учёба» with its stage); the window stays on «Главная».</summary>
+    private void ApplyPurpose()
+    {
+        NavWords.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
+        if (TranslateOnly && NavWords.IsChecked == true) NavHome.IsChecked = true;
+    }
+
+    /// <summary>Главная, Словарь (Главная in «Только перевод»), Настройки → Справочники, or Настройки at the section last open.</summary>
     public void ShowTab(MainTab tab)
     {
         switch (tab)
         {
             case MainTab.Home:
+                NavHome.IsChecked = true;
+                break;
+            case MainTab.Words when TranslateOnly:
                 NavHome.IsChecked = true;
                 break;
             case MainTab.Words:
@@ -191,9 +216,10 @@ public partial class MainWindow : Window
     private void UpdateEmpty() =>
         EmptyList.Visibility = _library.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>"ИИ: gemma26b выгружена · свободно 13,1 ГБ видеопамяти".</summary>
+    /// <summary>"ИИ: Gemma 4 26B выгружена · свободно 13,1 ГБ видеопамяти"; the same on «Главная» in more detail.</summary>
     private void UpdateAiStatus()
     {
+        if (HomePage.IsVisible) HomePage.RefreshAi();
         var s = _services.Settings.LocalAi;
         var loaded = _services.Ai.Current?.Dictionary is not null;
         var state = s.Mode == "off" ? "выключена" : loaded ? "готова"
@@ -201,7 +227,8 @@ public partial class MainWindow : Window
             : !s.HasRuntime() ? "без движка llama.cpp" : "выгружена";
         var free = AiRouter.FreeVramMb();
         var vram = free >= 0 ? string.Format(CultureInfo.GetCultureInfo("ru-RU"), " · свободно {0:0.0} ГБ видеопамяти", free / 1024.0) : "";
-        AiStatus.Text = $"ИИ: {s.Profile} {state}{vram}";
+        var title = Settings.ProfileTile.Title(s.Profile);
+        AiStatus.Text = $"ИИ: {char.ToUpper(title[0])}{title[1..]} {state}{vram}";
         AiDot.SetResourceReference(Shape.FillProperty, loaded ? "Good" : "Page");
         AiDot.SetResourceReference(Shape.StrokeProperty, loaded ? "Good" : "Muted");
     }
@@ -245,7 +272,7 @@ public partial class MainWindow : Window
             _library.CancelEdit();
             e.Handled = true;
         }
-        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control && !TranslateOnly)
         {
             NavWords.IsChecked = true;
             SearchBox.Focus();

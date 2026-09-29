@@ -3,10 +3,13 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Shapes;
+using Glossa.App.Ai;
 using Glossa.App.Theme;
 using Glossa.App.ViewModels;
 using Glossa.Core.Games;
 using Glossa.Core.Library;
+using Glossa.Core.Llm;
 
 namespace Glossa.App.Views;
 
@@ -25,7 +28,10 @@ public partial class HomePage : UserControl
     /// <summary>A recent word clicked: the dictionary opens on it (its id).</summary>
     public event Action<string>? OpenWord;
 
-    /// <summary>Follows «Статистика на главной» through the settings model Настройки uses.</summary>
+    /// <summary>«Настройки ИИ», «Сменить режим»: a section of Настройки (its key).</summary>
+    public event Action<string>? OpenSettings;
+
+    /// <summary>Follows the mode and «Статистика на главной» through the settings model Настройки uses.</summary>
     public void Attach(AppServices services, SettingsViewModel model)
     {
         _services = services;
@@ -42,22 +48,35 @@ public partial class HomePage : UserControl
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(SettingsViewModel.HomeStats) or "") Refresh();
+        if (e.PropertyName is nameof(SettingsViewModel.HomeStats) or nameof(SettingsViewModel.Purpose)
+            or nameof(SettingsViewModel.TranslateMode) or "") Refresh();
     }
 
-    /// <summary>Everything from the dictionary as it is now (the page is shown, a word was saved).</summary>
+    /// <summary>Everything from the dictionary and the AI as it is now (the page is shown, a word was saved).</summary>
     public void Refresh()
     {
         if (_services is not { } services) return;
         var now = DateTime.UtcNow;
         var today = LibraryStats.Day(now).ToDateTime(TimeOnly.MinValue).ToString("dddd, d MMMM", Russian);
         Today.Text = char.ToUpper(today[0], Russian) + today[1..];
+        RefreshAi();
+
+        // «Только перевод» hides the dictionary and study, and with them everything counted from the dictionary.
+        var translate = services.Settings.Purpose == "translate";
+        WordsPanel.Visibility = Shown(!translate);
+        TranslatePanel.Visibility = Shown(translate);
+        Lower.Visibility = Shown(!translate);
+        if (translate)
+        {
+            Stats.Visibility = Visibility.Collapsed;
+            TranslateCall.Text = $"{Settings.KeyCaps.Display(services.Settings.Hotkey)} · {TranslateModeName(services.Settings.TranslateMode)}";
+            return;
+        }
 
         var words = services.Library.List();
         var stats = LibraryStats.Of(words, now, (exe, title) => GameProfiles.DisplayName(services.Settings.Games, exe, title));
         FillWords(words, stats);
-        var shown = Shown(services.Settings.HomeStats && words.Count > 0);
-        Stats.Visibility = HeatPanel.Visibility = LanguagesPanel.Visibility = shown;
+        Stats.Visibility = HeatPanel.Visibility = Shown(services.Settings.HomeStats && words.Count > 0);
         Streak.Text = Days(stats.Streak);
         Best.Text = Days(stats.BestStreak);
         Lookups.Text = stats.Lookups.ToString("N0", Russian);
@@ -65,6 +84,45 @@ public partial class HomePage : UserControl
         FillHeat(stats, LibraryStats.Day(now));
         Bars(Languages, stats.Languages.Select(l => (LanguageName(l.Language), l.Count)).ToList());
     }
+
+    /// <summary>The AI's state and what it runs on (also every few seconds while the window is open).</summary>
+    public void RefreshAi()
+    {
+        if (_services is not { } services || DataContext is not SettingsViewModel model) return;
+        var s = services.Settings;
+        var ai = s.LocalAi;
+        var loaded = services.Ai.Current?.Dictionary is not null;
+        AiState.Text = s.DictionaryEngine != "local" ? $"Карточку делает «{s.DictionaryEngine}»"
+            : ai.Mode == "off" ? "Выключен - только справочники"
+            : loaded ? "Загружена и готова"
+            : !ai.HasModel(ai.Profile) ? $"Модель {Settings.ProfileTile.Absent(ai.Profile)}"
+            : !ai.HasRuntime() ? "Движок не скачан"
+            : "Выгружена - загрузится при поиске";
+        string? missing = s.DictionaryEngine != "local" || ai.Mode == "off" ? null
+            : !ai.HasModel(ai.Profile) ? (ai.Profile == "custom" ? "Выбери файл модели в «Настройках ИИ»." : "Скачай модель в «Настройках ИИ».")
+            : !ai.HasRuntime() ? "Скачай движок в «Настройках ИИ»."
+            : null;
+        AiMissing.Content = missing;
+        AiMissing.Visibility = Shown(missing is not null);
+        AiDot.SetResourceReference(Shape.FillProperty, loaded ? "Good" : "Surface");
+        AiDot.SetResourceReference(Shape.StrokeProperty, loaded ? "Good" : "Muted");
+
+        var title = Settings.ProfileTile.Title(ai.Profile);
+        AiModel.Text = ai.Profile == "custom" && ai.CustomModel.Length > 0 ? System.IO.Path.GetFileName(ai.CustomModel)
+            : char.ToUpper(title[0], Russian) + title[1..];
+        AiModel.ToolTip = ai.SingleModel(ai.Profile);
+        AiMode.Text = ai.Mode switch { "lowvram" => "Минимум видеопамяти", "off" => "Выключен", _ => "Авто" };
+        var runtime = RuntimeCatalog.For(model.Runtime);
+        AiEngine.Text = ai.LlamaServerPath.Length > 0 ? "свой llama-server"
+            : $"llama.cpp {runtime?.Release} · {(runtime?.Id == "vulkan" ? "Vulkan" : "CUDA")}{(ai.HasRuntime() ? "" : ", не скачан")}";
+        var free = AiRouter.FreeVramMb();
+        AiVram.Text = free >= 0 ? string.Format(Russian, "свободно {0:0.0} ГБ", free / 1024.0) : "нет данных";
+    }
+
+    private static string TranslateModeName(string mode) => mode switch
+    {
+        "screen" => "Весь экран", "live" => "Живой перевод", _ => "Реплика",
+    };
 
     private void FillWords(IReadOnlyList<SavedWord> words, LibraryStats stats)
     {
@@ -163,4 +221,9 @@ public partial class HomePage : UserControl
     private static Visibility Shown(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnOpenWords(object sender, RoutedEventArgs e) => OpenWords?.Invoke();
+
+    private void OnOpenSettings(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string section }) OpenSettings?.Invoke(section);
+    }
 }

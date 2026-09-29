@@ -408,7 +408,7 @@ public partial class App : Application
         if (_trayMenu is null)
         {
             var menu = _trayMenu = new TrayMenu();
-            menu.OpenRequested += () => ShowMain(MainTab.Words); // «Открыть словарь»
+            menu.OpenRequested += () => ShowMain(MainTab.Words); // «Открыть словарь» («Главная» in «Только перевод»)
             menu.SettingsRequested += () => ShowMain(MainTab.Settings);
             menu.ExitRequested += Shutdown;
             menu.LookupToggled += SetLookup;
@@ -436,7 +436,7 @@ public partial class App : Application
             : !s.LocalAi.HasRuntime() ? "ИИ: движок llama.cpp не скачан"
             : "ИИ выгружена · загрузится при поиске";
         var mode = s.LocalAi.Mode;
-        return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn);
+        return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn, s.Purpose == "translate");
     }
 
     /// <summary>«Поиск по Alt+Q» in the tray: hands the combination back to a game that needs it, until switched on again.</summary>

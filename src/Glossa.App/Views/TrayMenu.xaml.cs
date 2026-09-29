@@ -8,7 +8,8 @@ using Glossa.App.Interop;
 namespace Glossa.App.Views;
 
 /// <summary>What the tray menu shows when it opens.</summary>
-public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn);
+/// <remarks><paramref name="TranslateOnly"/>: «Только перевод», where the dictionary is hidden and the item opens «Главная».</remarks>
+public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn, bool TranslateOnly = false);
 
 /// <summary>The tray icon's menu, drawn like the rest of Glossa; it closes as soon as it loses focus.</summary>
 public partial class TrayMenu : Window
@@ -59,6 +60,7 @@ public partial class TrayMenu : Window
     internal void Fill(TrayState state)
     {
         StateText.Text = state.Status;
+        OpenItem.Content = state.TranslateOnly ? "Открыть Glossa" : "Открыть словарь";
         StateDot.SetResourceReference(Shape.FillProperty, state.AiLoaded ? "Good" : "Surface");
         StateDot.SetResourceReference(Shape.StrokeProperty, state.AiLoaded ? "Good" : "Muted");
         ModeAuto.IsChecked = state.Mode == "auto";

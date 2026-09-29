@@ -117,6 +117,7 @@ internal static class CardSnapshots
             theme.Apply(themeName);
             var window = new MainWindow(services);
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}.png"));
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min.png"), 1100, 700); // the smallest window
             window.ShowTab(MainTab.Words);
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}.png"));
             var vm = (ViewModels.LibraryViewModel)window.WordsPage.DataContext;
