@@ -371,8 +371,7 @@ public sealed class DictionaryPackWriter : IDisposable
         _key.Dispose();
         _link.Dispose();
         _db.Close();
-        _db.Dispose();
-        SqliteConnection.ClearAllPools();
+        _db.Dispose(); // unpooled: the file is released here
 
         File.Move(compact, _path, overwrite: true);
         File.Delete(_tmp);
@@ -397,7 +396,6 @@ public sealed class DictionaryPackWriter : IDisposable
             _key.Dispose();
             _link.Dispose();
             _db.Dispose();
-            SqliteConnection.ClearAllPools();
             if (File.Exists(_tmp)) File.Delete(_tmp);
             if (File.Exists(_path + ".compact")) File.Delete(_path + ".compact");
         }

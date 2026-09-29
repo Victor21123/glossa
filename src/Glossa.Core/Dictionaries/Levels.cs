@@ -163,7 +163,6 @@ public static class LevelsBuilder
             index.CommandText = $"CREATE INDEX levels_term ON levels(lang, term, rank); ANALYZE; PRAGMA user_version = {Version};";
             index.ExecuteNonQuery();
         }
-        SqliteConnection.ClearAllPools();
         File.Move(tmp, path, overwrite: true);
     }
 

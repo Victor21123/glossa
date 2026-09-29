@@ -204,8 +204,7 @@ public sealed class DictionaryService : IDisposable
             _enabled.Remove(pack);
         }
         var path = pack.Info.Path;
-        pack.Dispose();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        pack.Dispose(); // unpooled: the file can be replaced right away
         return path;
     }
 

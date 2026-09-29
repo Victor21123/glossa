@@ -12,7 +12,6 @@ public sealed class ReviewStoreTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
         foreach (var f in Directory.GetFiles(Path.GetDirectoryName(_path)!, Path.GetFileName(_path) + "*")) File.Delete(f);
     }
 
@@ -77,7 +76,7 @@ public sealed class ReviewStoreTests : IDisposable
             id = store.Record(Word("tsundere"), newLookup: true);
             store.SetPinned(id, true);
         }
-        using (var db = new SqliteConnection($"Data Source={_path}"))
+        using (var db = new SqliteConnection($"Data Source={_path};Pooling=False"))
         {
             db.Open();
             using var cmd = db.CreateCommand();
@@ -87,7 +86,6 @@ public sealed class ReviewStoreTests : IDisposable
                 """;
             cmd.ExecuteNonQuery();
         }
-        SqliteConnection.ClearAllPools();
 
         using var migrated = new LibraryStore(_path);
         Assert.True(File.Exists(_path + ".v5.bak"));

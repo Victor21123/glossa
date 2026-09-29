@@ -10,7 +10,6 @@ public sealed class LibraryStoreTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
         foreach (var f in new[] { _path, _path + "-wal", _path + "-shm", _path + ".v2.bak" })
             if (File.Exists(f)) File.Delete(f);
     }
@@ -103,7 +102,7 @@ public sealed class LibraryStoreTests : IDisposable
     public void Older_duplicates_merge_into_the_oldest_entry_keeping_its_anki_identity()
     {
         // A library written before sentences were kept per word: one row per word and sentence.
-        using (var db = new SqliteConnection($"Data Source={_path}"))
+        using (var db = new SqliteConnection($"Data Source={_path};Pooling=False"))
         {
             db.Open();
             using var cmd = db.CreateCommand();
@@ -123,7 +122,6 @@ public sealed class LibraryStoreTests : IDisposable
                 """;
             cmd.ExecuteNonQuery();
         }
-        SqliteConnection.ClearAllPools();
 
         using var store = new LibraryStore(_path);
         var word = Assert.Single(store.List());

@@ -10,8 +10,7 @@ public sealed class CollectionTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        foreach (var f in new[] { _path, _path + "-wal", _path + "-shm" })
+        foreach (var f in new[] { _path, _path + "-wal", _path + "-shm", _path + ".v6.bak" })
             if (File.Exists(f)) File.Delete(f);
     }
 
@@ -81,20 +80,17 @@ public sealed class CollectionTests : IDisposable
             store.Record(Word("呵护", lang: "zh", level: dash), newLookup: true);
             store.CreateCollection("HSK 7-9", new SmartFilter { Level = dash });
         }
-        using (var db = new SqliteConnection($"Data Source={_path}"))
+        using (var db = new SqliteConnection($"Data Source={_path};Pooling=False"))
         {
             db.Open();
             using var cmd = db.CreateCommand();
             cmd.CommandText = "PRAGMA user_version = 6";
             cmd.ExecuteNonQuery();
         }
-        SqliteConnection.ClearAllPools();
 
         using var migrated = new LibraryStore(_path);
         Assert.Equal("HSK 7-9", migrated.List().Single().Level);
         Assert.Equal("HSK 7-9", migrated.Collections().Single().Filter!.Level);
-        SqliteConnection.ClearAllPools();
-        File.Delete(_path + ".v6.bak");
     }
 
     [Fact]

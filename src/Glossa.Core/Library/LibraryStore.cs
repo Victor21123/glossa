@@ -125,7 +125,9 @@ public sealed partial class LibraryStore : IDisposable
     {
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
         _path = dbPath;
-        _db = new SqliteConnection($"Data Source={dbPath}");
+        // One connection for the store's whole life: a pool adds nothing, and without one Dispose releases the file
+        // (no process-wide SqliteConnection.ClearAllPools, which races with other threads opening pooled connections).
+        _db = new SqliteConnection($"Data Source={dbPath};Pooling=False");
         _db.Open();
         Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;");
         Migrate();
