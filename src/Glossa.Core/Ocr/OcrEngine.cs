@@ -6,18 +6,25 @@ using SkiaSharp;
 
 namespace Glossa.Core.Ocr;
 
-/// <summary>Which recognizer to run. PP-OCRv5 CH reads English, Japanese and Chinese; Russian needs ESLAV.</summary>
+/// <summary>Which recognizer to run. Russian needs PP-OCRv5 ESLAV; the rest are for measuring.</summary>
 public enum OcrModelFamily
 {
+    /// <summary>
+    /// English, Japanese and Chinese: lines found by the fast PP-OCRv5 mobile detector and read by the PP-OCRv6 medium
+    /// recognizer (v5 mobile when its file is not there). Sets of 2026-09-29: 30 of 32 hard lines against v5's 24,
+    /// letter errors 1.4% against 6.6%, about 60 ms more per lookup.
+    /// </summary>
     CjkLatin,
     Cyrillic,
+
+    /// <summary>Measuring: PP-OCRv5 mobile alone, the reader before 2026-09-29.</summary>
+    V5Mobile,
+
+    /// <summary>Measuring: PP-OCRv6 small pair.</summary>
     V6Multi,
 
-    /// <summary>PP-OCRv6 medium: the larger v6 pair (det 59 MB, rec 73 MB), for measuring against small.</summary>
+    /// <summary>Measuring: PP-OCRv6 medium pair (det 59 MB, rec 73 MB).</summary>
     V6Medium,
-
-    /// <summary>Measuring: lines found by the fast v5 detector, read by the v6 medium recognizer.</summary>
-    V5DetV6MediumRec,
 
     /// <summary>Measuring: lines found by the v6 small detector, read by the v6 medium recognizer.</summary>
     V6SmallDetMediumRec,
@@ -241,18 +248,19 @@ public sealed class OcrEngine : IDisposable
         var v5 = Path.Combine(_modelsDir, "v5");
         var v6 = Path.Combine(_modelsDir, "v6");
         var cls = Path.Combine(v5, "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx");
+        // v6 medium reads with the same 18 708 characters as small (checked 2026-09-29), so it uses small's list.
+        var v6Keys = Path.Combine(v6, "ppocrv6_small_dict.txt");
+        var v6MediumRec = Path.Combine(v6, "PP-OCRv6_rec_medium.onnx");
+        var v5Det = Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx");
         var (det, rec, keys) = family switch
         {
+            OcrModelFamily.CjkLatin when File.Exists(v6MediumRec) && File.Exists(v6Keys) => (v5Det, v6MediumRec, v6Keys),
             OcrModelFamily.Cyrillic => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
                 Path.Combine(v5, "eslav_PP-OCRv5_rec_mobile.onnx"), Path.Combine(v5, "ppocrv5_eslav_dict.txt")),
             OcrModelFamily.V6Multi => (Path.Combine(v6, "PP-OCRv6_det_small.onnx"),
                 Path.Combine(v6, "PP-OCRv6_rec_small.onnx"), Path.Combine(v6, "ppocrv6_small_dict.txt")),
-            OcrModelFamily.V6Medium => (Path.Combine(v6, "PP-OCRv6_det_medium.onnx"),
-                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
-            OcrModelFamily.V5DetV6MediumRec => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
-                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
-            OcrModelFamily.V6SmallDetMediumRec => (Path.Combine(v6, "PP-OCRv6_det_small.onnx"),
-                Path.Combine(v6, "PP-OCRv6_rec_medium.onnx"), Path.Combine(v6, "ppocrv6_medium_dict.txt")),
+            OcrModelFamily.V6Medium => (Path.Combine(v6, "PP-OCRv6_det_medium.onnx"), v6MediumRec, v6Keys),
+            OcrModelFamily.V6SmallDetMediumRec => (Path.Combine(v6, "PP-OCRv6_det_small.onnx"), v6MediumRec, v6Keys),
             _ => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
                 Path.Combine(v5, "ch_PP-OCRv5_rec_mobile.onnx"), Path.Combine(v5, "ppocrv5_ch_dict.txt")),
         };

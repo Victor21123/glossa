@@ -271,6 +271,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool CacheCards { get => S.Performance.CacheCards; set => Set(() => S.Performance.CacheCards = value); }
 
+    public string VisionReading { get => S.Performance.VisionReading; set => Set(() => S.Performance.VisionReading = value); }
+
     // ---- Языки ----
 
     public string NativeLanguage { get => S.NativeLanguage; set => Set(() => S.NativeLanguage = value); }

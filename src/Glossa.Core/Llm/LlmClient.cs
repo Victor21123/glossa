@@ -37,7 +37,9 @@ public enum StructuredOutputMode
     PromptOnly,
 }
 
-public sealed record LlmMessage(string Role, string Content);
+/// <param name="Image">A PNG shown to the model with the text (llama-server started with a vision file); only the
+/// OpenAI-compatible client sends it.</param>
+public sealed record LlmMessage(string Role, string Content, byte[]? Image = null);
 
 public sealed record LlmRequest(
     IReadOnlyList<LlmMessage> Messages,
@@ -132,7 +134,7 @@ public sealed class OpenAiCompatibleClient(HttpClient http, LlmEndpoint endpoint
     {
         var messages = new JsonArray();
         foreach (var m in r.Messages)
-            messages.Add(new JsonObject { ["role"] = m.Role, ["content"] = m.Content });
+            messages.Add(new JsonObject { ["role"] = m.Role, ["content"] = m.Image is null ? m.Content : WithImage(m) });
 
         var body = new JsonObject
         {
@@ -181,6 +183,17 @@ public sealed class OpenAiCompatibleClient(HttpClient http, LlmEndpoint endpoint
         }
         return body;
     }
+
+    /// <summary>The picture first, then the text: the order the vision chat templates expect.</summary>
+    private static JsonArray WithImage(LlmMessage m) =>
+    [
+        new JsonObject
+        {
+            ["type"] = "image_url",
+            ["image_url"] = new JsonObject { ["url"] = "data:image/png;base64," + Convert.ToBase64String(m.Image!) },
+        },
+        new JsonObject { ["type"] = "text", ["text"] = m.Content },
+    ];
 
     private static string? ExtractDelta(string json)
     {

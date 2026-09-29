@@ -4,13 +4,15 @@ using Glossa.Core.Ocr;
 namespace Glossa.Core.Text;
 
 /// <summary>The word under the cursor together with the text around it.</summary>
+/// <param name="Score">The recognizer's confidence in the word, its least sure letter or piece (1 for a typed word).</param>
 public sealed record WordHit(
     string Word,
     PixelRect Box,
     string Line,
     string Context,
     int ContextOffset,
-    Script Script);
+    Script Script,
+    float Score = 1f);
 
 /// <summary>
 /// Finds word boundaries in text written without spaces (Japanese, Chinese).
@@ -38,15 +40,17 @@ public sealed class HitTester
 
         string word;
         PixelRect box;
+        float score;
         if (Scripts.IsCjk(script) || (script == Script.Other && Scripts.ContainsCjk(line.Text)))
         {
-            (word, box) = CjkWord(line, unitIndex, cjkMatcher);
+            (word, box, score) = CjkWord(line, unitIndex, cjkMatcher);
             if (script == Script.Other) script = Scripts.Dominant(word);
         }
         else
         {
             word = TrimToWord(unit.Text);
             box = unit.Box;
+            score = unit.Score;
             if (word.Length == 0) return null;
         }
 
@@ -57,7 +61,7 @@ public sealed class HitTester
         var offset = text.IndexOf(word, searchFrom, StringComparison.Ordinal);
         var (context, contextOffset) = SentenceAround(text, offset, word.Length);
 
-        return new WordHit(word, box, line.Text, context, contextOffset, script);
+        return new WordHit(word, box, line.Text, context, contextOffset, script, score);
     }
 
     /// <summary>
@@ -104,7 +108,7 @@ public sealed class HitTester
         return best;
     }
 
-    private static (string Word, PixelRect Box) CjkWord(OcrLine line, int unitIndex, ITermMatcher? matcher)
+    private static (string Word, PixelRect Box, float Score) CjkWord(OcrLine line, int unitIndex, ITermMatcher? matcher)
     {
         // CJK lines come back as one unit per character; rebuild the line and map char index <-> unit.
         var sb = new StringBuilder();
@@ -116,15 +120,20 @@ public sealed class HitTester
         }
         var text = sb.ToString();
         var charIndex = unitAt.IndexOf(unitIndex);
-        if (charIndex < 0) return (line.Words[unitIndex].Text, line.Words[unitIndex].Box);
+        if (charIndex < 0) return (line.Words[unitIndex].Text, line.Words[unitIndex].Box, line.Words[unitIndex].Score);
 
         var (start, length) = matcher?.Match(text, charIndex) ?? (charIndex, 1);
         start = Math.Clamp(start, 0, text.Length - 1);
         length = Math.Clamp(length, 1, text.Length - start);
 
         var box = line.Words[unitAt[start]].Box;
-        for (var c = start + 1; c < start + length; c++) box = box.Union(line.Words[unitAt[c]].Box);
-        return (text.Substring(start, length), box);
+        var score = line.Words[unitAt[start]].Score;
+        for (var c = start + 1; c < start + length; c++)
+        {
+            box = box.Union(line.Words[unitAt[c]].Box);
+            score = Math.Min(score, line.Words[unitAt[c]].Score);
+        }
+        return (text.Substring(start, length), box, score);
     }
 
     internal static string TrimToWord(string token)

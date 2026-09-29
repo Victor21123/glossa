@@ -130,7 +130,10 @@ public partial class AiSection : UserControl
     private void OnDownload(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not ProfileTile { Entry: { } entry }) return;
-        _services.ModelDownloads.Start(entry, _services.Settings.LocalAi.ModelsFolderResolved());
+        // A model already there (maybe under one's own name) gets only its sight, beside it.
+        var ai = _services.Settings.LocalAi;
+        var model = ai.HasModel(entry.Profile) ? ai.SingleModel(entry.Profile) : null;
+        _services.ModelDownloads.Start(entry, model is null ? ai.ModelsFolderResolved() : Path.GetDirectoryName(model)!, model);
     }
 
     private void OnCancelDownload(object sender, RoutedEventArgs e)
@@ -302,15 +305,19 @@ public sealed class ProfileTile(string key, string name, string note, string spe
         get
         {
             if (Downloading) return null;
-            if (services.ModelDownloads.ErrorOf(Key) is { } error && !Installed) return error;
-            if (Installed) return null;
+            var lacksVision = services.Settings.LocalAi.LacksVision(Key);
+            if (services.ModelDownloads.ErrorOf(Key) is { } error && (!Installed || lacksVision)) return error;
+            if (Installed)
+                return Entry?.Vision is { } v && lacksVision
+                    ? string.Format(Russian, "нет файла зрения, {0:0.0} ГБ: без него трудные слова не перечитываются", v.Size / 1e9)
+                    : null;
             if (Key == "custom") return File is { Length: > 0 } f ? $"нет файла {Path.GetFileName(f)}" : "выбери GGUF-файл своей модели";
-            return Entry is { } e ? string.Format(Russian, "не скачана, {0:0.0} ГБ, {1}", e.Size / 1e9, e.Page) : "нет файла";
+            return Entry is { } e ? string.Format(Russian, "не скачана, {0:0.0} ГБ, {1}", e.TotalSize / 1e9, e.Page) : "нет файла";
         }
     }
 
     public bool HasMissing => Missing is not null;
-    public bool CanDownload => Entry is not null && !Installed && !Downloading;
+    public bool CanDownload => Entry is not null && (!Installed || services.Settings.LocalAi.LacksVision(Key)) && !Downloading;
     public bool IsCustom => Key == "custom";
 
     public void Refresh() => OnPropertyChanged(string.Empty);

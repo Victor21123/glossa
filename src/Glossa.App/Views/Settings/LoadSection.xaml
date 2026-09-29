@@ -79,6 +79,19 @@
                                        Text="то же слово в той же реплике открывается сразу, без ИИ (до выхода из Glossa)" />
                         </DockPanel>
                     </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Перечитывать трудные слова" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding VisionReading}"
+                                     HorizontalAlignment="Left">
+                                <ListBoxItem Content="Процессор" Tag="cpu" />
+                                <ListBoxItem Content="Видеокарта" Tag="gpu" />
+                                <ListBoxItem Content="Выкл." Tag="off" />
+                            </ListBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="слова нет в словарях (курсор игры поверх букв, необычный шрифт) - Gemma 26B читает кусок экрана заново. Процессор: +3,6 с только к такому слову. Видеокарта: +0,9 с к нему, но часть модели уходит в ОЗУ - каждая карточка на 1,3 с дольше и сильно грузит процессор. Нужен файл зрения (ИИ и модели)" />
+                        </StackPanel>
+                    </HeaderedContentControl>
                 </StackPanel>
             </Border>
 

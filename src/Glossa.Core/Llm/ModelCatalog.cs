@@ -8,22 +8,43 @@ namespace Glossa.Core.Llm;
 /// A local model Glossa downloads by a button (Настройки → ИИ и модели), pinned to the exact file and repository
 /// revision the 62-case comparison graded, so a re-upload upstream can never swap it for an untested one.
 /// </summary>
-public sealed record ModelEntry(string Profile, string Title, string Repo, string Revision, string File, long Size, string Sha256)
+/// <param name="Vision">The model's sight (its vision projector), downloaded with it: the lookup reads a doubtful word
+/// again from the picture.</param>
+public sealed record ModelEntry(string Profile, string Title, string Repo, string Revision, string File, long Size, string Sha256,
+    ModelPart? Vision = null)
 {
     public string Url => $"https://huggingface.co/{Repo}/resolve/{Revision}/{File}";
 
     /// <summary>Where it comes from, as the model tile names it.</summary>
     public string Page => $"huggingface.co/{Repo}";
+
+    /// <summary>Everything the button downloads.</summary>
+    public long TotalSize => Size + (Vision?.Size ?? 0);
+}
+
+/// <summary>
+/// A second file of a model, pinned like the model. <paramref name="LocalName"/> is its name on disk: upstream names
+/// such as "mmproj-F16.gguf" are the same for every model.
+/// </summary>
+public sealed record ModelPart(string Repo, string Revision, string File, long Size, string Sha256, string LocalName)
+{
+    public string Url => $"https://huggingface.co/{Repo}/resolve/{Revision}/{File}";
 }
 
 public static class ModelCatalog
 {
-    /// <summary>The models of the local profiles (test of 2026-09-29: 93%, 94% and 75% of the 62 cases).</summary>
+    /// <summary>
+    /// The models of the local profiles (test of 2026-09-29: 93%, 94% and 75% of the 62 cases). Gemma 26B's sight is
+    /// the original model's projector (unsloth F16): the abliteration changed only the language weights, and with it
+    /// the model read 32 of 32 lines and 7 of 7 covered words on the recognition sets of 2026-09-29.
+    /// </summary>
     public static IReadOnlyList<ModelEntry> Items { get; } =
     [
         new("gemma26b", "Gemma 4 26B A4B (Huihui abliterated, UD-IQ4_XS)", "groxaxo/Huihui-gemma-4-26B-A4B-it-abliterated-GGUF",
             "5d4351c2dfd4a11f36ede3c3eaa0a4595c1d150e", "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", 13418748864,
-            "1cde6460e82c26afb90f63bfcb2511a654c31f90cb987d2558f4f834cfbf6978"),
+            "1cde6460e82c26afb90f63bfcb2511a654c31f90cb987d2558f4f834cfbf6978",
+            new ModelPart("unsloth/gemma-4-26B-A4B-it-GGUF", "c099eb48e663fd284577b04978a94ffccb261841", "mmproj-F16.gguf", 1193058784,
+                "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f", "gemma-4-26B-A4B-mmproj-F16.gguf")),
         new("gemma12b", "Gemma 4 12B heretic (Q4_K_M)", "culturerevolt/gemma-4-12b-heretic-abliterated-GGUF",
             "ca1e60be3a69f79a699ff85c9c3f97a1614e5617", "gemma-4-12b-heretic-Q4_K_M.gguf", 7381382496,
             "6c4067ea0210d2367b2dbdd460d2dd86032a9b6e8dcbe03b83a3ea0a0a16dbee"),
@@ -46,6 +67,9 @@ public sealed class ModelDownloader(HttpClient proxied, HttpClient direct)
 {
     public Task<string> DownloadAsync(ModelEntry entry, string folder, IProgress<ModelProgress>? progress, CancellationToken ct) =>
         DownloadAsync(entry.Url, entry.File, entry.Size, entry.Sha256, folder, progress, ct);
+
+    public Task<string> DownloadAsync(ModelPart part, string folder, IProgress<ModelProgress>? progress, CancellationToken ct) =>
+        DownloadAsync(part.Url, part.LocalName, part.Size, part.Sha256, folder, progress, ct);
 
     /// <summary>Any pinned file (a model, a llama.cpp archive) into <paramref name="folder"/> under <paramref name="file"/>.</summary>
     public async Task<string> DownloadAsync(string url, string file, long size, string sha256, string folder,

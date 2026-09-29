@@ -6,6 +6,10 @@ using Glossa.Core.Text;
 namespace Glossa.Core.Lookup;
 
 /// <summary>Everything known about a word before the AI answers.</summary>
+/// <param name="Known">
+/// Whether an offline dictionary or level list has the word in any of its forms; null when there is none for the
+/// language. An unknown word is often a misread one (the lookup then reads the piece of screen again).
+/// </param>
 public sealed record LookupPlan(
     WordHit Hit,
     string Language,
@@ -13,7 +17,8 @@ public sealed record LookupPlan(
     WordCard Seed,
     IReadOnlyList<string> Candidates,
     IReadOnlyList<DictSection> Sections,
-    string? Hint);
+    string? Hint,
+    bool? Known = null);
 
 /// <summary>
 /// The deterministic half of a lookup, shared by the app and glossa-cli: word under a point, its language,
@@ -29,6 +34,16 @@ public sealed class WordLookup(
 
     public WordHit? Hit(OcrPage page, double x, double y, string preferredCjk) =>
         _hitTester.Hit(page, x, y, Matcher(preferredCjk));
+
+    /// <summary>
+    /// Japanese spelling fixes (<see cref="JapaneseText"/>) for a page read as Japanese: the game's language says so,
+    /// or kana on the page do while the game is not set to Chinese.
+    /// </summary>
+    public OcrPage Normalize(OcrPage page, string? language)
+    {
+        var japanese = language == "ja" || (language is null && page.Lines.Any(l => Scripts.Dominant(l.Text) == Script.Kana));
+        return japanese ? JapaneseText.Normalize(page, JapaneseExists) : page;
+    }
 
     /// <summary>Word boundaries in Japanese and Chinese lines, as a lookup draws them (a still frame steps word by word).</summary>
     public ITermMatcher Matcher(string preferredCjk) =>
@@ -49,7 +64,27 @@ public sealed class WordLookup(
 
         var hint = ds.HintAi ? DictionaryService.Hint(sections, target) : null;
         if (hint is null && lang == "zh") hint = chinese()?.SensesOf(seed.DictionaryForm ?? hit.Word);
-        return new LookupPlan(hit, lang, target, seed, candidates, sections, hint);
+        return new LookupPlan(hit, lang, target, seed, candidates, sections, hint, Known(lang, hit, seed, candidates, sections));
+    }
+
+    /// <summary>
+    /// Whether the word is in a dictionary in any of its search forms, or in the level list; null when neither exists
+    /// for the language. Chinese counts CC-CEDICT too, whose words the line was cut into; an English word counts
+    /// without "'s", and a hyphenated one when every part is known ("shit-stained", "50-year").
+    /// </summary>
+    private bool? Known(string lang, WordHit hit, WordCard seed, IReadOnlyList<string> candidates, IReadOnlyList<DictSection> sections)
+    {
+        var lists = levels() is { Available: true };
+        var zh = lang == "zh" ? chinese() : null;
+        if (!dictionaries.AnyFor(lang) && !lists && zh is null) return null;
+        if (sections.Count > 0 || seed.Level is not null || candidates.Any(c => dictionaries.HasKey(lang, c))
+            || zh?.Contains(seed.DictionaryForm ?? hit.Word) == true) return true;
+        if (lang != "en") return false;
+        var word = hit.Word.EndsWith("'s", StringComparison.OrdinalIgnoreCase) || hit.Word.EndsWith("’s", StringComparison.OrdinalIgnoreCase)
+            ? hit.Word[..^2] : hit.Word;
+        var parts = word.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 && parts.All(p => p.All(char.IsDigit) || dictionaries.HasKey("en", p)
+            || dictionaries.Lookup("en", [p], perPack: 1).Count > 0);
     }
 
     /// <summary>Articles for the dictionary form the AI named, when the form on screen found nothing.</summary>

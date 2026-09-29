@@ -55,14 +55,18 @@ public partial class LanguagesSection : UserControl
 
     private static List<(string Name, string State, bool Ok)> MeasureEngines()
     {
-        var v5 = Path.Combine(DataPaths.OcrModels, "v5");
         (string, string, bool) Model(string name, string file) =>
-            File.Exists(Path.Combine(v5, file)) ? (name, "готово", true) : (name, "нет файла модели", false);
+            File.Exists(Path.Combine(DataPaths.OcrModels, file)) ? (name, "готово", true) : (name, "нет файла модели", false);
         (string, string, bool) Data(string name, long bytes) => bytes > 0 ? (name, Sizes.Format(bytes), true) : (name, "не найден", false);
+        // The reader of the three languages is v6 medium; without its file the lookup falls back to v5 mobile.
+        var reader = File.Exists(Path.Combine(DataPaths.OcrModels, "v6", "PP-OCRv6_rec_medium.onnx"))
+            ? ("PP-OCRv6 medium - иероглифы, кана, латиница", "готово", true)
+            : Model("PP-OCRv5 - иероглифы, кана, латиница (нет v6 medium)", Path.Combine("v5", "ch_PP-OCRv5_rec_mobile.onnx"));
         return
         [
-            Model("PP-OCRv5 - иероглифы, кана, латиница", "ch_PP-OCRv5_rec_mobile.onnx"),
-            Model("PP-OCRv5 - кириллица и латиница", "eslav_PP-OCRv5_rec_mobile.onnx"),
+            Model("PP-OCRv5 - поиск строк", Path.Combine("v5", "ch_PP-OCRv5_mobile_det.onnx")),
+            reader,
+            Model("PP-OCRv5 - кириллица и латиница", Path.Combine("v5", "eslav_PP-OCRv5_rec_mobile.onnx")),
             Data("UniDic - разбор японского", Sizes.Folder(DataPaths.UniDic)),
             Data("CC-CEDICT - слова в китайском", Sizes.File(DataPaths.Cedict)),
         ];

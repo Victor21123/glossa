@@ -9,7 +9,9 @@ namespace Glossa.App.Ai;
 /// The context line is translated by its own request (a user's translator endpoint, or the same model with the
 /// translator prompt, which keeps swearing and tone better than the card's JSON field); the card then skips it.
 /// </param>
-public sealed record AiClients(ILlmClient? Dictionary, ILlmClient? Translator, string Description, bool SeparateTranslation = false);
+/// <param name="Vision">The local model when it was started with its sight: it reads a doubtful word from the picture.</param>
+public sealed record AiClients(ILlmClient? Dictionary, ILlmClient? Translator, string Description, bool SeparateTranslation = false,
+    ILlmClient? Vision = null);
 
 /// <summary>
 /// Chooses which models serve the dictionary and the translator, from settings and free VRAM,
@@ -18,6 +20,12 @@ public sealed record AiClients(ILlmClient? Dictionary, ILlmClient? Translator, s
 public sealed class AiRouter : IDisposable
 {
     private const string DictRole = "dictionary";
+
+    /// <summary>
+    /// Image tokens per picture: the fewest that kept every line of the recognition sets (2026-09-29: 280 read 30 of 32
+    /// lines and 7 of 7 covered words in 1.0-1.3 s; 1120 read 32 of 32 in 3.5 s).
+    /// </summary>
+    private const string ImageTokens = "280";
 
     private readonly Func<AppSettings> _settings;
     private readonly LlamaServerHost _host;
@@ -132,6 +140,7 @@ public sealed class AiRouter : IDisposable
         var lowVram = mode is "lowvram" or "light";
 
         ILlmClient? dict = dictCustom;
+        var seeing = false;
         if (dict is null && !off)
         {
             var model = local.SingleModel(local.Profile) ?? "";
@@ -144,18 +153,29 @@ public sealed class AiRouter : IDisposable
                 throw new LlmException(local.LlamaServerPath.Length > 0
                     ? $"Не найден свой llama-server ({server}) - Настройки -> ИИ и модели -> Файлы."
                     : "Движок llama.cpp не скачан - Настройки -> ИИ и модели -> Движок -> \"Скачать\".");
+            // Sight comes with the model when its file is there, except in the least-video-memory mode. On the
+            // processor it leaves the card's speed and the game's video memory alone; on the video card it reads faster
+            // but takes the room of part of the model (see PerformanceSettings.VisionReading).
+            var sight = s.Performance.VisionReading;
+            var vision = sight is "cpu" or "gpu" && !lowVram && local.VisionFile(local.Profile) is { } v && File.Exists(v) ? v : null;
+            var onGpu = vision is not null && sight == "gpu";
+            var reserve = local.VramReserveMb + (onGpu ? (int)(new FileInfo(vision!).Length >> 20) : 0);
             // Only the MoE model has experts to keep in RAM; the dense and small ones are fitted to free VRAM either way.
             IReadOnlyList<string> placement = lowVram && local.Profile == "gemma26b"
                 ? ["--n-gpu-layers", "99", "--cpu-moe"]
-                : ["--fit", "on", "--fit-target", local.VramReserveMb.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+                : ["--fit", "on", "--fit-target", reserve.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+            if (vision is not null)
+                placement = [.. placement, "--mmproj", vision, "--image-min-tokens", ImageTokens, "--image-max-tokens", ImageTokens,
+                    .. onGpu ? Array.Empty<string>() : ["--no-mmproj-offload"]];
             var ep = await _host.EnsureAsync(DictRole, server, model, local.BasePort, local.ContextSize, WithPriority(s, placement), ct).ConfigureAwait(false);
             dict = new OpenAiCompatibleClient(_localHttp, ep);
+            seeing = vision is not null;
         }
         var tr = trCustom ?? dict;
-        var desc = $"{local.Profile}{(lowVram ? " (минимум видеопамяти)" : "")}, словарь: {dict?.Endpoint.Name ?? "нет"}, перевод: {tr?.Endpoint.Name ?? "нет"}";
+        var desc = $"{local.Profile}{(lowVram ? " (минимум видеопамяти)" : "")}{(seeing ? " со зрением" : "")}, словарь: {dict?.Endpoint.Name ?? "нет"}, перевод: {tr?.Endpoint.Name ?? "нет"}";
         // A local model translates the context line with its translator prompt as a separate request.
         var separate = tr is not null && (!ReferenceEquals(tr, dict) || dict!.Endpoint.Kind == LlmProviderKind.LlamaServer);
-        return new AiClients(dict, tr, desc, separate);
+        return new AiClients(dict, tr, desc, separate, seeing ? dict : null);
     }
 
     private ILlmClient? Custom(AppSettings s, string engine)

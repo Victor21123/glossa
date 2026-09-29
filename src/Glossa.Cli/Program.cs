@@ -99,19 +99,25 @@ switch (args[0])
     }
     case "ocr-eval":
     {
-        // ocr-eval <cases.json> [v5|v6]: the word under the point on hard frames against the true text
+        // ocr-eval <cases.json> [base|v5|v6|v6m] [--vision <api root>]: the word under the point on hard frames
         using var bench = new Bench();
-        await OcrEval.RunAsync(args[1], args.Length > 2 ? args[2] : "v5", bench.Words);
+        await OcrEval.RunAsync(args[1], OcrEval.Options.Parse(args, 2), bench.Words);
         break;
     }
     case "ocr-lines":
-        // ocr-lines <cases.json> [v5|v6|v6m]: pieces of game screens, each true line against what was read
-        await OcrEval.LinesAsync(args[1], args.Length > 2 ? args[2] : "v5");
+    {
+        // ocr-lines <cases.json> [base|v5|v6|v6m] [--vision <api root>]: pieces of game screens, each true line against what was read
+        using var bench = new Bench();
+        await OcrEval.LinesAsync(args[1], OcrEval.Options.Parse(args, 2), bench.Words);
         break;
+    }
     case "ocr-found":
-        // ocr-found <eval_cases.json> [v5|v6]: whether each word is read anywhere on its frame
-        await OcrEval.FoundAsync(args[1], args.Length > 2 ? args[2] : "v5");
+    {
+        // ocr-found <eval_cases.json> [base|v5|v6]: whether each word is read anywhere on its frame, and how many would be read again
+        using var bench = new Bench();
+        await OcrEval.FoundAsync(args[1], OcrEval.Options.Parse(args, 2), bench.Words);
         break;
+    }
     case "dictcheck":
     {
         // dictcheck <cases.json> <results.json>: the "как в словаре" mark for translations of a finished eval run

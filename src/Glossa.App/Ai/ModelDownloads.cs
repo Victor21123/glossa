@@ -27,15 +27,43 @@ public sealed class ModelDownloads(HttpClient proxied, HttpClient direct, ILog l
 
     public string? ErrorOf(string key) => _errors.GetValueOrDefault(key);
 
-    public void Start(ModelEntry entry, string folder) =>
-        Run(entry.Profile, entry.Size, $"{entry.Url} → {folder}", (p, ct) => _downloader.DownloadAsync(entry, folder, p, ct));
+    /// <summary>
+    /// A catalog model and its sight into <paramref name="folder"/>, one progress over both. <paramref name="model"/>
+    /// is the model file already on disk (maybe one's own name): then only the sight is fetched, beside it. Each file is
+    /// reported as installed when it is there, so a model survives its sight's failed download.
+    /// </summary>
+    public void Start(ModelEntry entry, string folder, string? model = null)
+    {
+        var first = model is null ? entry.Size : 0;
+        var total = first + (entry.Vision?.Size ?? 0);
+        var steps = new List<Func<IProgress<ModelProgress>, CancellationToken, Task<string>>>();
+        if (model is null) steps.Add((p, ct) => _downloader.DownloadAsync(entry, folder, Shifted(p, 0, total), ct));
+        if (entry.Vision is { } vision)
+            steps.Add(async (p, ct) =>
+            {
+                await _downloader.DownloadAsync(vision, folder, Shifted(p, first, total), ct).ConfigureAwait(false);
+                return model ?? Path.Combine(folder, entry.File);
+            });
+        Run(entry.Profile, total, $"{entry.Url} → {folder}", [.. steps]);
+    }
+
+    /// <summary>A file's progress as part of the whole download: <paramref name="before"/> bytes of it are done.</summary>
+    private static IProgress<ModelProgress> Shifted(IProgress<ModelProgress> whole, long before, long total) =>
+        new Relay(p => whole.Report(new ModelProgress(before + p.Done, total, p.Verifying)));
+
+    /// <summary>Passes reports straight on (Progress would post them to a thread again).</summary>
+    private sealed class Relay(Action<ModelProgress> report) : IProgress<ModelProgress>
+    {
+        public void Report(ModelProgress value) => report(value);
+    }
 
     /// <summary>A llama.cpp build into <paramref name="root"/>; the finished one is reported with its llama-server.exe.</summary>
     public void StartRuntime(RuntimeEntry entry, string root) =>
         Run(Runtime, entry.Size, $"llama.cpp {entry.Release} {entry.Id} → {root}",
             (p, ct) => new RuntimeInstaller(_downloader).InstallAsync(entry, root, p, ct));
 
-    private async void Run(string key, long size, string what, Func<IProgress<ModelProgress>, CancellationToken, Task<string>> download)
+    /// <summary>The <paramref name="steps"/> one after another under one key; each finished one is reported installed.</summary>
+    private async void Run(string key, long size, string what, params Func<IProgress<ModelProgress>, CancellationToken, Task<string>>[] steps)
     {
         if (_running.ContainsKey(key)) return;
         var cts = new CancellationTokenSource();
@@ -51,9 +79,12 @@ public sealed class ModelDownloads(HttpClient proxied, HttpClient direct, ILog l
         try
         {
             log.Info($"download: {what}");
-            var path = await Task.Run(() => download(progress, cts.Token));
-            log.Info($"downloaded: {path}");
-            installed(key, path);
+            foreach (var step in steps)
+            {
+                var path = await Task.Run(() => step(progress, cts.Token));
+                log.Info($"downloaded: {path}");
+                installed(key, path);
+            }
         }
         catch (OperationCanceledException)
         {

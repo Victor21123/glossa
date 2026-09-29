@@ -66,7 +66,36 @@ public class LocalAiSettingsTests
             Assert.Matches("^[0-9a-f]{64}$", e.Sha256);
             Assert.True(e.Size > 1_000_000_000);
             Assert.StartsWith($"https://huggingface.co/{e.Repo}/resolve/{e.Revision}/", e.Url);
+            if (e.Vision is not { } v) continue;
+            Assert.Matches("^[0-9a-f]{40}$", v.Revision);
+            Assert.Matches("^[0-9a-f]{64}$", v.Sha256);
+            Assert.NotEqual(e.File, v.LocalName);
+            Assert.Equal(e.Size + v.Size, e.TotalSize);
         }
         Assert.Equal(["gemma26b", "gemma12b", "light"], ModelCatalog.Items.Select(e => e.Profile));
+        Assert.NotNull(ModelCatalog.For("gemma26b")!.Vision);
+    }
+
+    [Fact]
+    public void Sight_lies_beside_the_model_and_is_missing_until_downloaded()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "glossa-test-vision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var ai = new LocalAiSettings { Gemma26bModel = Path.Combine(dir, "my-gemma.gguf") };
+            var vision = Path.Combine(dir, ModelCatalog.For("gemma26b")!.Vision!.LocalName);
+            Assert.Equal(vision, ai.VisionFile("gemma26b"));
+            Assert.Null(ai.VisionFile("light")); // no sight in the catalog for it
+            Assert.False(ai.LacksVision("gemma26b")); // no model yet: the model is what is missing
+            File.WriteAllText(ai.SingleModel("gemma26b")!, "");
+            Assert.True(ai.LacksVision("gemma26b"));
+            File.WriteAllText(vision, "");
+            Assert.False(ai.LacksVision("gemma26b"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

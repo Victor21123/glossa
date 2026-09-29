@@ -51,7 +51,7 @@ public sealed class LookupController(
     /// <summary>What the current card would save.</summary>
     private sealed class Pending
     {
-        public required WordHit Hit { get; init; }
+        public required WordHit Hit { get; set; }
         public required CapturedFrame Frame { get; init; }
         public required string AppExe { get; init; }
         public required string WindowTitle { get; init; }
@@ -161,6 +161,7 @@ public sealed class LookupController(
         // A game always in one language (Языки, or its profile) skips the guessing: its text is read as that language.
         var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
         var cjk = forced is "ja" or "zh" ? forced : s.PreferredCjk;
+        page = words.Normalize(page, forced);
         var hit = words.Hit(page, cursor.X, cursor.Y, cjk);
         if (hit is null)
         {
@@ -191,9 +192,11 @@ public sealed class LookupController(
         if (s.Popup.AutoPlayAudio) Speak();
 
         // The same word in the same line again (a re-read dialogue, a menu): the card is already known.
-        var cacheKey = $"{lang}|{target}|{s.DictionaryEngine}|{s.LocalAi.Profile}|{hit.Word}|{hit.Context}";
-        if (s.Performance.CacheCards && _cache.Get(cacheKey) is { } known)
+        string CacheKey() => $"{lang}|{target}|{s.DictionaryEngine}|{s.LocalAi.Profile}|{hit.Word}|{hit.Context}";
+        var cacheKey = CacheKey();
+        bool Cached()
         {
+            if (!s.Performance.CacheCards || _cache.Get(cacheKey) is not { } known) return false;
             vm.Apply(known);
             pending.Card = known;
             if (DictionaryCheck.Of(known.Translation, sections, target) is { } knownCheck) vm.SetDictionaryMark(knownCheck.Matches);
@@ -201,8 +204,9 @@ public sealed class LookupController(
             vm.Timing = string.Format(Russian, "готовая карточка, {0:0.0} с", sw.Elapsed.TotalSeconds);
             Report($"слово \"{hit.Word}\", готовая карточка", ok: true, stages: Stages(sw.ElapsedMilliseconds, sw.ElapsedMilliseconds));
             if (s.AutoSaveWords) Save(pending);
-            return;
+            return true;
         }
+        if (Cached()) return;
 
         // Dictionaries first, the AI on Tab: the video card works only when the AI is really wanted.
         if (s.Performance.AiOnDemand && sections.Count > 0)
@@ -250,6 +254,32 @@ public sealed class LookupController(
             return;
         }
         vm.Status = null;
+
+        // A word no dictionary knows, or one the recognizer was unsure of, is read again by the model from the picture
+        // (a game's cursor over the letters, a stylized font); the card and its dictionaries follow the new reading.
+        // A failed reading only costs the second look: the card is made from the word as recognized.
+        if (clients.Vision is { } eyes && VisionReading.Doubtful(hit, plan.Known)
+            && await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) is { } reading)
+        {
+            var tRead = sw.ElapsedMilliseconds;
+            var reread = words.Normalize(VisionReading.Correct(page, hit, reading), forced);
+            var again = words.Hit(reread, cursor.X, cursor.Y, cjk);
+            log.Info($"lookup: read again '{hit.Word}' -> '{again?.Word}' at {tRead} ms");
+            if (again is not null && (again.Word != hit.Word || again.Context != hit.Context))
+            {
+                hit = again;
+                page = reread;
+                plan = await Task.Run(() => words.Plan(hit, cjk, s.NativeLanguage, ds, forced), ct);
+                ct.ThrowIfCancellationRequested();
+                (lang, target, seed, sections) = (plan.Language, plan.Target, plan.Seed, plan.Sections);
+                vm.Begin(hit, seed, lang, library.Contains(lang, seed.DictionaryForm ?? hit.Word));
+                if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
+                pending.Hit = hit;
+                pending.Card = seed;
+                cacheKey = CacheKey();
+                if (Cached()) return;
+            }
+        }
 
         // The context line comes from its own translation request when the router says so (a dedicated translator,
         // or the local model with its translator prompt); it is queued first, so it shows up first.
@@ -311,6 +341,49 @@ public sealed class LookupController(
 
         if (pending.Card.Error is null && !ct.IsCancellationRequested) _cache.Put(cacheKey, pending.Card);
         if (s.AutoSaveWords && pending.Card.Error is null && !ct.IsCancellationRequested) Save(pending);
+        }
+    }
+
+    /// <summary>A reading that takes longer than this is given up (a stuck server; on the processor one takes ~4 s).</summary>
+    private static readonly TimeSpan ReadingLimit = TimeSpan.FromSeconds(20);
+
+    /// <summary>The model's readings by the misread word and its line: the same line again needs no second look.</summary>
+    private readonly Dictionary<string, string> _readings = [];
+
+    /// <summary>
+    /// The model's reading of the piece of screen around the point, or null when it failed or ran over
+    /// <see cref="ReadingLimit"/> (logged). Only a newer lookup's cancellation passes through.
+    /// </summary>
+    private async Task<string?> ReadAgainAsync(ILlmClient eyes, CapturedFrame frame, WordHit hit, int x, int y, CancellationToken ct)
+    {
+        var key = $"{hit.Word}|{hit.Line}";
+        lock (_readings)
+            if (_readings.TryGetValue(key, out var known)) return known;
+        vm.Status = "Перечитываю слово...";
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(ReadingLimit);
+        try
+        {
+            var region = frame.Crop(VisionReading.Region(x, y));
+            if (region.Width < 2 || region.Height < 2) return null; // the point is off the frame
+            var png = VisionReading.Png(region.Bgra, region.Width, region.Height, region.Stride);
+            var reading = await VisionReading.ReadAsync(eyes, png, limit.Token);
+            lock (_readings)
+            {
+                if (_readings.Count >= 200) _readings.Clear();
+                _readings[key] = reading;
+            }
+            return reading;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            log.Warn($"lookup: second reading failed ({ex.GetType().Name}): {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            // A newer lookup cancelled this one: the status line is already its own.
+            if (!ct.IsCancellationRequested) vm.Status = null;
         }
     }
 

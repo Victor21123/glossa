@@ -110,6 +110,7 @@ public partial class App : Application
             _settings.Popup.AutoPlayAudio = false;
             _settings.LocalAi.BasePort += 100;
             if (Environment.GetEnvironmentVariable("GLOSSA_PRIORITY") is { Length: > 0 } priority) _settings.Performance.Priority = priority;
+            if (Environment.GetEnvironmentVariable("GLOSSA_VISION") is { Length: > 0 } vision) _settings.Performance.VisionReading = vision;
         }
         _theme.Install(this, _settings.Theme);
 
@@ -280,7 +281,7 @@ public partial class App : Application
 
     /// <summary>What the AI runs on: models, mode, endpoints, engines. A change restarts it (unloads the model).</summary>
     private static string AiState(AppSettings s) =>
-        System.Text.Json.JsonSerializer.Serialize(new { s.LocalAi, s.CustomEndpoints, s.DictionaryEngine, s.TranslatorEngine, s.Performance.Priority });
+        System.Text.Json.JsonSerializer.Serialize(new { s.LocalAi, s.CustomEndpoints, s.DictionaryEngine, s.TranslatorEngine, s.Performance.Priority, s.Performance.VisionReading });
 
     /// <summary>Настройки → Нагрузка на ПК → Приоритет: low lets the game have the processor first.</summary>
     private void ApplyPriority()

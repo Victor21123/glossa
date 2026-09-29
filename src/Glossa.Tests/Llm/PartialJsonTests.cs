@@ -155,4 +155,20 @@ public class PartialJsonTests
         Assert.Equal("""[["get",false]]""", ru["logit_bias"]!.ToJsonString());
         Assert.False(en.ContainsKey("logit_bias"));
     }
+
+    [Fact]
+    public void A_picture_goes_first_as_a_data_url_then_the_text()
+    {
+        var llm = new OpenAiCompatibleClient(new HttpClient(),
+            new LlmEndpoint("local", LlmProviderKind.LlamaServer, "http://127.0.0.1:1/v1", "gemma26b"));
+        var body = llm.BuildBody(new LlmRequest([new LlmMessage("user", VisionReading.Prompt, [1, 2, 3])]));
+
+        var content = body["messages"]![0]!["content"]!.AsArray();
+        Assert.Equal("image_url", (string?)content[0]!["type"]);
+        Assert.Equal("data:image/png;base64,AQID", (string?)content[0]!["image_url"]!["url"]);
+        Assert.Equal(VisionReading.Prompt, (string?)content[1]!["text"]);
+        // Without a picture the content stays a plain string.
+        var plain = llm.BuildBody(new LlmRequest([new LlmMessage("user", "hi")]));
+        Assert.Equal("hi", (string?)plain["messages"]![0]!["content"]);
+    }
 }

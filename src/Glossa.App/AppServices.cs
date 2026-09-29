@@ -92,7 +92,12 @@ public sealed class AppServices(
         }
         else
         {
-            if (string.Equals(ai.SingleModel(key), path, StringComparison.OrdinalIgnoreCase)) return;
+            // Only the sight came, for the model already in use: its server was started without it.
+            if (string.Equals(ai.SingleModel(key), path, StringComparison.OrdinalIgnoreCase))
+            {
+                if (key == ai.Profile) Ai.Reset();
+                return;
+            }
             switch (key)
             {
                 case "gemma26b": ai.Gemma26bModel = path; break;

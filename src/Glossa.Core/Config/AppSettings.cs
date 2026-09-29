@@ -110,6 +110,15 @@ public sealed class PerformanceSettings
 
     /// <summary>The same word in the same line opens from memory, without the AI.</summary>
     public bool CacheCards { get; set; } = true;
+
+    /// <summary>
+    /// A word no dictionary knows, or one the recognizer was unsure of, is read again by the local model from the
+    /// picture (Gemma 26B with its sight file). Where the sight runs, selftest on Persona 5 frames, RTX 5060 Ti 16 GB,
+    /// 2026-09-29 (whole AI card, median): off - 3.3 s, 2.8 s of processor per lookup; cpu - 3.6 s, a word read again
+    /// 6.8-7.7 s and ~31 s of processor; gpu - the sight's 1.2 GB push part of the model to RAM: 4.6 s and ~33 s of
+    /// processor on every lookup, a reading 0.9 s.
+    /// </summary>
+    public string VisionReading { get; set; } = "cpu";
 }
 
 /// <summary>Настройки → Учёба: the session around Anki's scheduler and what the card shows (Anki's defaults).</summary>
@@ -256,6 +265,15 @@ public sealed class LocalAiSettings
 
     /// <summary>Whether the profile's model is on disk: a catalog model not downloaded yet, or no file of one's own, is not.</summary>
     public bool HasModel(string profile) => SingleModel(profile) is { Length: > 0 } file && File.Exists(file);
+
+    /// <summary>Where the profile's sight (vision projector) is or goes: beside its model; null for a model without one.</summary>
+    public string? VisionFile(string profile) =>
+        Llm.ModelCatalog.For(profile)?.Vision is { } part && SingleModel(profile) is { Length: > 0 } model
+            ? Path.Combine(Path.GetDirectoryName(model) ?? ModelsFolderResolved(), part.LocalName)
+            : null;
+
+    /// <summary>The profile's model is there but its sight is not (a model downloaded before sight was added).</summary>
+    public bool LacksVision(string profile) => HasModel(profile) && VisionFile(profile) is { } file && !File.Exists(file);
 
     /// <summary>Settings from before 2026-09-29: the retired Qwen + Hy-MT2 pair and its tiers become the default model and modes.</summary>
     public void Normalize()

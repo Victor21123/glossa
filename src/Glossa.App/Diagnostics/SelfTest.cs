@@ -23,7 +23,9 @@ internal static class SelfTest
 {
     private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
 
-    private sealed record Case(string Id, string? Image, string Word);
+    /// <param name="X">The point to look up at, when the case gives it (ocr_hard.json: words the recognizer misreads,
+    /// which the locator below could not find by their text).</param>
+    private sealed record Case(string Id, string? Image, string Word, double? X = null, double? Y = null);
 
     private sealed record Result(string Id, string Word, string Outcome, bool Ok, LookupStages? Stages, double GlossaCpu, double ServerCpu,
         double GlossaMb, double ServerMb, int VramFreeMb)
@@ -54,6 +56,11 @@ internal static class SelfTest
         {
             foreach (var c in cases)
             {
+                if (c is { X: { } px, Y: { } py })
+                {
+                    points[c.Id] = ((int)px, (int)py);
+                    continue;
+                }
                 var frame = Load(c.Image!);
                 var page = await locator.RecognizeAsync(frame.Bgra, frame.Width, frame.Height, frame.Stride, frame.Bounds,
                     OcrModelFamily.CjkLatin, CancellationToken.None);

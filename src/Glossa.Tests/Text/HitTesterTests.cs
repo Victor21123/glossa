@@ -44,6 +44,19 @@ public class HitTesterTests
     }
 
     [Fact]
+    public void Hit_carries_the_recognizers_confidence_in_the_word()
+    {
+        var line = LatinLine("Your experence", 100);
+        var unsure = line with { Words = [line.Words[0], line.Words[1] with { Score = 0.6f }] };
+        Assert.Equal(0.6f, new HitTester().Hit(Page(unsure), 80, 110)!.Score);
+
+        // A Japanese word is as sure as its least sure character.
+        var cjk = CjkLine("攻撃力", 100);
+        var chars = cjk with { Words = [cjk.Words[0], cjk.Words[1] with { Score = 0.5f }, cjk.Words[2]] };
+        Assert.Equal(0.5f, new HitTester().Hit(Page(chars), 30, 110, new StubMatcher(0, 3))!.Score);
+    }
+
+    [Fact]
     public void Short_sentence_widens_context_to_paragraph()
     {
         var page = Page(LatinLine("A new neighbor...? Hello, stranger.", 100));
