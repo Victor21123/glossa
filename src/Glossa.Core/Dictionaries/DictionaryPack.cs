@@ -41,6 +41,7 @@ public static class DictKeys
 public readonly record struct DictKey(string Text, int Rank = 0)
 {
     public const int Alias = 1;
+    public const int Form = 2;
 }
 
 public sealed record DictEntry(long Id, string Headword, string? Reading, string Body, int Rank);
@@ -241,14 +242,15 @@ public sealed class DictionaryPackWriter : IDisposable
                 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE entries(id INTEGER PRIMARY KEY, headword TEXT NOT NULL, reading TEXT, body TEXT NOT NULL);
                 CREATE TABLE keys_build(key TEXT NOT NULL, entry INTEGER NOT NULL, rank INTEGER NOT NULL);
-                CREATE TABLE links(alias TEXT NOT NULL, target TEXT NOT NULL);
+                CREATE TABLE links(alias TEXT NOT NULL, target TEXT NOT NULL, rank INTEGER NOT NULL);
                 """);
             _tx = _db.BeginTransaction();
 
             _link.Transaction = _tx;
-            _link.CommandText = "INSERT INTO links(alias, target) VALUES ($a, $t)";
+            _link.CommandText = "INSERT INTO links(alias, target, rank) VALUES ($a, $t, $n)";
             _link.Parameters.Add("$a", SqliteType.Text);
             _link.Parameters.Add("$t", SqliteType.Text);
+            _link.Parameters.Add("$n", SqliteType.Integer);
 
             _entry.Transaction = _tx;
             _entry.CommandText = "INSERT INTO entries(headword, reading, body) VALUES ($h, $r, $b); SELECT last_insert_rowid();";
@@ -309,10 +311,13 @@ public sealed class DictionaryPackWriter : IDisposable
     /// A headword that only points at another headword (MDX "@@@LINK="). Resolved in <see cref="Complete"/>,
     /// once every target is known.
     /// </summary>
-    public void AddLink(string alias, string target)
+    /// <param name="rank"><see cref="DictKey.Alias"/> for another spelling, <see cref="DictKey.Form"/> for an
+    /// inflected form (Wiktionary's "form of"): a phrase search must not take 食べられない for a headword (B-26).</param>
+    public void AddLink(string alias, string target, int rank = DictKey.Alias)
     {
         _link.Parameters["$a"].Value = DictKeys.Normalize(alias, Meta.SourceLanguage);
         _link.Parameters["$t"].Value = DictKeys.Normalize(target, Meta.SourceLanguage);
+        _link.Parameters["$n"].Value = rank;
         _link.ExecuteNonQuery();
     }
 
@@ -362,7 +367,7 @@ public sealed class DictionaryPackWriter : IDisposable
         Exec("""
             CREATE TABLE keys(key TEXT NOT NULL, rank INTEGER NOT NULL, entry INTEGER NOT NULL, PRIMARY KEY(key, rank, entry)) WITHOUT ROWID;
             INSERT OR IGNORE INTO keys SELECT key, rank, entry FROM keys_build ORDER BY key, rank, entry;
-            INSERT OR IGNORE INTO keys SELECT l.alias, 1, k.entry FROM links l JOIN keys k ON k.key = l.target AND k.rank = 0;
+            INSERT OR IGNORE INTO keys SELECT l.alias, l.rank, k.entry FROM links l JOIN keys k ON k.key = l.target AND k.rank = 0;
             DROP TABLE keys_build;
             DROP TABLE links;
             ANALYZE;

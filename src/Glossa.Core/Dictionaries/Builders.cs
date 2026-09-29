@@ -258,7 +258,7 @@ public static class WiktionaryBuilder
             var body = new StringBuilder();
             var keys = new List<DictKey>();
             string? ipa = null;
-            string? lemmaOf = null;
+            (string Word, int Rank)? lemmaOf = null;
             var hasContent = false;
             var parts = 0;
             var datedOnly = 0;
@@ -327,9 +327,9 @@ public static class WiktionaryBuilder
                 if (language == "ja" && ipa is not null && ipa != word) keys.Add(new DictKey(ipa, 1));
                 writer.Add(word, ipa, body.ToString(), keys);
             }
-            else if (lemmaOf is not null && lemmaOf != word)
+            else if (lemmaOf is { } lemma && lemma.Word != word)
             {
-                writer.AddLink(word, lemmaOf);
+                writer.AddLink(word, lemma.Word, lemma.Rank);
             }
         }
         finally
@@ -345,13 +345,14 @@ public static class WiktionaryBuilder
     private static bool HasGloss(JsonElement s) =>
         s.TryGetProperty("glosses", out var g) && g.ValueKind == JsonValueKind.Array && g.GetArrayLength() > 0;
 
-    private static string? FormOf(JsonElement s)
+    /// <summary>The lemma a sense points at: "form of" is an inflection (went, 食べられない), "alt of" another spelling.</summary>
+    private static (string Word, int Rank)? FormOf(JsonElement s)
     {
-        foreach (var name in new[] { "form_of", "alt_of" })
+        foreach (var (name, rank) in new[] { ("form_of", DictKey.Form), ("alt_of", DictKey.Alias) })
         {
             if (s.TryGetProperty(name, out var f) && f.ValueKind == JsonValueKind.Array && f.GetArrayLength() > 0
-                && f[0].TryGetProperty("word", out var w))
-                return w.GetString();
+                && f[0].TryGetProperty("word", out var w) && w.GetString() is { } target)
+                return (target, rank);
         }
         return null;
     }

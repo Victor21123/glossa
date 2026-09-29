@@ -266,6 +266,7 @@ public sealed class DictionaryTests : IDisposable
             w.Add("go", "/ɡəʊ/", "[t]идти[/t]", [new DictKey("go"), new DictKey("went", 2)]);
             w.Add("look after", null, "[t]заботиться[/t]", [new DictKey("look after"), new DictKey("looked after", 2)]);
             w.AddLink("goes", "go");
+            w.AddLink("going", "go", DictKey.Form);
             w.Complete();
         }
         using (var w = new DictionaryPackWriter(Path.Combine(dir, "b.gdict"), new PackMeta("b", "B", "en", "en", 10)))
@@ -287,6 +288,8 @@ public sealed class DictionaryTests : IDisposable
         Assert.True(service.HasKey("en", "went"));
         Assert.False(service.HasKey("en", "went", DictKey.Alias)); // an inflected form is not a headword
         Assert.True(service.HasKey("en", "goes", DictKey.Alias));  // a link counts as an alias
+        Assert.Equal("go", service.Lookup("en", ["going"])[0].Entries[0].Headword);
+        Assert.False(service.HasKey("en", "going", DictKey.Alias)); // unless it links an inflected form (B-26)
 
         service.Reload(["a", "b"], ["b"]);
         var only = Assert.Single(service.Lookup("en", ["go"]));
@@ -319,6 +322,30 @@ public sealed class DictionaryTests : IDisposable
         Assert.Equal("A1", levels.LevelOf("en", "am"));
         Assert.Equal("C1", levels.LevelOf("en", "cloak"));
         Assert.Null(levels.LevelOf("en", "zebra"));
+    }
+
+    [Fact]
+    public void Wiktionary_inflections_link_as_forms_and_other_spellings_as_aliases()
+    {
+        var dir = Temp();
+        var gz = Path.Combine(dir, "kaikki.jsonl.gz");
+        using (var file = File.Create(gz))
+        using (var zip = new GZipStream(file, CompressionLevel.Fastest))
+        using (var w = new StreamWriter(zip, new UTF8Encoding(false)))
+        {
+            w.WriteLine("""{"word":"食べる","pos":"verb","senses":[{"glosses":["to eat"]}]}""");
+            w.WriteLine("""{"word":"食べられない","pos":"verb","senses":[{"glosses":["negative potential of 食べる"],"form_of":[{"word":"食べる"}]}]}""");
+            w.WriteLine("""{"word":"喰べる","pos":"verb","senses":[{"glosses":["alternative spelling of 食べる"],"alt_of":[{"word":"食べる"}]}]}""");
+        }
+
+        var pack = Path.Combine(dir, "wiktionary-ja.gdict");
+        WiktionaryBuilder.Build(gz, pack, null, CancellationToken.None, "ja");
+        using var service = new DictionaryService(dir);
+        service.Reload([], []);
+
+        Assert.Equal("食べる", service.Lookup("ja", ["食べられない"])[0].Entries[0].Headword);
+        Assert.False(service.HasKey("ja", "食べられない", DictKey.Alias)); // B-26: not a headword for phrases
+        Assert.True(service.HasKey("ja", "喰べる", DictKey.Alias));
     }
 
     [Fact]
