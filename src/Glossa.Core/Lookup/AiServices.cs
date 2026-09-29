@@ -195,7 +195,7 @@ public sealed class CardService
             PartOfSpeech = seed.PartOfSpeech ?? Get(k.PartOfSpeech),
             Register = seed.Register ?? Registers.Normalize(Get("register")),
             UsageNote = Get(k.Usage) ?? seed.UsageNote,
-            Level = seed.Level ?? Get("level"),
+            Level = seed.Level ?? WordLevels.Normalize(seed.Language, Get("level")),
             Reading = seed.Reading ?? Get("reading"),
             Synonyms = List("synonyms").Count > 0 ? List("synonyms") : seed.Synonyms,
             KeyForms = List("key_forms").Count > 0 ? List("key_forms") : seed.KeyForms,

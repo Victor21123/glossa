@@ -91,6 +91,25 @@ public sealed class LookupSessions
 
     public bool FrameOpen => _session?.Still is not null;
 
+    /// <summary>
+    /// The monitor at the point without Glossa's own card in it. With «Скрывать карточку от захвата» off the card is in
+    /// every screenshot, and the next lookup read the old card along with the game (2026-09-29: "観察 4"); an open card
+    /// steps aside first, the new lookup replaces it anyway, and the desktop is let to redraw.
+    /// </summary>
+    private async Task<CapturedFrame> CaptureAsync(int x, int y)
+    {
+        if (!_settings().Popup.HideFromCapture && _popup.IsVisible)
+        {
+            _popup.StepAside();
+            await Task.Run(() =>
+            {
+                Native.DwmFlush();
+                Native.DwmFlush();
+            });
+        }
+        return await Task.Run(() => _capture.CaptureMonitorAt(x, y));
+    }
+
     /// <summary>Alt+Q or the mouse button: the word under the cursor. Pressed again over a still frame, back to the game.</summary>
     public async void Pointer(string trigger)
     {
@@ -110,7 +129,7 @@ public sealed class LookupSessions
             var sw = Stopwatch.StartNew();
             Native.GetCursorPos(out var cursor);
             var (game, context, cjk) = await BeginAsync(trigger);
-            var frame = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
+            var frame = await CaptureAsync(cursor.X, cursor.Y);
 
             switch (context.Choices!.DuringLookup)
             {
@@ -157,7 +176,7 @@ public sealed class LookupSessions
                 return;
             }
             var (game, context, cjk) = await BeginAsync(trigger);
-            var frame = await Task.Run(() => _capture.CaptureMonitorAt((int)game.Bounds.CenterX, (int)game.Bounds.CenterY));
+            var frame = await CaptureAsync((int)game.Bounds.CenterX, (int)game.Bounds.CenterY);
             // The still takes the focus first, then the game is paused: focus never moves away from a frozen window.
             var session = OpenFrame(game, context, cjk, frame, pad: true, paused: false);
             if (context.Choices!.DuringLookup == "pause")
@@ -326,7 +345,7 @@ public sealed class LookupSessions
                 break;
             default:
                 _session = null;
-                var frame = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
+                var frame = await CaptureAsync(cursor.X, cursor.Y);
                 await _controller.TranslateLineAsync(frame, cursor.X, cursor.Y, context, sw);
                 break;
         }
@@ -338,7 +357,7 @@ public sealed class LookupSessions
     /// </summary>
     private async Task TranslateScreenAsync(GameWindow game, LookupContext context, string cjk, Native.POINT cursor)
     {
-        var still = await Task.Run(() => _capture.CaptureMonitorAt(cursor.X, cursor.Y));
+        var still = await CaptureAsync(cursor.X, cursor.Y);
         var session = OpenFrame(game, context, cjk, still, pad: false, paused: false, translating: true);
         _frame!.SetHint("Распознаю текст...");
         try

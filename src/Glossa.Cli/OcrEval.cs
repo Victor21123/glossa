@@ -46,7 +46,7 @@ public static class OcrEval
         var cases = JsonSerializer.Deserialize<List<Case>>(File.ReadAllText(casesPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
         var family = Family(options.Model);
-        using var ocr = new OcrEngine(DataPaths.OcrModels);
+        using var ocr = Engine();
         ocr.Warm(family);
         var vision = options.Client();
 
@@ -74,7 +74,7 @@ public static class OcrEval
             var hit = words.Hit(page, c.X, c.Y, cjk);
             var first = hit?.Word ?? "";
             var known = hit is null ? null : words.Plan(hit, cjk, "ru", new DictionarySettings(), forced).Known;
-            var doubt = hit is not null && VisionReading.Doubtful(hit, known);
+            var doubt = hit is not null && VisionReading.Doubtful(hit, known, page);
             if (doubt) doubtful++;
             long readMs = 0;
             if (vision is not null && hit is not null && doubt)
@@ -100,6 +100,13 @@ public static class OcrEval
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"-- {options.Model}{(vision is null ? "" : " + vision")}: words {right}/{cases.Count}, mean line cer {cerSum / n:0.000}, mean {msSum / n} ms; doubtful {doubtful}, read again {reread}{(reread > 0 ? $" ({visionMs / reread} ms each)" : "")}"));
     }
+
+    /// <summary>The recognizer; GLOSSA_OCR_UNCLIP widens its line boxes for a measurement.</summary>
+    private static OcrEngine Engine() => new(DataPaths.OcrModels)
+    {
+        UnClipRatio = float.TryParse(Environment.GetEnvironmentVariable("GLOSSA_OCR_UNCLIP"), System.Globalization.NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var u) ? u : null,
+    };
 
     private static string Known(bool? known) => known switch { true => "yes", false => "no ", null => "-  " };
 
@@ -127,17 +134,27 @@ public static class OcrEval
         var seen = new HashSet<(string, double, double)>();
         var doubtful = new List<WordHit>();
         var total = 0;
+        // GLOSSA_OCR_DOUBTS=3: how far each line's box reaches past its read words, in line heights (a dropped letter).
+        if (Environment.GetEnvironmentVariable("GLOSSA_OCR_DOUBTS") == "3")
+            foreach (var l in page.Lines.Where(l => l.Words.Count > 0))
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"  gap {(l.Box.Right - l.Words.Max(w => w.Box.Right)) / l.Box.Height:0.00} {(l.Words.Min(w => w.Box.Left) - l.Box.Left) / l.Box.Height:0.00} [{l.Text}]"));
         foreach (var unit in page.Lines.SelectMany(l => l.Words))
         {
             var hit = words.Hit(page, unit.Box.CenterX, unit.Box.CenterY, cjk);
             if (hit is null || !seen.Add((hit.Word, hit.Box.Left, hit.Box.Top)) || !hit.Word.Any(char.IsLetter)) continue;
             total++;
-            var known = words.Plan(hit, cjk, "ru", new DictionarySettings(), forced).Known;
-            if (!VisionReading.Doubtful(hit, known)) continue;
+            var plan = words.Plan(hit, cjk, "ru", new DictionarySettings(), forced);
+            var known = plan.Known;
+            // GLOSSA_OCR_DOUBTS=2 lists every word with what decided it.
+            if (Environment.GetEnvironmentVariable("GLOSSA_OCR_DOUBTS") == "2")
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"  word [{hit.Word}] {plan.Language} known {Known(known)} score {hit.Score:0.00} sections {plan.Sections.Count} level {plan.Seed.Level}"));
+            if (!VisionReading.Doubtful(hit, known, page)) continue;
             doubtful.Add(hit);
             // GLOSSA_OCR_DOUBTS=1 lists them: why each one would be read again.
             if (Environment.GetEnvironmentVariable("GLOSSA_OCR_DOUBTS") == "1")
-                Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  doubt {(known == false ? "unknown" : "unsure ")} {hit.Score:0.00} {hit.Word}"));
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  doubt {(known == false ? "unknown" : hit.Score < VisionReading.MinScore ? "unsure " : "tail   ")} {hit.Score:0.00} {hit.Word}"));
         }
         return (doubtful, total);
     }
@@ -151,7 +168,7 @@ public static class OcrEval
         var cases = JsonSerializer.Deserialize<List<Case>>(File.ReadAllText(casesPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
         var family = Family(options.Model);
-        using var ocr = new OcrEngine(DataPaths.OcrModels);
+        using var ocr = Engine();
         ocr.Warm(family);
         var pages = new Dictionary<string, (string Text, long Ms)>();
         int found = 0, doubtful = 0, total = 0;
@@ -177,6 +194,38 @@ public static class OcrEval
         Console.WriteLine($"-- {options.Model}: found {found}/{cases.Count(c => c.Image is not null)} words on {pages.Count} frames, mean {pages.Values.Sum(p => p.Ms) / Math.Max(pages.Count, 1)} ms per frame");
     }
 
+    /// <summary>
+    /// <c>ocr-at &lt;image&gt; &lt;x&gt; &lt;y&gt; [ja|zh|en]</c>: one lookup at a point of a saved frame, as the app makes it: the
+    /// region around the point, its lines with their boxes and word pieces, and the word, line and context it gives.
+    /// </summary>
+    public static async Task AtAsync(string image, double x, double y, string? lang, WordLookup words)
+    {
+        using var decoded = SKBitmap.Decode(image) ?? throw new InvalidDataException("not an image: " + image);
+        var left = (int)Math.Clamp(x - HalfWidth, 0, decoded.Width - 1);
+        var top = (int)Math.Clamp(y - Up, 0, decoded.Height - 1);
+        var rect = SKRectI.Create(left, top, (int)Math.Min(x + HalfWidth, decoded.Width) - left, (int)Math.Min(y + Down, decoded.Height) - top);
+        using var part = new SKBitmap();
+        decoded.ExtractSubset(part, rect);
+        using var crop = part.Copy(SKColorType.Bgra8888);
+        using var ocr = Engine();
+        var forced = lang is "en" or "ja" or "zh" ? lang : null;
+        var cjk = lang == "zh" ? "zh" : "ja";
+        var page = words.Normalize(await ocr.RecognizeAsync(crop.GetPixelSpan().ToArray(), crop.Width, crop.Height, crop.RowBytes,
+            new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), OcrModelFamily.CjkLatin, CancellationToken.None), forced);
+        foreach (var l in page.Lines.OrderBy(l => l.Box.Top))
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"[{l.Box.Left:F0},{l.Box.Top:F0} {l.Box.Width:F0}x{l.Box.Height:F0}] {l.Score:0.00} {l.Text}  | {string.Join(" ", l.Words.Select(w => $"{w.Text}@{w.Box.Left:F0}-{w.Box.Right:F0}/{w.Box.Height:F0}"))}"));
+        var hit = words.Hit(page, x, y, cjk);
+        if (hit is null)
+        {
+            Console.WriteLine("-- no text under the point");
+            return;
+        }
+        Console.WriteLine($"-- word [{hit.Word}] box {hit.Box.Left:F0},{hit.Box.Top:F0}-{hit.Box.Right:F0},{hit.Box.Bottom:F0} score {hit.Score:0.00}");
+        Console.WriteLine($"-- line [{hit.Line}]");
+        Console.WriteLine($"-- context [{hit.Context}] at {hit.ContextOffset}");
+    }
+
     public sealed record LinesCase(string Id, string Image, string? Lang, List<string> Lines);
 
     /// <summary>
@@ -188,7 +237,7 @@ public static class OcrEval
         var cases = JsonSerializer.Deserialize<List<LinesCase>>(File.ReadAllText(casesPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
         var family = Family(options.Model);
-        using var ocr = new OcrEngine(DataPaths.OcrModels);
+        using var ocr = Engine();
         ocr.Warm(family);
         var vision = options.Client();
         int exact = 0, total = 0, doubtful = 0, units = 0;

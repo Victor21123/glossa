@@ -81,6 +81,48 @@ public class HitTesterTests
         Assert.DoesNotContain("Inventory", hit.Context);
     }
 
+    /// <summary>A Japanese line whose box is <paramref name="height"/> high, <paramref name="pitch"/> wide per character.</summary>
+    private static OcrLine JaLine(string text, double left, double top, double pitch, double height)
+    {
+        var words = text.Select((c, i) =>
+            new OcrWord(c.ToString(), new PixelRect(left + i * pitch, top, left + (i + 1) * pitch, top + height), 0.99f)).ToList();
+        return new OcrLine(text, new PixelRect(left, top, left + text.Length * pitch, top + height), words, 0.99f);
+    }
+
+    [Fact]
+    public void A_column_beside_the_text_does_not_cut_its_paragraph()
+    {
+        // Two panels side by side (Mercurius, 2026-09-29): sorted top to bottom, the left panel's lines fall between
+        // the right panel's, and the context used to stop at the first of them.
+        var page = Page(
+            JaLine("観察力に優れ、", 1373, 686, 18, 30),
+            JaLine("ホラーが苦手な方や、", 997, 688, 18, 26),
+            JaLine("ホラー慣れている方に", 1373, 710, 19, 26),
+            JaLine("探査とパズルが難しく", 997, 711, 19, 24),
+            JaLine("感じる方におすすめ", 997, 733, 19, 24),
+            JaLine("おすすめ", 1374, 733, 20, 24));
+
+        var hit = new HitTester().Hit(page, 1500, 723, new StubMatcher(7, 2))!; // いる
+
+        Assert.Equal("観察力に優れ、ホラー慣れている方におすすめ", hit.Context);
+    }
+
+    [Fact]
+    public void Japanese_lines_join_by_the_width_of_their_characters_not_the_height_of_their_boxes()
+    {
+        var page = Page(
+            JaLine("【宇宙迷子モード】", 1397, 649, 17, 29), // the title: the same font, taller box
+            JaLine("観察力に優れ、", 1373, 686, 18, 30),
+            JaLine("おすすめ", 1374, 710, 20, 24),        // lower box, same font
+            JaLine("※このゲームの基本モードです", 1373, 738, 13, 23)); // a note in a smaller font
+
+        var body = new HitTester().Hit(page, 1400, 720, new StubMatcher(0, 4))!;
+        var note = new HitTester().Hit(page, 1400, 750, new StubMatcher(12, 2))!;
+
+        Assert.Equal("【宇宙迷子モード】観察力に優れ、おすすめ", body.Context);
+        Assert.Equal("※このゲームの基本モードです", note.Context);
+    }
+
     [Fact]
     public void Returns_null_far_from_any_text()
     {

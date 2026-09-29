@@ -73,6 +73,12 @@ public partial class LookupPopup : Window
         _outsideClick.Start();
     }
 
+    /// <summary>Out of the next screenshot's way without closing (the lookup that takes it shows its own card).</summary>
+    public void StepAside()
+    {
+        if (IsVisible) Hide();
+    }
+
     public void Dismiss()
     {
         if (!IsVisible) return;

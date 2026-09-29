@@ -79,6 +79,10 @@ internal static partial class Native
     [DllImport("user32.dll")]
     public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
 
+    /// <summary>Waits until the desktop is composed again (a window just hidden is gone from the next screenshot).</summary>
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmFlush();
+
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vk);
 

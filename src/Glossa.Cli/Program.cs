@@ -97,6 +97,14 @@ switch (args[0])
         Console.WriteLine($"-- {page.Lines.Count} lines in {page.Elapsed.TotalMilliseconds:F0} ms");
         break;
     }
+    case "ocr-at":
+    {
+        // ocr-at <image> <x> <y> [ja|zh|en]: one lookup at a point of a saved frame, lines and context as the app sees them
+        using var bench = new Bench();
+        await OcrEval.AtAsync(args[1], double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), args.Length > 4 ? args[4] : null, bench.Words);
+        break;
+    }
     case "ocr-eval":
     {
         // ocr-eval <cases.json> [base|v5|v6|v6m] [--vision <api root>]: the word under the point on hard frames

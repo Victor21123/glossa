@@ -258,7 +258,7 @@ public sealed class LookupController(
         // A word no dictionary knows, or one the recognizer was unsure of, is read again by the model from the picture
         // (a game's cursor over the letters, a stylized font); the card and its dictionaries follow the new reading.
         // A failed reading only costs the second look: the card is made from the word as recognized.
-        if (clients.Vision is { } eyes && VisionReading.Doubtful(hit, plan.Known)
+        if (clients.Vision is { } eyes && VisionReading.Doubtful(hit, plan.Known, page)
             && await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) is { } reading)
         {
             var tRead = sw.ElapsedMilliseconds;

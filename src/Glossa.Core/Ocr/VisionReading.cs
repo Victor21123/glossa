@@ -62,10 +62,29 @@ public static class VisionReading
     }
 
     /// <summary>
-    /// Whether the word is worth reading again: no dictionary knows it (<paramref name="known"/> false; null when
-    /// there is nothing to check against), or the recognizer was unsure of it.
+    /// How far, in line heights, the line's box may reach past its last word read before something there counts as
+    /// not read: "Special Sensation Oil I" came out as "Special Sensation Oil", its box 0.25 line heights past "Oil".
     /// </summary>
-    public static bool Doubtful(WordHit hit, bool? known) => known == false || hit.Score < MinScore;
+    public const double UnreadTail = 0.2;
+
+    /// <summary>
+    /// Whether the word is worth reading again: no dictionary knows it (<paramref name="known"/> false; null when
+    /// there is nothing to check against), the recognizer was unsure of it, or it is the last word read in a line whose
+    /// box goes on past it (on <paramref name="page"/>, when given).
+    /// </summary>
+    public static bool Doubtful(WordHit hit, bool? known, OcrPage? page = null) =>
+        known == false || hit.Score < MinScore || (page is not null && UnreadAfter(page, hit));
+
+    /// <summary>The word is the last one read in its line, and the line's box reaches on past it.</summary>
+    internal static bool UnreadAfter(OcrPage page, WordHit hit)
+    {
+        if (LineOf(page, hit) is not { Words.Count: > 0 } line) return false;
+        var lastRight = line.Words.Max(w => w.Box.Right);
+        return hit.Box.Right >= lastRight - 1 && line.Box.Right - lastRight > UnreadTail * line.Box.Height;
+    }
+
+    private static OcrLine? LineOf(OcrPage page, WordHit hit) =>
+        page.Lines.FirstOrDefault(l => l.Text == hit.Line && Overlaps(l.Box, hit.Box));
 
     /// <summary>
     /// The page with the word of <paramref name="hit"/> spelled as in <paramref name="reading"/> (the model's answer, one
@@ -75,11 +94,7 @@ public static class VisionReading
     /// </summary>
     public static OcrPage Correct(OcrPage page, WordHit hit, string reading)
     {
-        var index = -1;
-        for (var n = 0; n < page.Lines.Count && index < 0; n++)
-            if (page.Lines[n].Text == hit.Line && Overlaps(page.Lines[n].Box, hit.Box)) index = n;
-        if (index < 0) return page;
-        var line = page.Lines[index];
+        if (LineOf(page, hit) is not { } line) return page;
         var boxes = LetterBoxes(line);
         // The word's letters: those whose box middle lies inside the hit's box.
         var inside = Enumerable.Range(0, boxes.Count)
@@ -97,13 +112,17 @@ public static class VisionReading
                 (best, model) = (a, candidate);
         }
         if (best is null || model is null) return page;
-        var chars = Merge(line.Text, model, best, inside[0], inside[^1] + 1, Scripts.IsCjk(hit.Script));
+        // Past the last word read the line's box goes on: the model's words there come in as far as they fit the room.
+        var unread = UnreadAfter(page, hit)
+            ? (int)Math.Round((line.Box.Right - line.Words.Max(w => w.Box.Right)) / Math.Max(1, line.Box.Width / Math.Max(1, line.Text.Length)))
+            : 0;
+        var chars = Merge(line.Text, model, best, inside[0], inside[^1] + 1, Scripts.IsCjk(hit.Script), unread);
         if (chars is null) return page;
         var text = new string(chars.Select(c => c.Char).ToArray());
         if (text == line.Text) return page;
 
         var lines = page.Lines.ToList();
-        lines[index] = Rebuild(line, text, chars, boxes);
+        lines[lines.IndexOf(line)] = Rebuild(line, text, chars, boxes);
         return page with { Lines = lines };
     }
 
@@ -137,7 +156,11 @@ public static class VisionReading
                 d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + (Same(ocr[i - 1], model[j - 1]) ? 0 : 1));
         var end = 0;
         for (var j = 1; j <= m; j++)
-            if (d[n, j] <= d[n, end]) end = j; // of equal ends the longer: "Oil II" rather than its "Oil I"
+        {
+            // Of equal ends the same stretch a letter or two longer ("Oil II" rather than its "Oil I"), but not the same
+            // words again further on (the model may join two columns into one line).
+            if (d[n, j] < d[n, end] || (d[n, j] == d[n, end] && j - end <= 2)) end = j;
+        }
 
         var steps = new List<(int I, int J)>();
         int a = n, b = end, matches = 0, exact = 0;
@@ -168,7 +191,9 @@ public static class VisionReading
     /// their place: the model's letters aligned to them, with letters the model adds at either edge, widened to whole
     /// words (between spaces) outside Chinese and Japanese. Every letter comes with the old letter whose box it takes.
     /// </summary>
-    internal static List<(char Char, int From)>? Merge(string ocr, string model, Alignment a, int from, int to, bool cjk)
+    /// <param name="unread">Letters' room left unread past the old line's end: when the word reaches that end, the model's
+    /// following words (whole ones, a space counting as one more) are taken while they fit ("Oil" + " I").</param>
+    internal static List<(char Char, int From)>? Merge(string ocr, string model, Alignment a, int from, int to, bool cjk, int unread = 0)
     {
         var steps = a.Steps;
         var firstStep = -1;
@@ -191,6 +216,21 @@ public static class VisionReading
             while (start > 0 && !char.IsWhiteSpace(model[start - 1])) start--;
             while (end < model.Length && !char.IsWhiteSpace(model[end])) end++;
         }
+        var reachesEnd = steps.LastOrDefault(s => s.I >= 0 && s.J >= 0) is var (lastI, lastJ) && lastI == ocr.Length - 1 && lastJ < end;
+        if (unread > 0 && reachesEnd)
+        {
+            if (cjk) end = Math.Min(model.Length, end + unread);
+            else
+                for (var next = end; next < model.Length;)
+                {
+                    var word = next;
+                    while (word < model.Length && char.IsWhiteSpace(model[word])) word++;
+                    var wordEnd = word;
+                    while (wordEnd < model.Length && !char.IsWhiteSpace(model[wordEnd])) wordEnd++;
+                    if (wordEnd == word || wordEnd - end > unread + 1) break;
+                    end = next = wordEnd;
+                }
+        }
         // The old letters that stretch of the model's line stands for, and the word's own.
         int oldStart = from, oldEnd = to;
         foreach (var (i, j) in steps)
@@ -201,9 +241,10 @@ public static class VisionReading
         }
 
         // Letters of the stretch outside the alignment (the model's line runs on past the old one) take the edge boxes.
+        const int unset = int.MinValue;
         var lastOld = Math.Max(oldStart, oldEnd - 1);
         var boxOf = new int[model.Length];
-        Array.Fill(boxOf, -1);
+        Array.Fill(boxOf, unset);
         var previous = oldStart;
         foreach (var (i, j) in steps)
         {
@@ -212,7 +253,17 @@ public static class VisionReading
         }
         var aligned = steps.Where(s => s.J >= 0).Select(s => s.J).DefaultIfEmpty(0).Min();
         for (var j = start; j < end; j++)
-            if (boxOf[j] < 0) boxOf[j] = j < aligned ? oldStart : lastOld;
+            if (boxOf[j] == unset) boxOf[j] = j < aligned ? oldStart : lastOld;
+        // Letters past either end of the old line (a letter the recognizer dropped there, the "I" of "Oil I") get room of
+        // their own beyond it: numbered on from its length, or back from -1, spaces taking no place (see Rebuild).
+        var n = ocr.Length;
+        var paired = steps.Where(s => s.I >= 0 && s.J >= 0).Select(s => s.J).ToList();
+        if (paired.Count > 0 && oldEnd == n)
+            for (int j = Math.Max(start, paired[^1] + 1), k = 0; j < end; j++)
+                boxOf[j] = n + (char.IsWhiteSpace(model[j]) ? k : k++);
+        if (paired.Count > 0 && oldStart == 0)
+            for (int j = Math.Min(end, paired[0]) - 1, k = 0; j >= start; j--)
+                boxOf[j] = -1 - (char.IsWhiteSpace(model[j]) ? k : k++);
         var chars = new List<(char, int)>(ocr.Length + end - start);
         for (var i = 0; i < oldStart; i++) chars.Add((ocr[i], i));
         for (var j = start; j < end; j++) chars.Add((model[j], boxOf[j]));
@@ -237,6 +288,27 @@ public static class VisionReading
             box = null;
         }
 
+        // Letters past the old line's ends share the room between its outer letters and its box's edges (a letter's
+        // width each at least half the line's average, else the average).
+        var n = line.Text.Length;
+        var average = line.Box.Width / Math.Max(1, n);
+        var after = chars.Count(c => c.From >= n && !char.IsWhiteSpace(c.Char));
+        var before = chars.Count(c => c.From < 0 && !char.IsWhiteSpace(c.Char));
+
+        PixelRect Beyond(double edge, double limit, int k, int count, int direction)
+        {
+            var room = Math.Abs(limit - edge);
+            var width = room >= count * average * 0.5 ? room / count : average;
+            double a = edge + direction * k * width, b = edge + direction * (k + 1) * width;
+            return line.Box with { Left = Math.Min(a, b), Right = Math.Max(a, b) };
+        }
+
+        PixelRect Letter(int from) =>
+            boxes.Count == 0 ? line.Box
+            : from >= n ? Beyond(boxes[^1].Right, line.Box.Right, from - n, after, +1)
+            : from < 0 ? Beyond(boxes[0].Left, line.Box.Left, -1 - from, before, -1)
+            : boxes[from];
+
         foreach (var (c, from) in chars)
         {
             if (char.IsWhiteSpace(c))
@@ -244,7 +316,7 @@ public static class VisionReading
                 Flush();
                 continue;
             }
-            var letter = boxes.Count == 0 ? line.Box : boxes[Math.Clamp(from, 0, boxes.Count - 1)];
+            var letter = Letter(from);
             var cjk = Scripts.IsCjk(c);
             if (cjk) Flush();
             sb.Append(c);

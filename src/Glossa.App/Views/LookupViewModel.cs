@@ -75,7 +75,7 @@ public sealed class LookupViewModel : ObservableObject
     private bool Shown(string part) => !_hidden.Contains(part);
 
     public string? ShownReading => Shown("reading") ? _reading : null;
-    public string? ShownLevel => Shown("level") ? _level : null;
+    public string? ShownLevel => Shown("level") ? WordLevels.Short(_language, _level) : null;
     public string? ShownPartOfSpeech => Shown("pos") ? _partOfSpeech : null;
     public string? ShownUsageNote => Shown("scene") ? _usageNote : null;
     public string? ShownDefinition => Shown("definition") ? _definition : null;
@@ -93,6 +93,10 @@ public sealed class LookupViewModel : ObservableObject
             if (!SetProperty(ref _language, value)) return;
             OnPropertyChanged(nameof(WordFont));
             OnPropertyChanged(nameof(PlateFont));
+            OnPropertyChanged(nameof(LevelScale));
+            OnPropertyChanged(nameof(LevelValue));
+            OnPropertyChanged(nameof(ShownLevel));
+            OnPropertyChanged(nameof(Meta));
         }
     }
 
@@ -117,16 +121,10 @@ public sealed class LookupViewModel : ObservableObject
         }
     }
 
-    /// <summary>The list the level comes from, shown above it in the Standard card.</summary>
-    public string? LevelScale => _level switch
-    {
-        null => null,
-        _ when _level.StartsWith("HSK", StringComparison.Ordinal) => "HSK",
-        _ when _level.Length == 2 && _level[0] == 'N' && char.IsDigit(_level[1]) => "JLPT",
-        _ => "CEFR",
-    };
+    /// <summary>The list the level comes from, shown above it in the Standard card (JLPT for a Japanese word).</summary>
+    public string? LevelScale => WordLevels.Split(_language, _level)?.Scale;
 
-    public string? LevelValue => _level is { } l && l.StartsWith("HSK ", StringComparison.Ordinal) ? l[4..] : _level;
+    public string? LevelValue => WordLevels.Split(_language, _level)?.Value;
 
     public string? PartOfSpeech
     {

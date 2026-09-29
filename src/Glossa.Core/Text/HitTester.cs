@@ -147,39 +147,52 @@ public sealed class HitTester
         static bool IsCore(char c) => Scripts.Of(c) is Script.Latin or Script.Cyrillic or Script.Digit;
     }
 
-    /// <summary>Lines of the same paragraph: close vertically, overlapping horizontally, similar height.</summary>
+    /// <summary>
+    /// Lines of the same paragraph: from the anchor up and down its column, each next line the nearest one above or below
+    /// that shares some width with it, while it is close and of the same font size. Lines of a column beside it (a second
+    /// panel, another window) do not break the paragraph.
+    /// </summary>
     internal static List<OcrLine> ParagraphOf(List<OcrLine> lines, OcrLine anchor)
     {
-        var ordered = lines.OrderBy(l => l.Box.Top).ToList();
         var result = new List<OcrLine> { anchor };
-        var idx = ordered.IndexOf(anchor);
-
-        var current = anchor;
-        for (var i = idx - 1; i >= 0; i--)
-        {
-            if (!SameParagraph(ordered[i], current)) break;
-            result.Insert(0, ordered[i]);
-            current = ordered[i];
-        }
-        current = anchor;
-        for (var i = idx + 1; i < ordered.Count; i++)
-        {
-            if (!SameParagraph(current, ordered[i])) break;
-            result.Add(ordered[i]);
-            current = ordered[i];
-        }
+        for (var current = anchor; Neighbour(lines, current, above: true, result) is { } up && SameParagraph(up, current); current = up)
+            result.Insert(0, up);
+        for (var current = anchor; Neighbour(lines, current, above: false, result) is { } down && SameParagraph(current, down); current = down)
+            result.Add(down);
         return result;
+    }
+
+    /// <summary>The nearest line above (or below) <paramref name="line"/> in its column, not yet taken.</summary>
+    private static OcrLine? Neighbour(List<OcrLine> lines, OcrLine line, bool above, List<OcrLine> taken)
+    {
+        OcrLine? best = null;
+        foreach (var l in lines)
+        {
+            if (!Overlaps(l.Box, line.Box) || taken.Contains(l)) continue;
+            var side = l.Box.CenterY - line.Box.CenterY;
+            if (above ? side >= 0 : side <= 0) continue;
+            if (best is null || Math.Abs(side) < Math.Abs(best.Box.CenterY - line.Box.CenterY)) best = l;
+        }
+        return best;
     }
 
     private static bool SameParagraph(OcrLine upper, OcrLine lower)
     {
         var h = Math.Max(upper.Box.Height, lower.Box.Height);
         var gap = lower.Box.Top - upper.Box.Bottom;
-        var ratio = Math.Max(upper.Box.Height, lower.Box.Height) / Math.Max(1, Math.Min(upper.Box.Height, lower.Box.Height));
-        // Lines of one paragraph share a font size; a speaker name or title above the text is usually smaller
-        // or bolder, and must not leak into the context.
+        // Lines of one paragraph share a font size; a speaker name or a note under the text is usually smaller or
+        // bolder, and must not leak into the context. Kana and kanji are as wide as the font is big, so their size is
+        // the width per character: the height of their boxes changes with the characters (おすすめ is lower than 観察力).
+        var cjk = IsCjkLine(upper) && IsCjkLine(lower);
+        double a = Size(upper, cjk), b = Size(lower, cjk);
+        var ratio = Math.Max(a, b) / Math.Max(1, Math.Min(a, b));
         return gap < h * 0.9 && gap > -h * 0.5 && ratio < 1.2 && Overlaps(upper.Box, lower.Box);
     }
+
+    private static bool IsCjkLine(OcrLine line) => Scripts.Dominant(line.Text) is Script.Kana or Script.Han;
+
+    private static double Size(OcrLine line, bool cjk) =>
+        cjk ? line.Box.Width / Math.Max(1, line.Text.Count(c => !char.IsWhiteSpace(c))) : line.Box.Height;
 
     private static bool Overlaps(PixelRect a, PixelRect b) => a.Left < b.Right && b.Left < a.Right;
 

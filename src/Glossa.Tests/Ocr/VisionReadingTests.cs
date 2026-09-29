@@ -104,6 +104,29 @@ public class VisionReadingTests
     }
 
     [Fact]
+    public void A_letter_dropped_at_the_end_of_the_line_comes_back_in_its_room()
+    {
+        // "Special Sensation Oil I": the recognizer left out the lone "I", its line box still reaching past "Oil".
+        var read = LatinLine("Special Sensation Oil", 100);
+        var page = Page(read with { Box = read.Box with { Right = read.Box.Right + 8 } });
+        var hit = new HitTester().Hit(page, At(19), 110)!;
+
+        Assert.True(VisionReading.Doubtful(hit, known: true, page));
+        var fixedPage = VisionReading.Correct(page, hit, "Special Sensation Oil I Special Sensation Oil: Moderate");
+
+        Assert.Equal("Special Sensation Oil I", fixedPage.Lines[0].Text);
+        Assert.Equal("Oil", new HitTester().Hit(fixedPage, At(19), 110)!.Word);
+        Assert.Equal("I", new HitTester().Hit(fixedPage, 214, 110)!.Word);
+    }
+
+    [Fact]
+    public void A_line_box_ending_at_its_last_word_is_not_doubtful()
+    {
+        var page = Page(LatinLine("Special Sensation Oil", 100));
+        Assert.False(VisionReading.Doubtful(new HitTester().Hit(page, At(19), 110)!, known: true, page));
+    }
+
+    [Fact]
     public void Reading_unlike_the_line_changes_nothing()
     {
         var page = Page(LatinLine("Morgana smiles", 100));

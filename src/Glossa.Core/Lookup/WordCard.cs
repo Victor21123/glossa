@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Glossa.Core.Text;
 
 namespace Glossa.Core.Lookup;
@@ -43,6 +44,53 @@ public sealed record WordCard
 }
 
 /// <summary>Register labels: the AI answers with a fixed English value, the user sees a short Russian label.</summary>
+/// <summary>
+/// A word's level on its language's list: JLPT for Japanese ("JLPT N3"), HSK for Chinese ("HSK 4", "HSK 7-9"), CEFR
+/// for the rest ("B2"). The lists give the full form; the AI may answer "N3", or a CEFR level for a Japanese word.
+/// </summary>
+public static class WordLevels
+{
+    private static readonly Regex Jlpt = new(@"^(?:JLPT\s*)?N([1-5])$", RegexOptions.IgnoreCase);
+    private static readonly Regex Hsk = new(@"^(?:HSK\s*)?([1-9](?:\s*[-–]\s*9)?)$", RegexOptions.IgnoreCase);
+    private static readonly Regex Cefr = new(@"^(?:CEFR\s*)?([ABC][12])$", RegexOptions.IgnoreCase);
+
+    /// <summary>The list and the level on it, or null when the level is not on the language's list.</summary>
+    public static (string Scale, string Value)? Split(string? language, string? level)
+    {
+        if (string.IsNullOrWhiteSpace(level)) return null;
+        var text = level.Trim();
+        Match m;
+        switch (language)
+        {
+            case "ja":
+                m = Jlpt.Match(text);
+                return m.Success ? ("JLPT", "N" + m.Groups[1].Value) : null;
+            case "zh":
+                m = Hsk.Match(text);
+                return m.Success ? ("HSK", Regex.Replace(m.Groups[1].Value, @"\s*[-–]\s*", "-")) : null;
+            default:
+                m = Cefr.Match(text);
+                return m.Success ? ("CEFR", m.Groups[1].Value.ToUpperInvariant()) : null;
+        }
+    }
+
+    /// <summary>The level as stored: "JLPT N3", "HSK 4", "B2"; null when it is not on the language's list.</summary>
+    public static string? Normalize(string? language, string? level) => Split(language, level) switch
+    {
+        null => null,
+        ("CEFR", var value) => value,
+        var (scale, value) => $"{scale} {value}",
+    };
+
+    /// <summary>The level in a line of text: "N3", "HSK 4", "B2".</summary>
+    public static string? Short(string? language, string? level) => Split(language, level) switch
+    {
+        null => null,
+        ("HSK", var value) => "HSK " + value,
+        var (_, value) => value,
+    };
+}
+
 public static class Registers
 {
     public static readonly string[] All = ["neutral", "informal", "slang", "rude", "vulgar", "sexual"];

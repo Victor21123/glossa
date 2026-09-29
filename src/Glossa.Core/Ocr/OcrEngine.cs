@@ -71,6 +71,9 @@ public sealed class OcrEngine : IDisposable
 
     public TimeSpan? TrimAfter { get; }
 
+    /// <summary>For measuring: how far the detector's line boxes are widened (DBNet unclip); null keeps the preset's.</summary>
+    public float? UnClipRatio { get; init; }
+
     /// <summary>Raised after an idle trim (for the log).</summary>
     public event Action? Trimmed;
 
@@ -179,6 +182,7 @@ public sealed class OcrEngine : IDisposable
             ReturnWordBox = true,
             DoAngle = false,
         };
+        if (UnClipRatio is { } unclip) options = options with { UnClipRatio = unclip };
 
         var result = engine.Detect(bitmap, options, ct);
         var lines = new List<OcrLine>(result.TextBlocks.Length);
