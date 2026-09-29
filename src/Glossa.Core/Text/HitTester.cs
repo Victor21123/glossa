@@ -1,0 +1,229 @@
+using System.Text;
+using Glossa.Core.Ocr;
+
+namespace Glossa.Core.Text;
+
+/// <summary>The word under the cursor together with the text around it.</summary>
+public sealed record WordHit(
+    string Word,
+    PixelRect Box,
+    string Line,
+    string Context,
+    int ContextOffset,
+    Script Script);
+
+/// <summary>
+/// Finds word boundaries in text written without spaces (Japanese, Chinese).
+/// Given the index of the character under the cursor, returns the span of the word covering it.
+/// </summary>
+public interface ITermMatcher
+{
+    (int Start, int Length) Match(string text, int index);
+}
+
+public sealed class HitTester
+{
+    private const int MaxContextChars = 400;
+
+    /// <summary>Returns the word nearest to (x, y) or null when there is no text close enough.</summary>
+    public WordHit? Hit(OcrPage page, double x, double y, ITermMatcher? cjkMatcher = null)
+    {
+        var lines = DropFurigana(page.Lines);
+        var line = NearestLine(lines, x, y);
+        if (line is null || line.Words.Count == 0) return null;
+
+        var unitIndex = NearestUnit(line.Words, x);
+        var unit = line.Words[unitIndex];
+        var script = Scripts.Dominant(unit.Text);
+
+        string word;
+        PixelRect box;
+        if (Scripts.IsCjk(script) || (script == Script.Other && Scripts.ContainsCjk(line.Text)))
+        {
+            (word, box) = CjkWord(line, unitIndex, cjkMatcher);
+            if (script == Script.Other) script = Scripts.Dominant(word);
+        }
+        else
+        {
+            word = TrimToWord(unit.Text);
+            box = unit.Box;
+            if (word.Length == 0) return null;
+        }
+
+        var paragraph = ParagraphOf(lines, line);
+        var (text, lineStarts) = JoinParagraph(paragraph);
+        var lineIdx = paragraph.IndexOf(line);
+        var searchFrom = lineStarts[lineIdx];
+        var offset = text.IndexOf(word, searchFrom, StringComparison.Ordinal);
+        var (context, contextOffset) = SentenceAround(text, offset, word.Length);
+
+        return new WordHit(word, box, line.Text, context, contextOffset, script);
+    }
+
+    /// <summary>
+    /// Furigana/ruby lines are much smaller than the text below them; they would pollute the context
+    /// and are never what the user points at when a full-size line is under the cursor.
+    /// </summary>
+    internal static List<OcrLine> DropFurigana(IReadOnlyList<OcrLine> lines)
+    {
+        if (lines.Count < 2) return [.. lines];
+        var heights = lines.Select(l => l.Box.Height).OrderBy(h => h).ToArray();
+        var median = heights[heights.Length / 2];
+        return lines
+            .Where(l => !(l.Box.Height < median * 0.6 && Scripts.Dominant(l.Text) == Script.Kana
+                          && lines.Any(o => o != l && o.Box.Top >= l.Box.Bottom - 2
+                                            && o.Box.Top - l.Box.Bottom < median * 0.5
+                                            && Overlaps(o.Box, l.Box))))
+            .ToList();
+    }
+
+    private static OcrLine? NearestLine(List<OcrLine> lines, double x, double y)
+    {
+        OcrLine? best = null;
+        var bestDist = double.MaxValue;
+        foreach (var l in lines)
+        {
+            var d = l.Box.DistanceTo(x, y);
+            if (d < bestDist) { bestDist = d; best = l; }
+        }
+        if (best is null) return null;
+        var tolerance = Math.Max(best.Box.Height * 0.75, 12);
+        return bestDist <= tolerance ? best : null;
+    }
+
+    private static int NearestUnit(IReadOnlyList<OcrWord> words, double x)
+    {
+        var best = 0;
+        var bestDist = double.MaxValue;
+        for (var i = 0; i < words.Count; i++)
+        {
+            var b = words[i].Box;
+            var d = x < b.Left ? b.Left - x : x > b.Right ? x - b.Right : 0;
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    private static (string Word, PixelRect Box) CjkWord(OcrLine line, int unitIndex, ITermMatcher? matcher)
+    {
+        // CJK lines come back as one unit per character; rebuild the line and map char index <-> unit.
+        var sb = new StringBuilder();
+        var unitAt = new List<int>();
+        for (var i = 0; i < line.Words.Count; i++)
+        {
+            foreach (var _ in line.Words[i].Text) unitAt.Add(i);
+            sb.Append(line.Words[i].Text);
+        }
+        var text = sb.ToString();
+        var charIndex = unitAt.IndexOf(unitIndex);
+        if (charIndex < 0) return (line.Words[unitIndex].Text, line.Words[unitIndex].Box);
+
+        var (start, length) = matcher?.Match(text, charIndex) ?? (charIndex, 1);
+        start = Math.Clamp(start, 0, text.Length - 1);
+        length = Math.Clamp(length, 1, text.Length - start);
+
+        var box = line.Words[unitAt[start]].Box;
+        for (var c = start + 1; c < start + length; c++) box = box.Union(line.Words[unitAt[c]].Box);
+        return (text.Substring(start, length), box);
+    }
+
+    internal static string TrimToWord(string token)
+    {
+        var s = 0;
+        var e = token.Length - 1;
+        while (s <= e && !IsCore(token[s])) s++;
+        while (e >= s && !IsCore(token[e])) e--;
+        return s > e ? "" : token[s..(e + 1)];
+
+        static bool IsCore(char c) => Scripts.Of(c) is Script.Latin or Script.Cyrillic or Script.Digit;
+    }
+
+    /// <summary>Lines of the same paragraph: close vertically, overlapping horizontally, similar height.</summary>
+    internal static List<OcrLine> ParagraphOf(List<OcrLine> lines, OcrLine anchor)
+    {
+        var ordered = lines.OrderBy(l => l.Box.Top).ToList();
+        var result = new List<OcrLine> { anchor };
+        var idx = ordered.IndexOf(anchor);
+
+        var current = anchor;
+        for (var i = idx - 1; i >= 0; i--)
+        {
+            if (!SameParagraph(ordered[i], current)) break;
+            result.Insert(0, ordered[i]);
+            current = ordered[i];
+        }
+        current = anchor;
+        for (var i = idx + 1; i < ordered.Count; i++)
+        {
+            if (!SameParagraph(current, ordered[i])) break;
+            result.Add(ordered[i]);
+            current = ordered[i];
+        }
+        return result;
+    }
+
+    private static bool SameParagraph(OcrLine upper, OcrLine lower)
+    {
+        var h = Math.Max(upper.Box.Height, lower.Box.Height);
+        var gap = lower.Box.Top - upper.Box.Bottom;
+        var ratio = Math.Max(upper.Box.Height, lower.Box.Height) / Math.Max(1, Math.Min(upper.Box.Height, lower.Box.Height));
+        // Lines of one paragraph share a font size; a speaker name or title above the text is usually smaller
+        // or bolder, and must not leak into the context.
+        return gap < h * 0.9 && gap > -h * 0.5 && ratio < 1.2 && Overlaps(upper.Box, lower.Box);
+    }
+
+    private static bool Overlaps(PixelRect a, PixelRect b) => a.Left < b.Right && b.Left < a.Right;
+
+    internal static (string Text, int[] LineStarts) JoinParagraph(List<OcrLine> paragraph)
+    {
+        var sb = new StringBuilder();
+        var starts = new int[paragraph.Count];
+        for (var i = 0; i < paragraph.Count; i++)
+        {
+            var t = paragraph[i].Text.Trim();
+            if (i > 0 && sb.Length > 0)
+            {
+                var prev = sb[^1];
+                if (prev == '-' && t.Length > 0 && char.IsLower(t[0]))
+                    sb.Length--; // re-join a word hyphenated across lines
+                else if (!(Scripts.IsCjk(prev) || (t.Length > 0 && Scripts.IsCjk(t[0]))))
+                    sb.Append(' ');
+            }
+            starts[i] = sb.Length;
+            sb.Append(t);
+        }
+        return (sb.ToString(), starts);
+    }
+
+    /// <summary>The sentence containing [offset, offset+length); falls back to the whole (capped) text.</summary>
+    internal static (string Context, int Offset) SentenceAround(string text, int offset, int length)
+    {
+        if (offset < 0) return (Cap(text), -1);
+
+        var start = offset;
+        while (start > 0 && !Scripts.IsSentenceEnd(text[start - 1])) start--;
+        var end = offset + length;
+        while (end < text.Length && !Scripts.IsSentenceEnd(text[end])) end++;
+        while (end < text.Length && (Scripts.IsSentenceEnd(text[end]) || text[end] is '"' or '」' or '』' or '”' or ')')) end++;
+
+        while (start < offset && char.IsWhiteSpace(text[start])) start++;
+        var sentence = text[start..end];
+
+        // Very short sentences ("Hello.") carry little meaning on their own: widen to the paragraph.
+        if (sentence.Length < 25 && text.Length > sentence.Length)
+        {
+            var capped = Cap(text);
+            var off = capped.IndexOf(text.Substring(offset, length), StringComparison.Ordinal);
+            return (capped, off);
+        }
+        if (sentence.Length > MaxContextChars)
+        {
+            var from = Math.Max(0, offset - start - MaxContextChars / 2);
+            var take = Math.Min(MaxContextChars, sentence.Length - from);
+            return (sentence.Substring(from, take), offset - start - from);
+        }
+        return (sentence, offset - start);
+    }
+
+    private static string Cap(string text) => text.Length <= MaxContextChars ? text : text[..MaxContextChars];
+}

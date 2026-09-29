@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>Glossa</AssemblyName>
+    <RootNamespace>Glossa.App</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Drawn by tools\make-icon.ps1. -->
+    <ApplicationIcon>Assets\glossa.ico</ApplicationIcon>
+    <!-- Program.Main: with the resume-guard argument it runs the pause guard without starting WPF. -->
+    <StartupObject>Glossa.App.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinForms is only used for the tray icon; keep its names out of the WPF code. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <Using Include="System.Net.Http" />
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Glossa.Core\Glossa.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Onest and Literata (SIL OFL 1.1, licences beside the files). -->
+    <Resource Include="Assets\Fonts\*.ttf" />
+    <None Include="Assets\Fonts\OFL-*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The tray picks its size from the same file. -->
+    <Resource Include="Assets\glossa.ico" />
+  </ItemGroup>
+
+  <!-- tools\publish.ps1 makes a portable build, which carries native libraries for every platform (~340 MB).
+       Glossa runs on 64-bit Windows only; a win-x64 publish would instead need the runtime packs downloaded. -->
+  <Target Name="PublishWinX64NativesOnly" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('runtimes\')) And !$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('runtimes\win-x64\'))" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+  </ItemGroup>
+
+</Project>

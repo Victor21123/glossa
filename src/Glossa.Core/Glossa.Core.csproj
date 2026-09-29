@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Glossa.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.50.0" />
+    <PackageReference Include="LibNMeCab" Version="0.10.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="RapidOcrNet" Version="4.2.0" />
+  </ItemGroup>
+
+</Project>

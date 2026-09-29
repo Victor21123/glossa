@@ -1,0 +1,202 @@
+<UserControl x:Class="Glossa.App.Views.Settings.CardSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Glossa.App.Views">
+    <!-- Настройки → Карточка слова (canvas «Настройки — карточка слова»): the approved card settings with a live
+         preview on the user's own last word and game frame. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Three preset tiles with a sketch of how full the card is. -->
+        <Style x:Key="PresetTile" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="10" BorderThickness="1.5" BorderBrush="{DynamicResource Rule}" Background="Transparent"
+                                Padding="12">
+                            <StackPanel>
+                                <Border Height="64" CornerRadius="6" Background="{DynamicResource Page}" BorderBrush="{DynamicResource RuleSoft}"
+                                        BorderThickness="1" Padding="10">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="7*" />
+                                                <ColumnDefinition Width="3*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Height="{Binding Bar1}" CornerRadius="2" Background="{DynamicResource Ink}" />
+                                        </Grid>
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="5*" />
+                                                <ColumnDefinition Width="5*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Height="4" CornerRadius="2" Background="{DynamicResource Muted}" />
+                                        </Grid>
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{Binding Line3}" />
+                                                <ColumnDefinition Width="{Binding Line3Rest}" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Height="4" CornerRadius="2" Background="{DynamicResource Faint}" />
+                                        </Grid>
+                                        <Grid Visibility="{Binding HasLine4, Converter={StaticResource BoolToVis}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{Binding Line4}" />
+                                                <ColumnDefinition Width="{Binding Line4Rest}" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Height="4" CornerRadius="2" Background="{DynamicResource Rule}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="{Binding Name}" FontSize="14.5" FontWeight="SemiBold" Margin="0,8,0,0" />
+                                <TextBlock Text="{Binding Description}" FontSize="12.5" LineHeight="17" Foreground="{DynamicResource Muted}"
+                                           TextWrapping="Wrap" Margin="0,5,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Band}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Accent swatches: the chosen one gets a ring with a gap. -->
+        <Style x:Key="AccentTile" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <StackPanel Background="Transparent">
+                            <Grid Width="42" Height="42" HorizontalAlignment="Center">
+                                <Ellipse x:Name="Ring" Stroke="{DynamicResource Ink}" StrokeThickness="2" Visibility="Hidden" />
+                                <Ellipse Width="34" Height="34" Fill="{Binding Swatch}" Stroke="{Binding Outline}" StrokeThickness="1" />
+                            </Grid>
+                            <TextBlock Text="{Binding Name}" FontSize="12.5" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Карточка слова" Style="{StaticResource PageTitle}" />
+            <TextBlock x:Name="Description" Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.45*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="380" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
+                <StackPanel>
+                    <HeaderedContentControl Header="Пресет" Tag="сколько показывать сразу" Style="{StaticResource SettingRowTop}">
+                        <ListBox x:Name="Presets" SelectedValuePath="Key" SelectedValue="{Binding Preset}" ItemContainerStyle="{StaticResource PresetTile}"
+                                 Margin="0,0,-12,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.Template>
+                                <ControlTemplate TargetType="ListBox">
+                                    <ItemsPresenter />
+                                </ControlTemplate>
+                            </ListBox.Template>
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="3" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                        </ListBox>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Тема карточки" Tag="поверх игры" Style="{StaticResource SettingRow}">
+                        <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding CardTheme}">
+                            <ListBoxItem Content="Как у окна" Tag="app" />
+                            <ListBoxItem Content="Тёмная" Tag="dark" />
+                            <ListBoxItem Content="Светлая" Tag="light" />
+                            <ListBoxItem Content="Диско" Tag="disco" />
+                        </ListBox>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Акцент" Tag="{Binding AccentHint}" Style="{StaticResource SettingRowTop}">
+                        <ListBox x:Name="Accents" SelectedValuePath="Key" SelectedValue="{Binding Accent}" ItemContainerStyle="{StaticResource AccentTile}"
+                                 HorizontalAlignment="Left">
+                            <ListBox.Template>
+                                <ControlTemplate TargetType="ListBox">
+                                    <ItemsPresenter />
+                                </ControlTemplate>
+                            </ListBox.Template>
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                        </ListBox>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Размер текста" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <Slider Width="280" Minimum="85" Maximum="130" TickFrequency="5" IsSnapToTickEnabled="True" SmallChange="5"
+                                    LargeChange="5" Value="{Binding FontScale}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding FontScaleText}" FontSize="14" FontWeight="SemiBold" MinWidth="48" Margin="14,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Перевод по клику" Style="{StaticResource SettingRow}">
+                        <DockPanel>
+                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding HideTranslation}" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="для тренировки: перевод скрыт, пока не нажмёшь Пробел" />
+                        </DockPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Не попадать в запись" Style="{StaticResource SettingRow}">
+                        <DockPanel>
+                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding HideFromCapture}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0"
+                                       Text="карточки не видно в ShadowPlay, OBS и на скриншотах, и она не мешает распознаванию; выключи, чтобы записать видео с ней" />
+                        </DockPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="ПРЕДПРОСМОТР" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                <Border x:Name="PreviewBox" Height="660" CornerRadius="12" Background="{DynamicResource Band}" BorderBrush="{DynamicResource Rule}"
+                        BorderThickness="1">
+                    <Canvas x:Name="Stage" ClipToBounds="True">
+                        <Image x:Name="Shot" Stretch="Fill" />
+                        <Rectangle x:Name="Ring" RadiusX="4" RadiusY="4" StrokeThickness="2" />
+                        <Border x:Name="CardHost">
+                            <v:CardView x:Name="Card" />
+                        </Border>
+                    </Canvas>
+                </Border>
+                <TextBlock x:Name="PreviewNote" Style="{StaticResource Note}" Margin="0,10,0,0" />
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

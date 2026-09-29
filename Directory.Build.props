@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

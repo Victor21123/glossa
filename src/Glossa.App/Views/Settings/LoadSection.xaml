@@ -1,0 +1,114 @@
+<UserControl x:Class="Glossa.App.Views.Settings.LoadSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- Настройки → Нагрузка на ПК (canvas «Настройки — нагрузка на ПК»). Recognition on the video card needs another
+         ONNX Runtime package and is left out. -->
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Нагрузка на ПК" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Чтобы игра не проседала: приоритеты, видеопамять, память о готовых карточках." Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.6*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
+                <StackPanel>
+                    <HeaderedContentControl Header="Приоритет Glossa" Tag="ИИ и распознавание" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding Priority}">
+                                <ListBoxItem Content="Низкий" Tag="low" />
+                                <ListBoxItem Content="Обычный" Tag="normal" />
+                            </ListBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center" Text="игра получает процессор первой" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Потоков распознавания" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="100" SelectedValuePath="Tag" SelectedValue="{Binding OcrThreads}">
+                                <ComboBoxItem Content="1"><ComboBoxItem.Tag><sys:Int32>1</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="2"><ComboBoxItem.Tag><sys:Int32>2</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="3"><ComboBoxItem.Tag><sys:Int32>3</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="4"><ComboBoxItem.Tag><sys:Int32>4</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="6"><ComboBoxItem.Tag><sys:Int32>6</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="8"><ComboBoxItem.Tag><sys:Int32>8</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="больше — быстрее распознавание, но сильнее нагрузка во время поиска" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Видеопамять в игре" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <CheckBox Style="{StaticResource Switch}" Content="Следить и уступать игре" IsChecked="{Binding YieldVram}" />
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0"
+                                       Text="если у игры кончается видеопамять, Glossa выгружает модель; следующий поиск загрузит её снова" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Выгружать модель в игре" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="220" SelectedValuePath="Tag" SelectedValue="{Binding GameIdleUnloadMinutes}">
+                                <ComboBoxItem Content="через 1 минуту"><ComboBoxItem.Tag><sys:Int32>1</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 3 минуты"><ComboBoxItem.Tag><sys:Int32>3</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 5 минут"><ComboBoxItem.Tag><sys:Int32>5</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 10 минут"><ComboBoxItem.Tag><sys:Int32>10</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="как вне игр"><ComboBoxItem.Tag><sys:Int32>0</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center" Text="{Binding GameIdleNote}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="ИИ по кнопке" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <CheckBox Style="{StaticResource Switch}" Content="Сначала справочники, ИИ по Tab" IsChecked="{Binding AiOnDemand}" />
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0"
+                                       Text="видеокарта работает, только когда ИИ правда нужен; если в справочниках пусто, ИИ спрашивается сразу" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Помнить готовые карточки" Style="{StaticResource SettingRow}">
+                        <DockPanel>
+                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding CacheCards}" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="то же слово в той же реплике открывается сразу, без ИИ (до выхода из Glossa)" />
+                        </DockPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource SidePanel}">
+                <StackPanel>
+                    <TextBlock Text="ПОСЛЕДНИЙ ПОИСК" Style="{StaticResource Caption}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,12">
+                        <TextBlock x:Name="LastTotal" FontSize="28" FontWeight="Bold" VerticalAlignment="Bottom" />
+                        <TextBlock x:Name="LastNote" Style="{StaticResource Note}" Margin="12,0,0,5" VerticalAlignment="Bottom" />
+                    </StackPanel>
+                    <StackPanel x:Name="Waterfall" />
+                    <Border Height="1" Background="{DynamicResource Rule}" Margin="0,16" />
+                    <TextBlock Text="СЕЙЧАС" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                    <UniformGrid Columns="3">
+                        <StackPanel>
+                            <TextBlock Text="ОЗУ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="RamText" FontSize="16" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ПРОЦЕССОР" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="CpuText" FontSize="16" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ВИДЕОПАМЯТЬ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="VramText" FontSize="16" />
+                        </StackPanel>
+                    </UniformGrid>
+                    <TextBlock x:Name="NowNote" Style="{StaticResource Note}" Margin="0,12,0,0" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

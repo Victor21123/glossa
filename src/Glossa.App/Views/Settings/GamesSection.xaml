@@ -1,0 +1,139 @@
+<UserControl x:Class="Glossa.App.Views.Settings.GamesSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Glossa.App.Theme">
+    <!-- Настройки → Игры и профили (canvas «Настройки — игры и профили»): the list of games on the left, the chosen one's
+         profile on the right. A profile appears by itself at the first lookup in a game. -->
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Игры и профили" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Профиль появляется сам после первого поиска в игре. Его настройки важнее общих." Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+
+        <TextBlock x:Name="Empty" Style="{StaticResource Note}" FontSize="14.5" Visibility="Collapsed" TextWrapping="Wrap" MaxWidth="620"
+                   HorizontalAlignment="Left"
+                   Text="Профилей пока нет. Наведи курсор на слово в игре и нажми сочетание поиска — профиль игры появится здесь сам." />
+
+        <Grid x:Name="Body">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400" />
+                <ColumnDefinition Width="40" />
+                <ColumnDefinition Width="*" MaxWidth="1060" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SidePanel}" Padding="14">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <TextBox x:Name="Search" Padding="36,8,11,8" theme:Hint.Text="Игра или программа" TextChanged="OnSearch" />
+                        <Viewbox Width="16" Height="16" HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M11,4 A7,7 0 1 1 11,18 A7,7 0 1 1 11,4 Z M20,20 L16,16" Stroke="{DynamicResource Muted}" StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Grid>
+                    <ListBox x:Name="List" SelectionChanged="OnSelect">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="12,10">
+                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Meta}" FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock x:Name="NotFound" Style="{StaticResource Note}" Margin="12,8" Visibility="Collapsed" Text="Ничего не нашлось." />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Column="2" x:Name="Detail">
+                <DockPanel Margin="0,0,0,18">
+                    <Button DockPanel.Dock="Right" Content="Открыть слова в словаре" VerticalAlignment="Bottom" Click="OnOpenWords" />
+                    <StackPanel>
+                        <TextBlock x:Name="Title" FontSize="22" FontWeight="Bold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="Stats" FontSize="13.5" Foreground="{DynamicResource Muted}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Style="{StaticResource SettingRows}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Название" Tag="в словаре и коллекциях" Style="{StaticResource SettingRow}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="NameBox" Width="360" LostKeyboardFocus="OnNameCommit" KeyDown="OnNameKey" />
+                                <TextBlock x:Name="FirstTitle" Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Программы" Tag="по ним Glossa узнаёт игру" Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <StackPanel x:Name="Programs" />
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <Button Content="Ещё программа" Click="OnAddProgram" />
+                                    <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                               Text="если у игры отдельный лаунчер или несколько exe" />
+                                </StackPanel>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Язык текста" Style="{StaticResource SettingRow}">
+                            <ListBox x:Name="LanguageChoice" Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectionChanged="OnChoice">
+                                <ListBoxItem Content="Как в общих" Tag="default" />
+                                <ListBoxItem Content="Английский" Tag="en" />
+                                <ListBoxItem Content="Японский" Tag="ja" />
+                                <ListBoxItem Content="Китайский" Tag="zh" />
+                            </ListBox>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Во время поиска" Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <ListBox x:Name="DuringChoice" Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectionChanged="OnChoice"
+                                         HorizontalAlignment="Left">
+                                    <ListBoxItem Content="Как в общих" Tag="default" />
+                                    <ListBoxItem Content="Не трогать" Tag="none" />
+                                    <ListBoxItem Content="Остановить кадр" Tag="frame" />
+                                    <ListBoxItem x:Name="PauseItem" Content="Пауза игры" Tag="pause" />
+                                </ListBox>
+                                <TextBlock x:Name="DuringNote" Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="ИИ в этой игре" Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <ListBox x:Name="AiChoice" Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectionChanged="OnChoice"
+                                         HorizontalAlignment="Left">
+                                    <ListBoxItem Content="Как в общих" Tag="default" />
+                                    <ListBoxItem Content="Минимум видеопамяти" Tag="lowvram" />
+                                    <ListBoxItem Content="Только справочники" Tag="off" />
+                                </ListBox>
+                                <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                           Text="для тяжёлых игр: в «Минимуме» модель уходит в оперативную память, карточка 7–9 с; «Только справочники» не трогают видеокарту вовсе" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Окно игры" Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <ContentControl x:Name="WindowStatus" />
+                                <CheckBox x:Name="BorderlessSwitch" Style="{StaticResource Switch}" Margin="0,12,0,0"
+                                          Content="Растягивать окно без рамки на весь экран" Click="OnBorderless" />
+                                <TextBlock x:Name="WindowNote" Style="{StaticResource Note}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Античит" Style="{StaticResource SettingRow}">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl x:Name="AntiCheatStatus" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                           Text="Glossa только снимает экран и в игру не вмешивается" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                    <Button Content="Удалить профиль" Style="{StaticResource GhostButton}" Click="OnRemove" />
+                    <TextBlock Style="{StaticResource Note}" Margin="12,0,0,0" VerticalAlignment="Center" Text="слова из игры останутся в словаре" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,284 @@
+<UserControl x:Class="Glossa.App.Views.Settings.AiSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:theme="clr-namespace:Glossa.App.Theme">
+    <!-- Настройки → ИИ и модели (canvas «Настройки — ИИ и модели»). -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- A local model: radio, name and note on the left, card time and video memory on the right. -->
+        <Style x:Key="ProfileTile" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="10" BorderThickness="1.5" BorderBrush="{DynamicResource Rule}" Background="Transparent"
+                                Padding="16,12">
+                            <DockPanel>
+                                <Grid Width="18" Height="18" VerticalAlignment="Top" Margin="0,2,14,0">
+                                    <Ellipse x:Name="Ring" Stroke="{DynamicResource Muted}" StrokeThickness="1.5" />
+                                    <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource Ink}" Visibility="Collapsed" />
+                                </Grid>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <StackPanel Width="96">
+                                        <TextBlock Text="КАРТОЧКА" Style="{StaticResource StatLabel}" />
+                                        <TextBlock Text="{Binding Speed}" FontSize="15" />
+                                    </StackPanel>
+                                    <StackPanel Width="110">
+                                        <TextBlock Text="ВИДЕОПАМЯТЬ" Style="{StaticResource StatLabel}" />
+                                        <TextBlock Text="{Binding Vram}" FontSize="15" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Note}" FontSize="12.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                    <ContentControl Content="{Binding Missing}" Style="{StaticResource WarnText}" FontSize="12.5" Margin="0,4,0,0"
+                                                    Visibility="{Binding HasMissing, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Text="{Binding Progress}" FontSize="12.5" Foreground="{DynamicResource InkSoft}" Margin="0,4,0,0"
+                                               Visibility="{Binding HasProgress, Converter={StaticResource BoolToVis}}" />
+                                    <!-- The catalog models download by a button; «Своя модель» takes any GGUF file. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Content="Скачать" Click="OnDownload" Margin="0,0,8,0"
+                                                Visibility="{Binding CanDownload, Converter={StaticResource BoolToVis}}" />
+                                        <Button Content="Отмена" Style="{StaticResource GhostButton}" Click="OnCancelDownload" Margin="0,0,8,0"
+                                                Visibility="{Binding Downloading, Converter={StaticResource BoolToVis}}" />
+                                        <Button Content="Выбрать файл…" Click="OnPickModel"
+                                                Visibility="{Binding IsCustom, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Band}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Ink}" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FieldCaption" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="ИИ и модели" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Локальные модели работают на твоей видеокарте; своё API можно подключить вместо них."
+                       Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.6*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="340" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
+                <StackPanel>
+                    <HeaderedContentControl Header="Модель" Tag="карточка и перевод реплики" Style="{StaticResource SettingRowTop}">
+                        <ListBox x:Name="Profiles" SelectedValuePath="Key" SelectedValue="{Binding AiProfile}"
+                                 ItemContainerStyle="{StaticResource ProfileTile}" Margin="0,0,0,-8">
+                            <ListBox.Template>
+                                <ControlTemplate TargetType="ListBox">
+                                    <ItemsPresenter />
+                                </ControlTemplate>
+                            </ListBox.Template>
+                        </ListBox>
+                    </HeaderedContentControl>
+
+                    <!-- llama.cpp: the official build for this card, downloaded by a button like the models. -->
+                    <HeaderedContentControl Header="Движок" Tag="llama.cpp — запускает локальную модель" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding Runtime}" HorizontalAlignment="Left">
+                                <ListBoxItem Content="NVIDIA (CUDA)" Tag="cuda" />
+                                <ListBoxItem Content="Любая видеокарта (Vulkan)" Tag="vulkan" />
+                            </ListBox>
+                            <ContentControl x:Name="RuntimeOk" Style="{StaticResource OkText}" FontSize="12.5" Margin="0,10,0,0" />
+                            <ContentControl x:Name="RuntimeWarn" Style="{StaticResource WarnText}" FontSize="12.5" Margin="0,10,0,0" />
+                            <TextBlock x:Name="RuntimeProgress" FontSize="12.5" Foreground="{DynamicResource InkSoft}" Margin="0,6,0,0" />
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button x:Name="RuntimeDownload" Content="Скачать" Click="OnDownloadRuntime" Margin="0,0,8,0" />
+                                <Button x:Name="RuntimeCancel" Content="Отмена" Style="{StaticResource GhostButton}" Click="OnCancelRuntime" />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Режим" Tag="сколько видеопамяти отдать ИИ" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding AiMode}">
+                                <ListBoxItem Content="Авто" Tag="auto" />
+                                <ListBoxItem Content="Минимум видеопамяти" Tag="lowvram" />
+                                <ListBoxItem Content="Выключен" Tag="off" />
+                            </ListBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" Text="{Binding AiModeNote}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Оставлять свободной" Tag="видеопамять для системы и игры в режиме «Авто»"
+                                            Style="{StaticResource SettingRow}">
+                        <ComboBox Width="160" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding VramReserveMb}">
+                            <ComboBoxItem Content="0,5 ГБ"><ComboBoxItem.Tag><sys:Int32>512</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="1 ГБ"><ComboBoxItem.Tag><sys:Int32>1024</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="1,5 ГБ"><ComboBoxItem.Tag><sys:Int32>1536</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="2 ГБ"><ComboBoxItem.Tag><sys:Int32>2048</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="3 ГБ"><ComboBoxItem.Tag><sys:Int32>3072</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="4 ГБ"><ComboBoxItem.Tag><sys:Int32>4096</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            <ComboBoxItem Content="6 ГБ"><ComboBoxItem.Tag><sys:Int32>6144</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                        </ComboBox>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Выгружать без дела" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="200" SelectedValuePath="Tag" SelectedValue="{Binding IdleUnloadMinutes}">
+                                <ComboBoxItem Content="через 5 минут"><ComboBoxItem.Tag><sys:Int32>5</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 10 минут"><ComboBoxItem.Tag><sys:Int32>10</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 15 минут"><ComboBoxItem.Tag><sys:Int32>15</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через 30 минут"><ComboBoxItem.Tag><sys:Int32>30</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="через час"><ComboBoxItem.Tag><sys:Int32>60</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="никогда"><ComboBoxItem.Tag><sys:Int32>0</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="первый поиск после выгрузки загружает модель 5–10 с" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Своё API" Tag="ключи хранятся зашифрованными, только на этом ПК"
+                                            Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ItemsControl x:Name="EndpointList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource Rule}" Background="{DynamicResource Surface}"
+                                                Padding="18,16" Margin="0,0,0,12">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="16" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="14" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="14" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="НАЗВАНИЕ" Style="{StaticResource FieldCaption}" />
+                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="ВИД" Style="{StaticResource FieldCaption}" />
+                                                        <ComboBox MinHeight="38" SelectedValuePath="Tag" SelectedValue="{Binding KindKey}">
+                                                            <ComboBoxItem Content="OpenAI-совместимый" Tag="OpenAiCompatible" />
+                                                            <ComboBoxItem Content="Anthropic (Claude)" Tag="Anthropic" />
+                                                        </ComboBox>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2">
+                                                        <TextBlock Text="АДРЕС API" Style="{StaticResource FieldCaption}" />
+                                                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=LostFocus}" theme:Hint.Text="для OpenAI-совместимых — до /v1" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="2">
+                                                        <TextBlock Text="МОДЕЛЬ" Style="{StaticResource FieldCaption}" />
+                                                        <TextBox Text="{Binding Model, UpdateSourceTrigger=LostFocus}" theme:Hint.Text="{Binding ModelHint}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="4">
+                                                        <TextBlock Text="КЛЮЧ" Style="{StaticResource FieldCaption}" />
+                                                        <PasswordBox PasswordChanged="OnKeyTyped" LostFocus="OnKeyDone" />
+                                                        <ContentControl Content="ключ сохранён" Style="{StaticResource OkText}" FontSize="12.5" Margin="0,6,0,0"
+                                                                        Visibility="{Binding HasKey, Converter={StaticResource BoolToVis}}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="4" Grid.Column="2">
+                                                        <TextBlock Text="ОТВЕТ В JSON" Style="{StaticResource FieldCaption}" />
+                                                        <ComboBox MinHeight="38" SelectedValuePath="Tag" SelectedValue="{Binding StructuredKey}">
+                                                            <ComboBoxItem Content="по схеме (json_schema)" Tag="JsonSchema" />
+                                                            <ComboBoxItem Content="json_object, схема в запросе" Tag="JsonObject" />
+                                                            <ComboBoxItem Content="только в тексте запроса" Tag="PromptOnly" />
+                                                        </ComboBox>
+                                                    </StackPanel>
+                                                </Grid>
+                                                <DockPanel Margin="0,16,0,0">
+                                                    <Button DockPanel.Dock="Left" Content="Проверить" Click="OnTestEndpoint" />
+                                                    <Button DockPanel.Dock="Right" Content="Удалить" Style="{StaticResource GhostButton}" Click="OnRemoveEndpoint" />
+                                                    <TextBlock Text="{Binding Status}" Style="{StaticResource Note}" VerticalAlignment="Center" Margin="14,0,12,0" />
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock x:Name="NoEndpoints" Text="Не подключено." Style="{StaticResource Note}" FontSize="13.5" Margin="0,8,0,10" />
+                            <WrapPanel x:Name="Providers">
+                                <TextBlock Text="Добавить:" Style="{StaticResource Note}" FontSize="13.5" VerticalAlignment="Center" Margin="0,0,10,8" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl x:Name="EnginesRow" Header="Кто работает" Tag="локальная модель или своё API" Style="{StaticResource SettingRowTop}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="КАРТОЧКА СЛОВА" Style="{StaticResource FieldCaption}" />
+                                <ComboBox ItemsSource="{Binding Engines}" SelectedValuePath="Key" SelectedValue="{Binding DictionaryEngine}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="ПЕРЕВОД РЕПЛИКИ" Style="{StaticResource FieldCaption}" />
+                                <ComboBox ItemsSource="{Binding Engines}" SelectedValuePath="Key" SelectedValue="{Binding TranslatorEngine}" />
+                            </StackPanel>
+                        </Grid>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Файлы" Tag="модели GGUF и llama.cpp; обычно менять не нужно" Style="{StaticResource SettingRowTop}">
+                        <StackPanel x:Name="Files">
+                            <TextBlock Text="СВОЙ LLAMA-SERVER.EXE" Style="{StaticResource FieldCaption}" />
+                            <TextBox Text="{Binding LlamaServerPath, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas" FontSize="13"
+                                     theme:Hint.Text="пусто — скачанный движок" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource SidePanel}">
+                <StackPanel>
+                    <TextBlock Text="СЕЙЧАС" Style="{StaticResource Caption}" />
+                    <TextBlock x:Name="StateText" FontSize="17" FontWeight="SemiBold" Margin="0,10,0,14" TextWrapping="Wrap" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="СВОБОДНО VRAM" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="VramText" FontSize="16" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="ПОСЛЕДНИЙ ПОИСК" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="LastText" FontSize="16" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
+                    <Button x:Name="TestButton" Content="Проверить модель" HorizontalAlignment="Left" Click="OnTestModel" />
+                    <TextBlock x:Name="TestNote" Style="{StaticResource Note}" Margin="0,10,0,0"
+                               Text="Загрузит модель и переведёт пробную реплику, покажет время." />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

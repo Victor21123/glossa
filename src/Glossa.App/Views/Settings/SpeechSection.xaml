@@ -1,0 +1,118 @@
+<UserControl x:Class="Glossa.App.Views.Settings.SpeechSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Glossa.App.Views"
+             xmlns:theme="clr-namespace:Glossa.App.Theme">
+    <!-- Настройки → Озвучка (canvas «Настройки — озвучка»): Windows voices per language, rate, volume, the sound cache. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <v:FalseToVisibleConverter x:Key="FalseToVis" />
+    </UserControl.Resources>
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Озвучка" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Произношение слов голосами Windows." Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.6*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="340" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
+                <StackPanel>
+                    <HeaderedContentControl Header="Голоса" Tag="голоса Windows, без интернета" Style="{StaticResource SettingRowTop}">
+                        <ItemsControl x:Name="VoiceList" ItemsSource="{Binding Voices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,0,0,1" MinHeight="54">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="34" />
+                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Code}" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource Muted}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="14.5" VerticalAlignment="Center" />
+                                            <Grid Grid.Column="2" VerticalAlignment="Center" Margin="0,0,14,0">
+                                                <ComboBox Width="280" HorizontalAlignment="Left" ItemsSource="{Binding Choices}" SelectedValuePath="Id"
+                                                          SelectedValue="{Binding VoiceId}" Visibility="{Binding HasVoice, Converter={StaticResource BoolToVis}}" />
+                                                <ContentControl Content="голос не установлен" Style="{StaticResource WarnText}"
+                                                                Visibility="{Binding HasVoice, Converter={StaticResource FalseToVis}}" />
+                                            </Grid>
+                                            <Button Grid.Column="3" Content="Прослушать" Click="OnListen" VerticalAlignment="Center"
+                                                    IsEnabled="{Binding HasVoice}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Скорость" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <Slider Width="280" Minimum="50" Maximum="200" TickFrequency="10" IsSnapToTickEnabled="True" Value="{Binding SpeechRate}"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SpeechRateText}" FontSize="14" FontWeight="SemiBold" MinWidth="60" Margin="14,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Громкость" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <Slider Width="280" Minimum="0" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding SpeechVolume}"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SpeechVolumeText}" FontSize="14" FontWeight="SemiBold" MinWidth="60" Margin="14,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Произносить сразу" Tag="когда открывается карточка" Style="{StaticResource SettingRow}">
+                        <DockPanel>
+                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AutoPlayAudio}" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="иначе — клавиша P или кнопка в карточке" />
+                        </DockPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Кэш звука" Tag="готовые записи слов; они же идут в Anki" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl x:Name="CacheFolder" Style="{StaticResource PathBox}" MaxWidth="320" />
+                            <TextBlock x:Name="CacheSize" FontSize="14" VerticalAlignment="Center" Margin="14,0,0,0" />
+                            <Button Content="Очистить" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnClearCache" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource SidePanel}">
+                <StackPanel>
+                    <TextBlock Text="ПРОСЛУШАТЬ" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Width="38" Padding="0" Margin="8,0,0,0" Click="OnSay"
+                                ToolTip="Прослушать">
+                            <Path Data="M0,0 L10,6 L0,12 Z" Fill="{DynamicResource InverseInk}" />
+                        </Button>
+                        <TextBox x:Name="SayBox" Text="reconsider" theme:Hint.Text="слово или фраза" />
+                    </DockPanel>
+                    <TextBlock x:Name="SayNote" Style="{StaticResource Note}" Margin="0,8,0,0"
+                               Text="Язык определяется по тексту: латиница — английский, кана — японский, иероглифы без каны — китайский." />
+                    <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
+                    <TextBlock Text="КАК ДОБАВИТЬ ГОЛОС" Style="{StaticResource Caption}" Margin="0,0,0,10" />
+                    <TextBlock FontSize="14" LineHeight="21" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap">
+                        1. Параметры Windows → Время и язык → Речь.<LineBreak />
+                        2. «Добавить голоса»: японский — Microsoft Haruka, китайский — Microsoft Huihui.<LineBreak />
+                        3. Вернись сюда и нажми «Проверить снова».
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Content="Открыть параметры речи" Click="OnOpenSpeechSettings" />
+                        <Button Content="Проверить снова" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="OnRecheck" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

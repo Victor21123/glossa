@@ -1,0 +1,70 @@
+<UserControl x:Class="Glossa.App.Views.Settings.LanguagesSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Настройки → Языки (canvas «Настройки — языки»). Per-language display switches (kana or romaji, tone marks,
+         simplified characters) are not built yet; the language cards show what each language has now. -->
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Языки" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Что ты читаешь и на что переводить." Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.6*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="340" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <Border Style="{StaticResource SettingRows}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Мой язык" Tag="сюда переводятся слова и реплики" Style="{StaticResource SettingRow}">
+                            <ComboBox Width="240" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding NativeLanguage}">
+                                <ComboBoxItem Content="Русский" Tag="ru" />
+                                <ComboBoxItem Content="Английский" Tag="en" />
+                            </ComboBox>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Текст на экране" Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding ScreenLanguage}">
+                                    <ListBoxItem Content="Определять по тексту" Tag="auto" />
+                                    <ListBoxItem Content="Английский" Tag="en" />
+                                    <ListBoxItem Content="Японский" Tag="ja" />
+                                    <ListBoxItem Content="Китайский" Tag="zh" />
+                                    <ListBoxItem Content="Русский" Tag="ru" />
+                                </ListBox>
+                                <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0"
+                                           Text="Если игра всегда на одном языке, выбери его: Glossa не будет гадать, и строка из одних иероглифов прочтётся правильно. Русский включает распознавание кириллицы." />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="Строка из одних иероглифов" Tag="когда язык определяется по тексту"
+                                                Style="{StaticResource SettingRowTop}">
+                            <StackPanel>
+                                <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding PreferredCjk}">
+                                    <ListBoxItem Content="Китайский" Tag="zh" />
+                                    <ListBoxItem Content="Японский" Tag="ja" />
+                                </ListBox>
+                                <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0"
+                                           Text="В японской реплике почти всегда есть кана. Без неё Glossa читает строку как китайскую — поменяй для японской игры с короткими надписями." />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="ПО ЯЗЫКАМ" Style="{StaticResource Caption}" Margin="0,26,0,12" />
+                <UniformGrid x:Name="LanguageCards" Columns="3" Margin="0,0,-16,0" />
+            </StackPanel>
+
+            <Border Grid.Column="2" Style="{StaticResource SidePanel}">
+                <StackPanel>
+                    <TextBlock Text="РАСПОЗНАВАНИЕ И РАЗБОР" Style="{StaticResource Caption}" Margin="0,0,0,6" />
+                    <StackPanel x:Name="Engines" />
+                    <TextBlock Style="{StaticResource Note}" Margin="0,12,0,0"
+                               Text="Всё работает без интернета: распознавание текста на экране, разбор японского на слова (UniDic) и китайского (CC-CEDICT)." />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

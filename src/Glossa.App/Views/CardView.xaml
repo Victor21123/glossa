@@ -1,0 +1,445 @@
+<UserControl x:Class="Glossa.App.Views.CardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Glossa.App.Views"
+             Foreground="{DynamicResource Ink}" FontSize="14">
+    <!-- The word card: three presets from the approved mockups (canvas «Карточка слова»): Less, Standard, More.
+         Shown by LookupPopup over the game and as the live preview in Настройки → Карточка слова. Colours come from
+         the card palette the code puts into these resources, so the card can follow its own theme and accent. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <v:NullToCollapsedConverter x:Key="NullToCollapsed" />
+        <v:FalseToVisibleConverter x:Key="FalseToVis" />
+
+        <Geometry x:Key="IconSpeaker">M11,5 L6,9 H3 V15 H6 L11,19 Z M15.5,8.5 A5,5 0 0 1 15.5,15.5 M18.5,5.5 A9,9 0 0 1 18.5,18.5</Geometry>
+        <Geometry x:Key="IconBookmark">M6,3 H18 V21 L12,17 L6,21 Z</Geometry>
+        <Geometry x:Key="IconClock">M4,13 A8,8 0 1 1 20,13 A8,8 0 1 1 4,13 Z M12,9 V13 L14.5,15.5 M9.5,2 H14.5</Geometry>
+
+        <DropShadowEffect x:Key="CardShadow" BlurRadius="36" ShadowDepth="10" Direction="270" Opacity="1"
+                          Color="{DynamicResource ShadowColor}" />
+
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        </Style>
+
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{TemplateBinding Tag}" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.8"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Well}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Bookmark: outline until the word is in the library, then filled with the accent. -->
+        <Style x:Key="SaveButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Tag" Value="{StaticResource IconBookmark}" />
+            <Setter Property="ToolTip" Value="Сохранить слово (S)" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path x:Name="Mark" Data="{StaticResource IconBookmark}" Stroke="{DynamicResource Muted}" StrokeThickness="1.8"
+                                          StrokeLineJoin="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Well}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSaved}" Value="True">
+                                <Setter TargetName="Mark" Property="Stroke" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Mark" Property="Fill" Value="{DynamicResource Accent}" />
+                                <Setter Property="ToolTip" Value="Слово в твоём словаре" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="KbdBox" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+            <Setter Property="Background" Value="{DynamicResource Kbd}" />
+            <Setter Property="Padding" Value="6,0,6,1" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="KbdText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+        </Style>
+
+        <!-- A labelled line of the Standard card: caption on the left, content on the right. -->
+        <Style x:Key="Row" TargetType="HeaderedContentControl">
+            <Setter Property="Margin" Value="0,0,0,11" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="HeaderedContentControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            <ContentPresenter Grid.Column="2" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SmallRow" TargetType="HeaderedContentControl" BasedOn="{StaticResource Row}">
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="HeaderedContentControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="84" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{TemplateBinding Header}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                            <ContentPresenter Grid.Column="2" TextElement.FontSize="13" TextElement.Foreground="{DynamicResource InkSoft}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Training mode stand-in for the translation. -->
+        <Style x:Key="RevealHint" TargetType="Border">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Background" Value="{DynamicResource Well}" />
+            <Setter Property="Visibility" Value="{Binding ShowTranslation, Converter={StaticResource FalseToVis}}" />
+        </Style>
+
+        <DataTemplate x:Key="ComponentItem">
+            <TextBlock Margin="0,0,14,2">
+                <Run Text="{Binding Part, Mode=OneWay}" FontFamily="{Binding DataContext.WordFont, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     FontWeight="SemiBold" Foreground="{DynamicResource Ink}" />
+                <Run Text="{Binding Meaning, Mode=OneWay}" />
+            </TextBlock>
+        </DataTemplate>
+
+        <ItemsPanelTemplate x:Key="WrapItems">
+            <WrapPanel />
+        </ItemsPanelTemplate>
+
+        <DataTemplate x:Key="DictSection">
+            <StackPanel Margin="0,0,0,4">
+                <TextBlock Text="{Binding Title}" Style="{StaticResource Caption}" Margin="0,6,0,4" />
+                <ItemsControl ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,4,8">
+                                <WrapPanel>
+                                    <TextBlock Text="{Binding Headword}" FontSize="15" FontWeight="SemiBold" Margin="0,0,8,0"
+                                               FontFamily="{Binding DataContext.WordFont, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    <TextBlock Text="{Binding Reading}" Foreground="{DynamicResource Muted}" VerticalAlignment="Bottom" Margin="0,0,0,1"
+                                               FontFamily="{Binding DataContext.WordFont, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                </WrapPanel>
+                                <v:MarkupView Markup="{Binding Body}" MaxLines="16" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid x:Name="Root" Margin="16,12,16,24">
+        <!-- One-line notice instead of a card -->
+        <Border Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" MaxWidth="440" HorizontalAlignment="Left"
+                CornerRadius="10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                Padding="16,11" Effect="{StaticResource CardShadow}">
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+        </Border>
+
+        <Grid Visibility="{Binding HasMessage, Converter={StaticResource FalseToVis}}">
+
+            <!-- ============ Меньше: the translation is the headline ============ -->
+            <Border Width="440" CornerRadius="14" Background="{DynamicResource Surface}" Padding="20,16,18,13"
+                    Effect="{StaticResource CardShadow}" Visibility="{Binding IsLess, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,-4,-6,0">
+                            <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" ToolTip="Произнести (P)" Click="OnSpeak" />
+                            <Button Style="{StaticResource SaveButton}" Click="OnSave" />
+                        </StackPanel>
+                        <Grid>
+                            <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontSize="28" FontWeight="ExtraBold" LineHeight="32"
+                                       TextWrapping="Wrap" Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
+                            <Border Style="{StaticResource RevealHint}">
+                                <TextBlock Text="Пробел: показать перевод" FontSize="12.5" Foreground="{DynamicResource Muted}" />
+                            </Border>
+                        </Grid>
+                    </DockPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13.5" Foreground="{DynamicResource Muted}">
+                        <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
+                             Foreground="{DynamicResource Ink}" /><Run Text="   " /><Run Text="{Binding Meta, Mode=OneWay}" FontFamily="{Binding WordFont, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Text="{Binding ContextTranslation}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="15" LineHeight="22"
+                               Foreground="{DynamicResource InkSoft}" Visibility="{Binding ContextTranslation, Converter={StaticResource NullToCollapsed}}" />
+                    <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource Danger}"
+                               Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                    <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,9,0,0">
+                        <DockPanel TextElement.FontSize="12.5" TextElement.Foreground="{DynamicResource Muted}">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <TextBlock Text="{Binding Footer}" />
+                                <TextBlock Text="  ·  Tab подробнее" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding DictionaryMarkShort}" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Стандарт: everything about the word at once, dictionaries folded ============ -->
+            <Border Width="560" CornerRadius="10" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                    Effect="{StaticResource CardShadow}" Visibility="{Binding IsStandard, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="22,18,20,16">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" ToolTip="Произнести (P)" Click="OnSpeak" />
+                                <Button Style="{StaticResource SaveButton}" Click="OnSave" />
+                                <Border Width="58" Height="58" Margin="10,0,0,0" CornerRadius="8" BorderBrush="{DynamicResource Ink}" BorderThickness="1.5"
+                                        Visibility="{Binding Level, Converter={StaticResource NullToCollapsed}}">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding LevelScale}" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Muted}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding LevelValue}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock TextWrapping="Wrap" FontFamily="{Binding WordFont}">
+                                    <Run Text="{Binding Headword, Mode=OneWay}" FontSize="30" FontWeight="Bold" /><Run Text="  " /><Run
+                                        Text="{Binding Reading, Mode=OneWay}" FontSize="15" Foreground="{DynamicResource InkSoft}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding PartOfSpeech}" FontSize="13" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"
+                                           Visibility="{Binding PartOfSpeech, Converter={StaticResource NullToCollapsed}}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel Margin="22,16,22,3">
+                        <HeaderedContentControl Header="ПЕРЕВОД" Style="{StaticResource Row}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
+                                           Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
+                                <Border Style="{StaticResource RevealHint}">
+                                    <TextBlock Text="Пробел: показать перевод" FontSize="12.5" Foreground="{DynamicResource Muted}" />
+                                </Border>
+                                <TextBlock Text="{Binding DictionaryMark}" FontSize="11.5" Margin="0,2,0,0"
+                                           Visibility="{Binding DictionaryMark, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DictionaryMarkMatches}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="ЗДЕСЬ" Style="{StaticResource Row}"
+                                                Visibility="{Binding UsageNote, Converter={StaticResource NullToCollapsed}}">
+                            <TextBlock Text="{Binding UsageNote}" FontSize="14.5" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="ЗНАЧЕНИЕ" Style="{StaticResource Row}"
+                                                Visibility="{Binding Definition, Converter={StaticResource NullToCollapsed}}">
+                            <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="РЕПЛИКА" Style="{StaticResource Row}">
+                            <StackPanel>
+                                <TextBlock x:Name="ContextStandard" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                                           FontFamily="{Binding WordFont}" />
+                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                           Margin="0,5,0,0" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="РАЗБОР" Style="{StaticResource Row}"
+                                                Visibility="{Binding HasComponents, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl ItemsSource="{Binding Components}" ItemTemplate="{StaticResource ComponentItem}" ItemsPanel="{StaticResource WrapItems}"
+                                          TextElement.Foreground="{DynamicResource InkSoft}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="ФОРМЫ" Style="{StaticResource Row}"
+                                                Visibility="{Binding KeyForms, Converter={StaticResource NullToCollapsed}}">
+                            <TextBlock Text="{Binding KeyForms}" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" FontFamily="{Binding WordFont}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource Row}"
+                                                Visibility="{Binding Synonyms, Converter={StaticResource NullToCollapsed}}">
+                            <TextBlock Text="{Binding Synonyms}" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" FontFamily="{Binding WordFont}" />
+                        </HeaderedContentControl>
+                        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,0,0,11" Foreground="{DynamicResource Danger}"
+                                   Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                    </StackPanel>
+
+                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="22,0,14,10"
+                                  Visibility="{Binding ShowDictionaries, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl ItemsSource="{Binding Dictionaries}" ItemTemplate="{StaticResource DictSection}" Margin="0,0,8,0" />
+                    </ScrollViewer>
+
+                    <Border Background="{DynamicResource Band}" BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0" CornerRadius="0,0,9,9"
+                            Padding="22,10">
+                        <DockPanel TextElement.FontSize="12.5" TextElement.Foreground="{DynamicResource Muted}">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Border Style="{StaticResource KbdBox}"><TextBlock Text="S" Style="{StaticResource KbdText}" /></Border>
+                                <TextBlock Text="сохранить" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                <Border Style="{StaticResource KbdBox}"><TextBlock Text="Esc" Style="{StaticResource KbdText}" /></Border>
+                                <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1,0,0,0" Margin="6,0,0,0" Padding="10,0,0,0"
+                                        Visibility="{Binding Footer, Converter={StaticResource NullToCollapsed}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Viewbox Width="12" Height="12" Margin="0,0,5,0" VerticalAlignment="Center">
+                                            <Canvas Width="24" Height="24">
+                                                <Path Data="{StaticResource IconClock}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                            </Canvas>
+                                        </Viewbox>
+                                        <TextBlock Text="{Binding Footer}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="СЛОВАРИ" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Button Content="{Binding DictionarySummary}" Click="OnToggleDictionaries" Cursor="Hand" Focusable="False"
+                                        IsEnabled="{Binding HasDictionaries}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <TextBlock Text="{TemplateBinding Content}" Foreground="{DynamicResource Muted}" />
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Больше: nameplate on top, serif, the dictionary open ============ -->
+            <Grid Width="472" Visibility="{Binding IsMore, Converter={StaticResource BoolToVis}}">
+                <Border Margin="0,17,0,0" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}"
+                        BorderThickness="1" Padding="4" Effect="{StaticResource CardShadow}">
+                    <Border CornerRadius="8" BorderBrush="{DynamicResource RuleSoft}" BorderThickness="1" Padding="22,28,22,14">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-20,-12,0">
+                                <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" ToolTip="Произнести (P)" Click="OnSpeak" />
+                                <Button Style="{StaticResource SaveButton}" Click="OnSave" />
+                            </StackPanel>
+                            <StackPanel>
+                                <Grid Margin="0,0,64,0">
+                                    <TextBlock Text="{Binding Translation, TargetNullValue=…}" FontFamily="{DynamicResource SerifFont}" FontSize="25"
+                                               FontWeight="SemiBold" LineHeight="30" TextWrapping="Wrap"
+                                               Visibility="{Binding ShowTranslation, Converter={StaticResource BoolToVis}}" />
+                                    <Border Style="{StaticResource RevealHint}">
+                                        <TextBlock Text="Пробел: показать перевод" FontSize="12.5" Foreground="{DynamicResource Muted}" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock TextWrapping="Wrap" Margin="0,12,0,0" FontSize="13.5" Foreground="{DynamicResource InkSoft}">
+                                    <Run Text="{Binding PartOfSpeech, Mode=OneWay}" Foreground="{DynamicResource Muted}" /><Run Text="   " /><Run
+                                        Text="{Binding UsageNote, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding Definition}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap" Margin="0,12,0,0"
+                                           Foreground="{DynamicResource InkSoft}" Visibility="{Binding Definition, Converter={StaticResource NullToCollapsed}}" />
+                                <Border Height="1" Background="{DynamicResource RuleSoft}" Margin="0,14,0,12" />
+                                <TextBlock x:Name="ContextMore" FontSize="13.5" LineHeight="20" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                                           FontFamily="{Binding WordFont}" />
+                                <TextBlock Text="{Binding ContextTranslation, TargetNullValue=…}" FontFamily="{DynamicResource SerifFont}" FontSize="15.5"
+                                           LineHeight="22" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                <HeaderedContentControl Header="РАЗБОР" Style="{StaticResource SmallRow}"
+                                                        Visibility="{Binding HasComponents, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl ItemsSource="{Binding Components}" ItemTemplate="{StaticResource ComponentItem}" ItemsPanel="{StaticResource WrapItems}" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="ФОРМЫ" Style="{StaticResource SmallRow}"
+                                                        Visibility="{Binding KeyForms, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock Text="{Binding KeyForms}" TextWrapping="Wrap" FontFamily="{Binding WordFont}" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource SmallRow}"
+                                                        Visibility="{Binding Synonyms, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock Text="{Binding Synonyms}" TextWrapping="Wrap" FontFamily="{Binding WordFont}" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="СЛОВАРИ" Style="{StaticResource SmallRow}">
+                                    <TextBlock Text="{Binding DictionaryMark, TargetNullValue=статьи нет}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Muted}" />
+                                </HeaderedContentControl>
+                                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" Margin="0,2,-8,6"
+                                              Visibility="{Binding ShowDictionaries, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl ItemsSource="{Binding Dictionaries}" ItemTemplate="{StaticResource DictSection}" Margin="0,0,8,0" />
+                                </ScrollViewer>
+                                <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource Danger}"
+                                           Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                                <Border BorderBrush="{DynamicResource RuleSoft}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,4,0,0">
+                                    <DockPanel TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Muted}">
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                    Visibility="{Binding Footer, Converter={StaticResource NullToCollapsed}}">
+                                            <Viewbox Width="12" Height="12" Margin="0,0,5,0" VerticalAlignment="Center">
+                                                <Canvas Width="24" Height="24">
+                                                    <Path Data="{StaticResource IconClock}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
+                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Text="{Binding Footer}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Style="{StaticResource KbdBox}"><TextBlock Text="S" Style="{StaticResource KbdText}" /></Border>
+                                            <TextBlock Text="сохранить" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                            <Border Style="{StaticResource KbdBox}"><TextBlock Text="P" Style="{StaticResource KbdText}" /></Border>
+                                            <TextBlock Text="звук" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                            <Border Style="{StaticResource KbdBox}"><TextBlock Text="Esc" Style="{StaticResource KbdText}" /></Border>
+                                            <TextBlock Text="закрыть" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Border>
+                <!-- The nameplate sits on the frame's top edge, above the border line (Plate On Top). -->
+                <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,0,0,0" CornerRadius="6" Background="{DynamicResource Plate}"
+                        Padding="14,4,14,6">
+                    <TextBlock Foreground="{DynamicResource PlateInk}">
+                        <Run Text="{Binding Headword, Mode=OneWay}" FontFamily="{Binding PlateFont, Mode=OneWay}" FontSize="19" FontWeight="SemiBold" /><Run
+                            Text="  " /><Run Text="{Binding Level, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />
+                    </TextBlock>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
