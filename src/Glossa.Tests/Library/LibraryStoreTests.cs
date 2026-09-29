@@ -99,6 +99,39 @@ public sealed class LibraryStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_corrected_lookup_is_taken_back()
+    {
+        using var store = new LibraryStore(_path);
+        SavedWord Seen(string word, string sentence) =>
+            new() { Language = "en", Word = word, Translation = "т", Context = sentence, ShotFile = $"shots/{word}-{sentence.Length}.jpg" };
+
+        // A misread word the lookup created goes away entirely, its frame with it.
+        store.Record(Seen("Wching", "Wching you."), newLookup: true, out var misread);
+        Assert.True(misread!.NewWord);
+        Assert.Equal(["shots/Wching-11.jpg"], store.Retract(misread));
+        Assert.Empty(store.List());
+        Assert.Empty(store.ListDeleted());
+
+        // A word already there keeps its old sentence and count; only this lookup's sentence goes.
+        var id = store.Record(Seen("watching", "Keep watching."), newLookup: true);
+        store.Record(Seen("watching", "I'm watching you."), newLookup: true, out var again);
+        Assert.False(again!.NewWord);
+        Assert.Equal(["shots/watching-17.jpg"], store.Retract(again));
+        var kept = Assert.Single(store.List());
+        Assert.Equal(id, kept.Id);
+        Assert.Equal(1, kept.Lookups);
+        Assert.Equal("Keep watching.", Assert.Single(kept.Contexts).Context);
+
+        // A deleted word brought back by the lookup is deleted again.
+        store.Delete(id);
+        store.Record(Seen("watching", "Keep watching."), newLookup: true, out var back);
+        Assert.True(back!.Revived);
+        Assert.Empty(store.Retract(back)); // the sentence was already there
+        Assert.Empty(store.List());
+        Assert.Single(store.ListDeleted());
+    }
+
+    [Fact]
     public void Older_duplicates_merge_into_the_oldest_entry_keeping_its_anki_identity()
     {
         // A library written before sentences were kept per word: one row per word and sentence.

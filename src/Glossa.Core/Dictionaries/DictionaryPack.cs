@@ -130,6 +130,32 @@ public sealed class DictionaryPack : IDisposable
         return list;
     }
 
+    /// <summary>
+    /// Keys that begin with <paramref name="first"/> and are <paramref name="minLength"/> to <paramref name="maxLength"/>
+    /// letters long, each with its best rank: the pool spelling suggestions are picked from (a range of the clustered
+    /// key table, a few tens of milliseconds for a letter of Wiktionary).
+    /// </summary>
+    public IReadOnlyList<(string Key, int Rank)> KeysFrom(char first, int minLength, int maxLength)
+    {
+        var keys = new List<(string, int)>();
+        lock (_gate)
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = """
+                SELECT key, MIN(rank) FROM keys
+                WHERE key >= $lo AND key < $hi AND length(key) BETWEEN $min AND $max
+                GROUP BY key
+                """;
+            cmd.Parameters.AddWithValue("$lo", first.ToString());
+            cmd.Parameters.AddWithValue("$hi", ((char)(first + 1)).ToString());
+            cmd.Parameters.AddWithValue("$min", minLength);
+            cmd.Parameters.AddWithValue("$max", maxLength);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) keys.Add((r.GetString(0), r.GetInt32(1)));
+        }
+        return keys;
+    }
+
     /// <param name="maxRank">Only keys up to this rank: <see cref="DictKey.Alias"/> leaves out inflected forms.</param>
     public bool HasKey(string key, int maxRank = int.MaxValue)
     {

@@ -82,6 +82,18 @@ switch (args[0])
         Console.WriteLine($"-- {sections.Count} sections in {ms:F1} ms; hint: {DictionaryService.Hint(sections, "ru", 200)}");
         break;
     }
+    case "suggest":
+    {
+        // suggest <lang> <word>...: what the card offers when a misread word is corrected
+        using var bench = new Bench();
+        foreach (var word in args.Skip(2))
+        {
+            var t0 = sw.Elapsed;
+            var list = bench.Words.Suggestions(args[1], word);
+            Console.WriteLine($"{word} -> {string.Join(", ", list)}  ({(sw.Elapsed - t0).TotalMilliseconds:F0} ms)");
+        }
+        break;
+    }
     case "level":
     {
         using var levels = new LevelService(DataPaths.Levels);

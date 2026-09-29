@@ -114,6 +114,12 @@ public sealed record WordContext
     public PixelRect? WordBox { get; init; }
 }
 
+/// <summary>
+/// What one lookup added to the library: a new word, a deleted one brought back, or a sentence for a word already
+/// there (<see cref="LibraryStore.Retract"/> takes it back when the user corrects a misread word).
+/// </summary>
+public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, string? NewSentenceId);
+
 public sealed partial class LibraryStore : IDisposable
 {
     private const int SchemaVersion = 7;
@@ -305,12 +311,22 @@ public sealed partial class LibraryStore : IDisposable
     /// when the same lookup is saved again (the S key after autosave): it updates that sentence and does not count.
     /// Returns the word's id.
     /// </summary>
-    public string Record(SavedWord w, bool newLookup)
+    public string Record(SavedWord w, bool newLookup) => Record(w, newLookup, out _);
+
+    /// <param name="added">For a new lookup, what it added to the library, so <see cref="Retract"/> can take it back.</param>
+    public string Record(SavedWord w, bool newLookup, out RecordedLookup? added)
     {
         lock (_gate)
         {
             using var tx = _db.BeginTransaction();
-            var id = !newLookup && Exists(w.Id) ? w.Id : FindWord(w.Language, w.Headword) ?? Revive(w.Language, w.Headword);
+            var id = !newLookup && Exists(w.Id) ? w.Id : FindWord(w.Language, w.Headword);
+            var revived = false;
+            if (id is null && Revive(w.Language, w.Headword) is { } back)
+            {
+                id = back;
+                revived = true;
+            }
+            var created = id is null;
             if (id is null)
             {
                 id = w.Id;
@@ -321,10 +337,58 @@ public sealed partial class LibraryStore : IDisposable
                 FillBlanks(id, w);
                 if (newLookup) Run("UPDATE words SET lookups = lookups + 1 WHERE id = $id", ("$id", id));
             }
-            SaveContext(id, w, newLookup);
+            var sentence = SaveContext(id, w, newLookup);
             MirrorNewest(id);
             tx.Commit();
+            added = newLookup ? new RecordedLookup(id, created, revived, sentence) : null;
             return id;
+        }
+    }
+
+    /// <summary>
+    /// Takes one lookup back (the word was misread and the user corrected it): a word the lookup created goes away
+    /// entirely, one it brought back is deleted again, otherwise only the sentence it added and its count. Returns the
+    /// frames (shot files, relative to the data folder) nothing refers to any more, for the caller to delete.
+    /// </summary>
+    public IReadOnlyList<string> Retract(RecordedLookup added)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            var shots = new List<string>();
+            void CollectShots(string sql, string id)
+            {
+                using var cmd = _db.CreateCommand();
+                cmd.CommandText = sql;
+                cmd.Parameters.AddWithValue("$id", id);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    if (!r.IsDBNull(0)) shots.Add(r.GetString(0));
+            }
+            if (added.NewWord)
+            {
+                CollectShots("SELECT shot_file FROM contexts WHERE word_id = $id", added.WordId);
+                Run("""
+                    DELETE FROM contexts WHERE word_id = $id;
+                    DELETE FROM collection_words WHERE word_id = $id;
+                    DELETE FROM review_state WHERE word_id = $id;
+                    DELETE FROM review_log WHERE word_id = $id;
+                    DELETE FROM words WHERE id = $id;
+                    """, ("$id", added.WordId));
+            }
+            else
+            {
+                if (added.NewSentenceId is { } sentence)
+                {
+                    CollectShots("SELECT shot_file FROM contexts WHERE id = $id", sentence);
+                    Run("DELETE FROM contexts WHERE id = $id", ("$id", sentence));
+                }
+                Run("UPDATE words SET lookups = MAX(1, lookups - 1) WHERE id = $id", ("$id", added.WordId));
+                if (added.Revived) Run("UPDATE words SET deleted = 1 WHERE id = $id", ("$id", added.WordId));
+                MirrorNewest(added.WordId);
+            }
+            tx.Commit();
+            return shots;
         }
     }
 
@@ -553,10 +617,12 @@ public sealed partial class LibraryStore : IDisposable
     /// Adds the sentence, or refreshes it when the word already has it. A repeated lookup keeps the user's edits to
     /// the sentence; a re-save of the same lookup overwrites (the card may have finished streaming meanwhile).
     /// </summary>
-    private void SaveContext(string wordId, SavedWord w, bool newLookup)
+    /// <summary>Adds the sentence, or refreshes it if the word already has it; returns the id of a sentence it added.</summary>
+    private string? SaveContext(string wordId, SavedWord w, bool newLookup)
     {
         var existing = Scalar("SELECT id FROM contexts WHERE word_id = $w AND COALESCE(context, '') = $ctx LIMIT 1",
             ("$w", wordId), ("$ctx", w.Context ?? "")) as string;
+        string? inserted = null;
         using var cmd = _db.CreateCommand();
         if (existing is null)
         {
@@ -565,7 +631,7 @@ public sealed partial class LibraryStore : IDisposable
                                      usage_note, app_exe, window_title, shot_file, word_box)
                 VALUES($cid, $w, $created, $ctx, $off, $surface, $ctxtr, $tr, $usage, $exe, $title, $shot, $box)
                 """;
-            cmd.Parameters.AddWithValue("$cid", Guid.NewGuid().ToString("N"));
+            cmd.Parameters.AddWithValue("$cid", inserted = Guid.NewGuid().ToString("N"));
         }
         else
         {
@@ -597,6 +663,7 @@ public sealed partial class LibraryStore : IDisposable
         cmd.Parameters.AddWithValue("$shot", (object?)w.ShotFile ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$box", w.WordBox is { } b ? JsonSerializer.Serialize(b) : DBNull.Value);
         cmd.ExecuteNonQuery();
+        return inserted;
     }
 
     /// <summary>Copies the newest sentence into the word row, which exports read.</summary>

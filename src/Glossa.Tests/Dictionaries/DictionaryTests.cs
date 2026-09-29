@@ -349,6 +349,37 @@ public sealed class DictionaryTests : IDisposable
     }
 
     [Fact]
+    public void Suggestions_put_a_common_word_before_a_rare_nearer_one()
+    {
+        var dir = Temp();
+        using (var w = new DictionaryPackWriter(Path.Combine(dir, "en.gdict"), new PackMeta("en", "EN", "en", "ru", 10)))
+        {
+            w.Add("watch", null, "[t]смотреть[/t]", [new DictKey("watch"), new DictKey("watching", DictKey.Form)]);
+            w.Add("whing", null, "[t]?[/t]", [new DictKey("whing")]);
+            w.Add("business", null, "[t]дело[/t]", [new DictKey("business")]);
+            w.Add("bizness", null, "[t]?[/t]", [new DictKey("bizness")]);
+            w.AddLink("bihness", "business"); // another spelling: not as common as the word it spells
+            w.Complete();
+        }
+        File.WriteAllText(Path.Combine(dir, "jlpt_n5.csv"), "expression,reading,meaning,tags,guid\n");
+        foreach (var f in LevelsBuilder.JlptFiles.Skip(1)) File.WriteAllText(Path.Combine(dir, f), "expression,reading,meaning,tags,guid\n");
+        File.WriteAllText(Path.Combine(dir, LevelsBuilder.HskFile), "[]");
+        File.WriteAllText(Path.Combine(dir, LevelsBuilder.CefrFile), "headword,pos,CEFR\nwatch,verb,A1\nbusiness,noun,A1\n");
+        File.WriteAllText(Path.Combine(dir, LevelsBuilder.CefrC1C2File), "headword,pos,CEFR,notes\n");
+        var levelsDb = Path.Combine(dir, "levels.db");
+        LevelsBuilder.Build(dir, levelsDb, CancellationToken.None);
+
+        using var service = new DictionaryService(dir);
+        service.Reload([], []);
+        using var levels = new LevelService(levelsDb);
+        var words = new Glossa.Core.Lookup.WordLookup(() => null, () => null, service, () => levels);
+
+        Assert.Equal("Watching", words.Suggestions("en", "Wching")[0]);  // two letters off, but watch is A1
+        Assert.Equal("business", words.Suggestions("en", "buisness")[0]);
+        Assert.Empty(words.Suggestions("ja", "合体して"));                  // not by letters
+    }
+
+    [Fact]
     public void Levels_built_with_an_en_dash_get_a_hyphen()
     {
         var dir = Temp();

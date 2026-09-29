@@ -87,6 +87,48 @@ public sealed class WordLookup(
             || dictionaries.Lookup("en", [p], perPack: 1).Count > 0);
     }
 
+    /// <summary>
+    /// Spellings to offer when the user corrects a misread word: dictionary words one letter away (two for words over
+    /// four letters), the commonest first by the listed level of the word or its headword (watching, as watch A1, before
+    /// witching). Latin script only: a misread kanji, hanzi or kana is not near by letters.
+    /// </summary>
+    public IReadOnlyList<string> Suggestions(string language, string word, int count = 4)
+    {
+        if (Scripts.Dominant(word) != Script.Latin) return [];
+        // Every near key is ranked, not the first few: an inflected form (watching) is as likely as a rare headword.
+        var near = dictionaries.Near(language, word, word.Length <= 4 ? 1 : 2, limit: 3000);
+        // A common word two letters off beats a rare one a letter off: OCR drops and swaps letters of real words
+        // (Wching: Watching, as watch A1, before Whing).
+        // A word with a level of its own goes before one that only inherits it (business before bidness, which
+        // Wiktionary lists among the forms of business).
+        return near
+            .Select((n, i) => (n.Key, Order: i, Level: Level(n.Key)))
+            .Select(n => (n.Key, n.Order, n.Level.Own, Score: near[n.Order].Distance * 2 + Rarity(n.Level.Level)))
+            .OrderBy(n => n.Score).ThenBy(n => n.Own ? 0 : 1).ThenBy(n => n.Order)
+            .Take(count).Select(n => LikeCase(n.Key, word)).ToList();
+
+        // The key's own level, else the level of the word it is an inflected form of (watching → watch A1). Another
+        // spelling does not count: Wiktionary links bihness to business, and a misspelling is not a common word.
+        (string? Level, bool Own) Level(string key)
+        {
+            if (levels() is not { Available: true } lv) return (null, false);
+            if (lv.LevelOf(language, key) is { } own) return (own, true);
+            var inherited = dictionaries.Lookup(language, [key], null, 8).SelectMany(s => s.Entries).Where(e => e.Rank == DictKey.Form)
+                .Select(e => lv.LevelOf(language, e.Headword)).Where(l => l is not null).MinBy(Rarity);
+            return (inherited, false);
+        }
+    }
+
+    /// <summary>CEFR A → 0, B → 1, C → 2; no level (or not CEFR) → 3.</summary>
+    private static int Rarity(string? level) => level is { Length: 2 } && level[0] is >= 'A' and <= 'C' ? level[0] - 'A' : 3;
+
+    /// <summary>Dictionary keys are lower case; a suggestion is written like the word on screen (Wching → Watching).</summary>
+    private static string LikeCase(string key, string like)
+    {
+        if (like.Length > 1 && like.All(c => !char.IsLetter(c) || char.IsUpper(c))) return key.ToUpperInvariant();
+        return char.IsUpper(like[0]) ? char.ToUpperInvariant(key[0]) + key[1..] : key;
+    }
+
     /// <summary>Articles for the dictionary form the AI named, when the form on screen found nothing.</summary>
     public IReadOnlyList<DictSection> LookupLemma(string language, string lemma, string? reading, int perPack) =>
         dictionaries.Lookup(language, [lemma], reading, perPack);

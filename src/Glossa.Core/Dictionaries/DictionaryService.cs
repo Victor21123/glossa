@@ -71,6 +71,34 @@ public sealed class DictionaryService : IDisposable
     }
 
     /// <summary>True if any enabled pack for the language has this exact key (used to find set phrases).</summary>
+    /// <summary>
+    /// Dictionary keys spelled closest to <paramref name="term"/>: the same first letter, at most
+    /// <paramref name="maxDistance"/> letters inserted, dropped or replaced, one word (no phrases). Nearest first; the
+    /// caller ranks further (how common each is: a form like watching is no worse a guess than a rare headword).
+    /// </summary>
+    public IReadOnlyList<(string Key, int Distance)> Near(string language, string term, int maxDistance, int limit)
+    {
+        var key = DictKeys.Normalize(term);
+        if (key.Length < 3 || key.Contains(' ')) return [];
+        var best = new Dictionary<string, (int Distance, int Rank)>(StringComparer.Ordinal);
+        lock (_gate)
+        {
+            foreach (var p in _enabled)
+            {
+                if (p.Info.SourceLanguage != language) continue;
+                foreach (var (k, rank) in p.KeysFrom(key[0], key.Length - maxDistance, key.Length + maxDistance))
+                {
+                    if (k == key || k.Contains(' ')) continue;
+                    var d = Glossa.Core.Text.Spelling.Distance(key, k, maxDistance);
+                    if (d > maxDistance) continue;
+                    if (!best.TryGetValue(k, out var seen) || (d, rank).CompareTo(seen) < 0) best[k] = (d, rank);
+                }
+            }
+        }
+        return best.OrderBy(b => b.Value.Distance).ThenBy(b => b.Key, StringComparer.Ordinal)
+            .Take(limit).Select(b => (b.Key, b.Value.Distance)).ToList();
+    }
+
     /// <param name="maxRank">Only keys up to this rank (<see cref="DictKey.Alias"/>: headwords, readings, synonyms).</param>
     public bool HasKey(string language, string term, int maxRank = int.MaxValue)
     {
