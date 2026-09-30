@@ -385,6 +385,7 @@ public sealed class SettingsViewModel : ObservableObject
     public bool StudyFrontShot { get => S.Study.FrontShot; set => Set(() => S.Study.FrontShot = value); }
     public bool StudyFrontLine { get => S.Study.FrontLine; set => Set(() => S.Study.FrontLine = value); }
     public bool StudyFrontReading { get => S.Study.FrontReading; set => Set(() => S.Study.FrontReading = value); }
+    public bool StudyBackPicture { get => S.Study.BackPicture; set => Set(() => S.Study.BackPicture = value); }
     public bool StudyBackLineTranslation { get => S.Study.BackLineTranslation; set => Set(() => S.Study.BackLineTranslation = value); }
     public bool StudySpeakOnFlip { get => S.Study.SpeakOnFlip; set => Set(() => S.Study.SpeakOnFlip = value); }
 

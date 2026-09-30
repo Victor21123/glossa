@@ -9,6 +9,7 @@ using Glossa.Core.Config;
 using Glossa.Core.Games;
 using Glossa.Core.Library;
 using Glossa.Core.Ocr;
+using Glossa.Core.Pictures;
 using Glossa.Core.Study;
 using Russian = Glossa.Core.Text.Russian;
 
@@ -33,6 +34,15 @@ public partial class StudyPage : UserControl
     private int _answered;
     private BitmapImage? _shot;
     private PixelRect? _box;
+    private SavedWord? _word;
+
+    /// <summary>Pictures picked from the back during this review: a word answered «Снова» comes back with its new one.</summary>
+    private readonly Dictionary<string, (MeaningPicture? Picture, string? Query)> _chosenPictures = [];
+
+    /// <summary>The word as this review last changed it (the session holds the copy it started with).</summary>
+    private SavedWord Latest(SavedWord w) => _chosenPictures.TryGetValue(w.Id, out var chosen)
+        ? w with { Picture = chosen.Picture, PictureQuery = chosen.Query ?? w.PictureQuery }
+        : w;
 
     public StudyPage()
     {
@@ -46,6 +56,12 @@ public partial class StudyPage : UserControl
     /// whole day holds (the tab's badge) and the study statistics.
     /// </summary>
     public event Action<StudyPlan, int, StudyStats>? TodayChanged;
+
+    /// <summary>
+    /// «подобрать» on the back: the picture dialog for this word, and what to call with the picture chosen (null:
+    /// removed) and the query that found it.
+    /// </summary>
+    public event Action<SavedWord, Action<MeaningPicture?, string?>>? PickPicture;
 
     /// <summary>A review is on screen: the keys belong to it.</summary>
     public bool Reviewing => _session is not null;
@@ -280,6 +296,7 @@ public partial class StudyPage : UserControl
         if (_services is not { } services || _plan is not { Cards.Count: > 0 } plan) return;
         _session = new StudySession(plan, _states, services.Settings.Study.Config(), Clock, services.Library.SaveAnswer);
         _answered = 0;
+        _chosenPictures.Clear();
         _startedUtc = DateTime.UtcNow;
         DoneBanner.Visibility = Visibility.Collapsed;
         StartView.Visibility = Visibility.Collapsed;
@@ -332,6 +349,8 @@ public partial class StudyPage : UserControl
         LineTranslation.Visibility = study.BackLineTranslation && !string.IsNullOrWhiteSpace(w.ContextTranslation) ? Visibility.Visible : Visibility.Collapsed;
         FillMeta(w);
         ShowPin(w);
+        _word = w;
+        ShowMeaning(w);
 
         // A reverse card turns the faces round: the meaning asks, the frame, the word and its line answer.
         _reverse = card.Direction == CardDirection.Reverse;
@@ -395,6 +414,28 @@ public partial class StudyPage : UserControl
         var suggest = _pinned && _services!.Settings.Study.SuggestUnpin && StudyPins.SuggestUnpin(w with { Pinned = true }, _answers, Clock);
         UnpinHint.Text = $"Верно в {StudyPins.DaysToUnpin} разных дня: пометку можно снять.";
         UnpinHint.Visibility = suggest ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>The picture of the meaning, one chosen during this review first; or «нет, подобрать».</summary>
+    private void ShowMeaning(SavedWord w)
+    {
+        var picture = Latest(w).Picture;
+        var image = ImageFiles.Load(picture is null ? null : Path.Combine(DataPaths.Root, picture.File));
+        MeaningImage.Source = image;
+        MeaningImage.Visibility = MeaningCredit.Visibility = image is null ? Visibility.Collapsed : Visibility.Visible;
+        MeaningCredit.Text = picture?.Credit;
+        NoMeaning.Visibility = image is null ? Visibility.Visible : Visibility.Collapsed;
+        MeaningPanel.Visibility = _services!.Settings.Study.BackPicture ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnPickPicture(object sender, RoutedEventArgs e)
+    {
+        if (_word is not { } w) return;
+        PickPicture?.Invoke(Latest(w), (picture, query) =>
+        {
+            _chosenPictures[w.Id] = (picture, query ?? Latest(w).PictureQuery);
+            if (_word?.Id == w.Id) ShowMeaning(w);
+        });
     }
 
     /// <summary>The frame around the word, a little closer than the whole screenshot, the word in the middle when possible.</summary>

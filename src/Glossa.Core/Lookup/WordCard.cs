@@ -36,6 +36,9 @@ public sealed record WordCard
     public IReadOnlyList<string> KeyForms { get; init; } = [];
     public IReadOnlyList<CardComponent> Components { get; init; } = [];
 
+    /// <summary>1-3 English words to find a picture of this meaning («Картинка значения»); null when it cannot be pictured.</summary>
+    public string? PictureQuery { get; init; }
+
     /// <summary>Set while the AI part is still streaming.</summary>
     public bool IsPartial { get; init; }
 

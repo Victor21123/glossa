@@ -91,6 +91,14 @@ internal static class CardSnapshots
         library.CreateCollection("Сленг и мат", new Glossa.Core.Library.SmartFilter { Language = "en", Register = null, MinLookups = null });
         library.CreateCollection("Искал 2+ раза", new Glossa.Core.Library.SmartFilter { MinLookups = 2 });
 
+        // «Картинка значения»: drawn stand-ins, credited as a Commons picture is; reconsider has none (it cannot be pictured).
+        foreach (var (head, seed, query) in new[] { ("tsundere", 1, "tsundere anime girl"), ("shit-stained", 3, "stained coat") })
+        {
+            var pictured = library.List().First(w => w.Headword == head);
+            library.SetPicture(pictured.Id, new Glossa.Core.Pictures.MeaningPicture(
+                Glossa.Core.Pictures.PictureFiles.Save(data, pictured.Id, SamplePicture(seed))!, "Wikimedia Commons", "Jane Doe", "CC BY-SA 4.0"), query);
+        }
+
         // Study: two words learned earlier and due now (one overdue), answers on the last days for the footer.
         var studyNow = DateTime.UtcNow;
         var studyToday = Glossa.Core.Study.StudyClock.Local.Day(studyNow);
@@ -156,6 +164,13 @@ internal static class CardSnapshots
             window.CollectionKind.SelectedIndex = 1;
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}-collection.png"));
             window.CloseModal();
+            // A word with its meaning picture (a tall window: the row is below the frame), then the dialog that finds one.
+            vm.Selected = vm.Items.First(i => i.Headword == "tsundere");
+            SaveWindow(window, Path.Combine(folder, $"main-{themeName}-picture.png"), 2048, 1900);
+            window.PreviewPicturePicker(vm.Selected.Word, SamplePictures());
+            SaveWindow(window, Path.Combine(folder, $"main-{themeName}-picker.png"));
+            window.CloseModal();
+            vm.Selected = vm.Items.First(i => i.Headword == "reconsider");
             // «Учёба»: today's session, then the first card before and after Space.
             window.ShowTab(MainTab.Study);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}.png"));
@@ -166,6 +181,10 @@ internal static class CardSnapshots
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-front.png"));
             window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back.png"));
+            // The next card, shit-stained, has its meaning picture on the back.
+            window.StudyPage.HandleKey(System.Windows.Input.Key.D3);
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back-picture.png"));
             window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
             // «Перевод -> слово»: a card asked by its meaning, then answered with the word, its line and frame.
             settings.Study.Direction = "reverse";
@@ -296,6 +315,36 @@ internal static class CardSnapshots
         }
         return (rel, Box(0, "reconsider"), Box(1, "shit-stained"));
     }
+
+    /// <summary>A stand-in for a picture from the internet (the snapshots show no one else's work): shapes on a gradient.</summary>
+    private static byte[] SamplePicture(int seed)
+    {
+        const int w = 500, h = 360;
+        (uint From, uint To)[] hues = [(0x3d5a80, 0xee6c4d), (0x6d597a, 0xe56b6f), (0x2a9d8f, 0xe9c46a), (0x264653, 0xf4a261), (0x355070, 0xb56576), (0x1d3557, 0xa8dadc)];
+        var (from, to) = hues[seed % hues.Length];
+        static Color C(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(new LinearGradientBrush(C(from), C(to), 35), null, new Rect(0, 0, w, h));
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x60, 0xff, 0xff, 0xff)), null, new Point(120 + 45 * (seed % 6), 140), 64, 64);
+            dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(0x90, 0x10, 0x10, 0x20)), null,
+                Geometry.Parse("M0,290 L110,210 L220,262 L350,176 L500,250 L500,360 L0,360 Z"));
+        }
+        var bitmap = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        var png = new PngBitmapEncoder();
+        png.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        png.Save(stream);
+        return stream.ToArray();
+    }
+
+    /// <summary>Six pictures as the three sources would give them.</summary>
+    private static IReadOnlyList<(Glossa.Core.Pictures.PictureCandidate, byte[])> SamplePictures() =>
+        Enumerable.Range(0, 6).Select(i => (new Glossa.Core.Pictures.PictureCandidate(
+            i < 2 ? "Википедия" : i < 5 ? "Wikimedia Commons" : "Openverse", $"https://example.org/{i}.jpg", null, "Jane Doe", "CC BY-SA 4.0"),
+            SamplePicture(i))).ToList();
 
     private static IEnumerable<(Glossa.Core.Library.SavedWord Word, bool Fresh)> SampleWords(string shot, PixelRect reconsider, PixelRect stained)
     {

@@ -1,0 +1,82 @@
+<UserControl x:Class="Glossa.App.Views.PicturePicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Glossa.App.Theme"
+             PreviewKeyDown="OnPreviewKeyDown" PreviewDragOver="OnDragOver" PreviewDrop="OnDrop" AllowDrop="True">
+    <!-- «Картинка значения» (STUDY_PLAN 11, decided 2026-09-28): six pictures from Wikipedia, Wikimedia Commons and
+         Openverse, or the user's own (Ctrl+V, a file dropped or chosen). -->
+    <Border Width="760" CornerRadius="14" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+            Padding="30,24,30,24">
+        <StackPanel>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Tag="M6,6 L18,18 M18,6 L6,18" Click="OnClose" ToolTip="Закрыть (Esc)"
+                        VerticalAlignment="Top" />
+                <StackPanel>
+                    <TextBlock Text="Картинка значения" FontSize="22" FontWeight="Bold" />
+                    <TextBlock x:Name="WordText" FontSize="14" Foreground="{DynamicResource InkSoft}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </DockPanel>
+
+            <TextBlock Text="ЧТО ИСКАТЬ" Style="{StaticResource Caption}" Margin="0,18,0,6" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Найти" Click="OnSearch" Margin="10,0,0,0" Padding="18,0" />
+                <TextBox x:Name="QueryBox" theme:Hint.Text="1-3 слова по-английски: fruit bat, baseball bat" KeyDown="OnQueryKeyDown" />
+            </DockPanel>
+            <TextBlock x:Name="Status" Style="{StaticResource Note}" FontSize="13.5" Margin="0,10,0,0" TextWrapping="Wrap" />
+
+            <ItemsControl x:Name="Tiles" Margin="0,12,-12,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="3" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Click="OnTile" Margin="0,0,12,12" Height="152" Cursor="Hand" IsEnabled="{Binding Ready}" ToolTip="{Binding Credit}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd" CornerRadius="9" Background="{DynamicResource Well}" BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+                                        <Grid>
+                                            <!-- An image brush keeps the rounded corners (a clipped Image would not). -->
+                                            <Border CornerRadius="8">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding Image}" Stretch="UniformToFill" />
+                                                </Border.Background>
+                                            </Border>
+                                            <TextBlock Text="{Binding Note}" FontSize="12.5" Foreground="{DynamicResource Muted}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7" Padding="7,2,7,3" CornerRadius="5"
+                                                    Background="{DynamicResource Surface}">
+                                                <TextBlock Text="{Binding Source}" FontSize="11.5" Foreground="{DynamicResource InkSoft}" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Margin="0,6,0,0" Padding="16,10,10,10" CornerRadius="10" Background="{DynamicResource Band}" BorderBrush="{DynamicResource Rule}"
+                    BorderThickness="1">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button x:Name="RemoveButton" Style="{StaticResource GhostButton}" Content="Убрать картинку" Click="OnRemove" Margin="0,0,8,0" />
+                        <Button Content="Выбрать файл..." Click="OnBrowse" />
+                    </StackPanel>
+                    <TextBlock Text="Своя картинка: Ctrl+V или перетащите файл сюда" FontSize="13.5" Foreground="{DynamicResource InkSoft}"
+                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                </DockPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

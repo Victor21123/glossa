@@ -120,6 +120,21 @@ public class PartialJsonTests
     }
 
     [Fact]
+    public void The_picture_query_comes_last_and_only_as_a_few_english_words()
+    {
+        var en = new CardRequest(new WordHit("bat", new PixelRect(0, 0, 1, 1), "", "", 0, Script.Latin), "en", "ru", null,
+            new WordCard { Word = "bat", Language = "en" });
+        Assert.Equal("picture", CardService.Schema(en)["properties"]!.AsObject().Last().Key);
+        Assert.Equal("fruit bat", CardService.Clean(CardService.Merge(en, PartialJson.Read("{\"picture\": \"fruit bat\"}"), false), en).PictureQuery);
+
+        Assert.Null(CardService.PictureQuery(""));
+        Assert.Null(CardService.PictureQuery("none"));
+        Assert.Null(CardService.PictureQuery("летучая мышь"));
+        Assert.Null(CardService.PictureQuery("a small flying mammal that hangs upside down"));
+        Assert.Equal("baseball bat", CardService.PictureQuery("\"baseball bat.\""));
+    }
+
+    [Fact]
     public void Dictionary_rule_appears_only_with_the_hint()
     {
         var seed = new WordCard { Word = "nuts", Language = "en" };

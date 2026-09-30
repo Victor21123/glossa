@@ -1,4 +1,5 @@
 using Glossa.Core.Library;
+using Glossa.Core.Pictures;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
@@ -135,6 +136,46 @@ public sealed class LibraryStoreTests : IDisposable
         Assert.Empty(store.Retract(back)); // the sentence was already there
         Assert.Equal("you", Assert.Single(store.List()).Word);
         Assert.Single(store.ListDeleted());
+    }
+
+    [Fact]
+    public void A_meaning_picture_is_kept_through_edits_and_replaced_and_its_query_comes_from_the_first_card()
+    {
+        using var store = new LibraryStore(_path);
+        var id = store.Record(new SavedWord { Language = "en", Word = "bat", PictureQuery = "fruit bat", Context = "A bat flew by." }, newLookup: true);
+        store.Record(new SavedWord { Language = "en", Word = "bat", PictureQuery = "baseball bat", Context = "Swing the bat." }, newLookup: true);
+        Assert.Equal("fruit bat", Assert.Single(store.List()).PictureQuery);
+
+        var wiki = new MeaningPicture("images/a.jpg", "Википедия", "Ann", "CC BY-SA 3.0", "https://commons.wikimedia.org/wiki/File:A.jpg");
+        Assert.Null(store.SetPicture(id, wiki));
+        store.Update(Assert.Single(store.List()) with { Translation = "летучая мышь" });
+        Assert.Equal(wiki, Assert.Single(store.List()).Picture);
+
+        // The user's own search is remembered for the next one; the replaced file is the caller's to delete.
+        Assert.Equal("images/a.jpg", store.SetPicture(id, new MeaningPicture("images/b.jpg", MeaningPicture.OwnSource), query: "flying fox"));
+        var word = Assert.Single(store.List());
+        Assert.Equal(("images/b.jpg", "flying fox"), (word.Picture!.File, word.PictureQuery));
+
+        Assert.Equal("images/b.jpg", store.SetPicture(id, null));
+        Assert.Null(Assert.Single(store.List()).Picture);
+    }
+
+    [Fact]
+    public void A_picture_value_that_does_not_read_is_no_picture_and_the_library_still_opens()
+    {
+        string id;
+        using (var store = new LibraryStore(_path)) id = store.Record(new SavedWord { Language = "en", Word = "bat" }, newLookup: true);
+        using (var db = new SqliteConnection($"Data Source={_path};Pooling=False"))
+        {
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = "UPDATE words SET picture = '{\"File\": \"images/cut' WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        using var reopened = new LibraryStore(_path);
+        Assert.Null(Assert.Single(reopened.List()).Picture);
+        Assert.Null(reopened.SetPicture(id, new MeaningPicture("images/new.jpg", MeaningPicture.OwnSource)));
     }
 
     [Fact]

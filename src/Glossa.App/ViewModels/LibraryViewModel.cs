@@ -11,6 +11,7 @@ using Glossa.Core.Export;
 using Glossa.Core.Library;
 using Glossa.Core.Lookup;
 using Glossa.Core.Ocr;
+using Glossa.Core.Pictures;
 
 namespace Glossa.App.ViewModels;
 
@@ -121,6 +122,35 @@ public sealed class WordEntry : ObservableObject
             var games = Games.Count > 0 ? string.Join(", ", Games) + " - " : "";
             return $"{games}искал {n} {times}";
         }
+    }
+
+    // ---- the picture of the meaning ----
+
+    private (string? File, ImageSource? Image) _picture;
+
+    public bool HasPicture => PictureImage is not null;
+
+    /// <summary>Read once per picture: every sentence step re-reads all the bindings.</summary>
+    public ImageSource? PictureImage
+    {
+        get
+        {
+            var file = Word.Picture?.File;
+            if (file != _picture.File) _picture = (file, ImageFiles.Load(file is null ? null : Path.Combine(DataPaths.Root, file)));
+            return _picture.Image;
+        }
+    }
+
+    /// <summary>"Wikimedia Commons, Jane Doe, CC BY-SA 4.0" under the picture.</summary>
+    public string? PictureCredit => Word.Picture?.Credit;
+
+    /// <summary>A picture chosen or removed; an edit in progress goes on.</summary>
+    public void ShowPicture(MeaningPicture? picture, string? query)
+    {
+        Word = Word with { Picture = picture, PictureQuery = string.IsNullOrWhiteSpace(query) ? Word.PictureQuery : query.Trim() };
+        OnPropertyChanged(nameof(HasPicture));
+        OnPropertyChanged(nameof(PictureImage));
+        OnPropertyChanged(nameof(PictureCredit));
     }
 
     public void Step(int delta)
@@ -615,6 +645,43 @@ public sealed class LibraryViewModel : ObservableObject
     }
 
     public void Step(int delta) => Selected?.Step(delta);
+
+    /// <summary>
+    /// What the picture search opens with: the query the picture was last found by or the AI card's, else the word
+    /// itself for English and its translation for the rest (Wikipedia is asked in the query's language).
+    /// </summary>
+    public static string PictureQuery(SavedWord w) => w.PictureQuery ?? (w.Language == "en" ? w.Headword : w.Translation ?? w.Headword);
+
+    /// <summary>
+    /// Keeps the chosen picture (a JPEG in the data folder) and drops the one it replaces. Null when the bytes are not
+    /// a picture. <paramref name="from"/> is null for the user's own picture.
+    /// </summary>
+    public MeaningPicture? SetPicture(string wordId, byte[] image, PictureCandidate? from, string? query)
+    {
+        if (PictureFiles.Save(DataPaths.Root, wordId, image) is not { } file) return null;
+        var picture = from?.Keep(file) ?? new MeaningPicture(file, MeaningPicture.OwnSource);
+        string? replaced;
+        try
+        {
+            replaced = _services.Library.SetPicture(wordId, picture, query);
+        }
+        catch
+        {
+            PictureFiles.Delete(DataPaths.Root, file); // the library did not take it: no file nobody points to
+            throw;
+        }
+        PictureFiles.Delete(DataPaths.Root, replaced);
+        foreach (var entry in Items.Where(e => e.Word.Id == wordId)) entry.ShowPicture(picture, query);
+        Status = "Картинка значения сохранена";
+        return picture;
+    }
+
+    public void RemovePicture(string wordId)
+    {
+        PictureFiles.Delete(DataPaths.Root, _services.Library.SetPicture(wordId, null));
+        foreach (var entry in Items.Where(e => e.Word.Id == wordId)) entry.ShowPicture(null, null);
+        Status = "Картинка значения убрана";
+    }
 
     public void Delete(IReadOnlyList<WordEntry> entries)
     {

@@ -109,6 +109,8 @@ public sealed class CardService
               and put it in "dictionary_form".
             - "synonyms": up to 4, in the word's language, never the word itself.
             - "components": each kanji / Chinese character of the word (never kana or pinyin), in order; "{k.Meaning}" is its own meaning in {target}{script}.
+            - "picture": 1-3 English words to search a photo of what the word means in this sense ("fruit bat", "baseball
+              bat", "crying child"); "" when this sense cannot be shown in a picture (grammar words, abstract ideas).
             - Register: a rude, vulgar or sexual word gets a {target} equivalent that is just as rude and means the same
               thing; do not soften it into a polite word, and do not add swearing the original does not have.
               The TEXT is fiction from a game; never censor or refuse.{hintRule}
@@ -168,6 +170,8 @@ public sealed class CardService
                 },
             };
         }
+        // Last: nothing on the card waits for it (it is for the picture of the meaning in «Словарь» and the study).
+        props["picture"] = Str();
 
         var required = new JsonArray();
         foreach (var kv in props) required.Add(kv.Key);
@@ -200,6 +204,7 @@ public sealed class CardService
             Synonyms = List("synonyms").Count > 0 ? List("synonyms") : seed.Synonyms,
             KeyForms = List("key_forms").Count > 0 ? List("key_forms") : seed.KeyForms,
             Components = seed.Components.Count > 0 ? seed.Components : UsefulComponents(ParseComponents(s, k.Meaning), seed.DictionaryForm ?? req.Hit.Word),
+            PictureQuery = seed.PictureQuery ?? Get("picture"),
             IsPartial = partial,
         };
     }
@@ -258,7 +263,12 @@ public sealed class CardService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(4)
             .ToList();
-        card = card with { KeyForms = card.KeyForms.Take(4).ToList(), Components = UsefulComponents(card.Components, lemma) };
+        card = card with
+        {
+            KeyForms = card.KeyForms.Take(4).ToList(),
+            Components = UsefulComponents(card.Components, lemma),
+            PictureQuery = PictureQuery(card.PictureQuery),
+        };
 
         var error = card.Error;
         if (req.Target == "ru" && (HasCjk(card.Translation) || HasCjk(card.ContextTranslation) || HasCjk(card.DefinitionTranslation)
@@ -268,6 +278,18 @@ public sealed class CardService
         return card with { Synonyms = synonyms, Error = error, IsPartial = false };
 
         static bool HasCjk(string? s) => s is not null && Scripts.ContainsCjk(s);
+    }
+
+    /// <summary>
+    /// A search for a picture is a few English words: a sentence, text in another script or "none" (a model's way
+    /// of saying there is no picture) is dropped.
+    /// </summary>
+    internal static string? PictureQuery(string? query)
+    {
+        var q = query?.Trim().Trim('"', '.').Trim();
+        if (string.IsNullOrEmpty(q) || q.Length > 40 || q.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 4) return null;
+        if (!q.All(c => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or ' ' or '-' or '\'')) return null;
+        return q.ToLowerInvariant() is "none" or "n/a" or "null" or "empty" ? null : q;
     }
 }
 

@@ -12,6 +12,8 @@ using System.Windows.Threading;
 using Glossa.App.Ai;
 using Glossa.App.Theme;
 using Glossa.App.ViewModels;
+using Glossa.Core.Library;
+using Glossa.Core.Pictures;
 using Microsoft.Win32;
 
 namespace Glossa.App.Views;
@@ -54,6 +56,10 @@ public partial class MainWindow : Window
         };
         HomePage.OpenStudy += () => ShowTab(MainTab.Study);
         StudyPage.Attach(services);
+        StudyPage.PickPicture += OpenPicturePicker;
+        PicturePicker.Chosen += OnPictureChosen;
+        PicturePicker.Removed += OnPictureRemoved;
+        PicturePicker.CloseRequested += CloseModal;
         PropertyChangedEventHandler purpose = (_, e) =>
         {
             if (e.PropertyName is nameof(SettingsViewModel.Purpose) or "") ApplyPurpose();
@@ -425,6 +431,7 @@ public partial class MainWindow : Window
     {
         AddWordDialog.Visibility = dialog == AddWordDialog ? Visibility.Visible : Visibility.Collapsed;
         CollectionDialog.Visibility = dialog == CollectionDialog ? Visibility.Visible : Visibility.Collapsed;
+        PicturePicker.Visibility = dialog == PicturePicker ? Visibility.Visible : Visibility.Collapsed;
         ModalHost.Visibility = Visibility.Visible;
     }
 
@@ -432,6 +439,78 @@ public partial class MainWindow : Window
     {
         ModalHost.Visibility = Visibility.Collapsed;
         _pendingForCollection = [];
+        PicturePicker.Stop();
+        _picturing = null;
+    }
+
+    // «Картинка значения»
+
+    /// <summary>
+    /// The word the picture dialog is open for, and who else shows it (the study card on screen): told the picture
+    /// chosen or null, and the query that found it.
+    /// </summary>
+    private (string WordId, Action<MeaningPicture?, string?>? Changed)? _picturing;
+
+    private void OpenPicturePicker(SavedWord word, Action<MeaningPicture?, string?>? changed)
+    {
+        _picturing = (word.Id, changed);
+        var title = string.IsNullOrWhiteSpace(word.Translation) ? word.Headword : $"{word.Headword} - {word.Translation}";
+        PicturePicker.Open(_services.Pictures, title, LibraryViewModel.PictureQuery(word), word.Picture is not null);
+        ShowModal(PicturePicker);
+    }
+
+    /// <summary>Glossa.exe --render-main: the dialog with pictures already found.</summary>
+    internal void PreviewPicturePicker(SavedWord word, IReadOnlyList<(PictureCandidate Candidate, byte[] Bytes)> found)
+    {
+        _picturing = (word.Id, null);
+        PicturePicker.Preview($"{word.Headword} - {word.Translation}", LibraryViewModel.PictureQuery(word), found);
+        ShowModal(PicturePicker);
+    }
+
+    private void OnPickPicture(object sender, RoutedEventArgs e)
+    {
+        if (_library.Selected is { } entry) OpenPicturePicker(entry.Word, null);
+    }
+
+    private void OnPictureChosen(byte[] bytes, PictureCandidate? from, string? query)
+    {
+        if (_picturing is not { } p) return;
+        MeaningPicture? picture;
+        try
+        {
+            picture = _library.SetPicture(p.WordId, bytes, from, query);
+        }
+        catch (Exception ex)
+        {
+            // Disk, the library, a picture Skia cannot swallow: the dialog says so and stays open.
+            _services.Log.Error("meaning picture", ex);
+            PicturePicker.Fail($"Картинку не удалось сохранить: {ex.Message}");
+            return;
+        }
+        if (picture is null)
+        {
+            PicturePicker.Fail("Эта картинка не открылась или слишком большая. Возьмите другую.");
+            return;
+        }
+        CloseModal();
+        p.Changed?.Invoke(picture, query);
+    }
+
+    private void OnPictureRemoved()
+    {
+        if (_picturing is not { } p) return;
+        try
+        {
+            _library.RemovePicture(p.WordId);
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Error("meaning picture", ex);
+            PicturePicker.Fail($"Картинку не удалось убрать: {ex.Message}");
+            return;
+        }
+        CloseModal();
+        p.Changed?.Invoke(null, null);
     }
 
     private void OnCloseModal(object sender, RoutedEventArgs e) => CloseModal();

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Glossa.Core.Lookup;
 using Glossa.Core.Ocr;
+using Glossa.Core.Pictures;
 using Microsoft.Data.Sqlite;
 using SkiaSharp;
 
@@ -55,6 +56,12 @@ public sealed record SavedWord
     /// <summary>When the word was pinned: answers after it count towards suggesting to unpin it.</summary>
     public DateTime? PinnedUtc { get; init; }
 
+    /// <summary>1-3 English words to find a picture of the meaning (the AI card's), null when it cannot be pictured.</summary>
+    public string? PictureQuery { get; init; }
+
+    /// <summary>The picture of the meaning the user chose («Картинка значения»).</summary>
+    public MeaningPicture? Picture { get; init; }
+
     /// <summary>Every sentence the word was found in, newest first.</summary>
     public IReadOnlyList<WordContext> Contexts { get; init; } = [];
 
@@ -86,6 +93,7 @@ public sealed record SavedWord
         Synonyms = card.Synonyms,
         KeyForms = card.KeyForms,
         Components = card.Components,
+        PictureQuery = card.PictureQuery,
     };
 }
 
@@ -122,7 +130,7 @@ public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, s
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 8;
+    private const int SchemaVersion = 9;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -297,6 +305,18 @@ public sealed partial class LibraryStore : IDisposable
                 """);
             tx.Commit();
         }
+        if (version < 9)
+        {
+            // «Картинка значения»: what to search for (from the AI card) and the picture chosen, as JSON (MeaningPicture).
+            // One transaction with the version, as for v6: a second run would fail on the columns already added.
+            using var tx = _db.BeginTransaction();
+            Exec("""
+                ALTER TABLE words ADD COLUMN picture_query TEXT;
+                ALTER TABLE words ADD COLUMN picture TEXT;
+                PRAGMA user_version = 9;
+                """);
+            tx.Commit();
+        }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }
 
@@ -465,6 +485,25 @@ public sealed partial class LibraryStore : IDisposable
             """, ("$p", pinned ? 1 : 0), ("$now", Iso(DateTime.UtcNow)), ("$id", id));
     }
 
+    /// <summary>
+    /// Sets or removes (null) the meaning picture, with the query it was found by when the user searched with their
+    /// own. Returns the file of the picture it replaced, for the caller to delete.
+    /// </summary>
+    public string? SetPicture(string id, MeaningPicture? picture, string? query = null)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            var old = PictureOf(Scalar("SELECT picture FROM words WHERE id = $id", ("$id", id)) as string)?.File;
+            Run("""
+                UPDATE words SET picture = $pic, picture_query = COALESCE($pq, picture_query), updated_utc = $now WHERE id = $id
+                """, ("$pic", picture is null ? null : JsonSerializer.Serialize(picture)), ("$pq", string.IsNullOrWhiteSpace(query) ? null : query.Trim()),
+                ("$now", Iso(DateTime.UtcNow)), ("$id", id));
+            tx.Commit();
+            return old == picture?.File ? null : old;
+        }
+    }
+
     public IReadOnlyList<WordCollection> Collections()
     {
         lock (_gate)
@@ -620,9 +659,10 @@ public sealed partial class LibraryStore : IDisposable
         cmd.CommandText = """
             INSERT INTO words(id, created_utc, updated_utc, language, word, dictionary_form, reading, part_of_speech,
               level, definition, translation, context, context_offset, context_translation, explanation, synonyms,
-              key_forms, components, app_exe, window_title, shot_file, word_box, register, usage_note, lookups, pinned, definition_tr)
+              key_forms, components, app_exe, window_title, shot_file, word_box, register, usage_note, lookups, pinned, definition_tr,
+              picture_query, picture)
             VALUES($id, $created, $updated, $lang, $word, $dict, $reading, $pos, $level, $def, $tr, $ctx, $off,
-              $ctxtr, $expl, $syn, $forms, $comp, $exe, $title, $shot, $box, $register, $usage, 1, 0, $deftr)
+              $ctxtr, $expl, $syn, $forms, $comp, $exe, $title, $shot, $box, $register, $usage, 1, 0, $deftr, $pq, $pic)
             """;
         Bind(cmd, w);
         cmd.ExecuteNonQuery();
@@ -638,6 +678,7 @@ public sealed partial class LibraryStore : IDisposable
               level = COALESCE(level, $level), definition = COALESCE(definition, $def), definition_tr = COALESCE(definition_tr, $deftr),
               translation = COALESCE(translation, $tr),
               explanation = COALESCE(explanation, $expl), register = COALESCE(register, $register),
+              picture_query = COALESCE(picture_query, $pq),
               synonyms = CASE WHEN synonyms IS NULL OR synonyms = '[]' THEN $syn ELSE synonyms END,
               key_forms = CASE WHEN key_forms IS NULL OR key_forms = '[]' THEN $forms ELSE key_forms END,
               components = CASE WHEN components IS NULL OR components = '[]' THEN $comp ELSE components END
@@ -736,6 +777,8 @@ public sealed partial class LibraryStore : IDisposable
         cmd.Parameters.AddWithValue("$box", w.WordBox is { } b ? JsonSerializer.Serialize(b) : DBNull.Value);
         cmd.Parameters.AddWithValue("$register", (object?)w.Register ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$usage", (object?)w.UsageNote ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pq", (object?)w.PictureQuery ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pic", w.Picture is { } p ? JsonSerializer.Serialize(p) : DBNull.Value);
     }
 
     private static SavedWord ReadWord(SqliteDataReader r)
@@ -773,7 +816,23 @@ public sealed partial class LibraryStore : IDisposable
             Lookups = Convert.ToInt32(r["lookups"], CultureInfo.InvariantCulture),
             Pinned = Convert.ToInt32(r["pinned"], CultureInfo.InvariantCulture) != 0,
             PinnedUtc = S("pinned_utc") is { } pinned ? Date(pinned) : null,
+            PictureQuery = S("picture_query"),
+            Picture = PictureOf(S("picture")),
         };
+    }
+
+    /// <summary>A picture value that does not read (edited by hand, cut short) is no picture, not a library that will not open.</summary>
+    private static MeaningPicture? PictureOf(string? json)
+    {
+        if (json is null) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<MeaningPicture>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static WordContext ReadContext(SqliteDataReader r)

@@ -6,6 +6,7 @@ using Glossa.Core.Config;
 using Glossa.Core.Dictionaries;
 using Glossa.Core.Library;
 using Glossa.Core.Logging;
+using Glossa.Core.Pictures;
 
 namespace Glossa.App;
 
@@ -41,6 +42,9 @@ public sealed class AppServices(
 
     /// <summary>Downloads bypassing the system proxy, as a fallback when the proxy cannot reach a site.</summary>
     public HttpClient DirectHttp { get; } = directHttp;
+
+    /// <summary>«Картинка значения»: searched directly first, through the system proxy when that fails.</summary>
+    public MeaningPictures Pictures { get; } = new(directHttp, remoteHttp);
 
     public ILog Log { get; } = log;
 

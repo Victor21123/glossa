@@ -167,6 +167,14 @@
                                     </DockPanel>
                                     <TextBlock x:Name="UnpinHint" FontSize="12.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,10,0,0"
                                                Visibility="Collapsed" />
+                                    <!-- «Картинка значения» (Настройки -> Учёба -> Оборот); without one, a way to pick it right here. -->
+                                    <StackPanel x:Name="MeaningPanel" Margin="0,16,0,0" Visibility="Collapsed">
+                                        <Image x:Name="MeaningImage" MaxWidth="300" MaxHeight="200" Stretch="Uniform" HorizontalAlignment="Left" />
+                                        <TextBlock x:Name="MeaningCredit" FontSize="11.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                        <TextBlock x:Name="NoMeaning" FontSize="12.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap">
+                                            <Run Text="Картинки значения нет, " /><Hyperlink Click="OnPickPicture" Foreground="{DynamicResource InkSoft}"><Run Text="подобрать" /></Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
                                 </StackPanel>
                             </Grid>
                         </Border>
