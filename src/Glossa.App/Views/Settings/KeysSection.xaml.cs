@@ -27,6 +27,8 @@ public partial class KeysSection : UserControl
         _services = services;
         _model = model;
         DataContext = model;
+        // With one monitor there is nowhere else to put the card: only what works is shown.
+        OtherMonitorRow.Visibility = Glossa.App.Interop.Native.MonitorBounds().Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         Focusable = true;
         PreviewKeyDown += OnCaptureKey;
         foreach (var (name, key) in CardKeyList)

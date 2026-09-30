@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Glossa.App.Interop;
 using Glossa.App.Theme;
 using Glossa.Core.Config;
+using Glossa.Core.Games;
 using Glossa.Core.Ocr;
 
 namespace Glossa.App.Views;
@@ -150,15 +151,26 @@ public partial class LookupPopup : Window
     /// <summary>Preset, theme, accent, text size and training mode from the settings.</summary>
     public void ApplyLook(PopupSettings settings, ThemeManager theme) => Card.ApplyLook(settings, theme);
 
+    /// <summary>
+    /// The card goes to another monitor, at the word's spot carried over (a game the card takes out of exclusive full
+    /// screen, <see cref="FullScreen"/>); null - beside the word.
+    /// </summary>
+    public (PixelRect From, PixelRect To)? Elsewhere { get; set; }
+
+    /// <summary>The card came on screen (it was hidden before).</summary>
+    public event Action? Shown;
+
     /// <summary>Shows the card below (or above) the word without activating it.</summary>
     public void ShowNear(PixelRect wordBox)
     {
         _anchor = wordBox;
-        if (!IsVisible) Show();
+        var appearing = !IsVisible;
+        if (appearing) Show();
         UpdateLayout();
         Place();
         _mouseWasDown = Native.IsKeyDown(Native.VK_LBUTTON);
         _outsideClick.Start();
+        if (appearing && !Offscreen) Shown?.Invoke();
     }
 
     /// <summary>Out of the next screenshot's way without closing (the lookup that takes it shows its own card).</summary>
@@ -198,13 +210,14 @@ public partial class LookupPopup : Window
         var scale = Native.GetDpiForWindow(_hwnd) / 96.0;
         var w = (int)Math.Ceiling(ActualWidth * scale);
         var h = (int)Math.Ceiling(ActualHeight * scale);
-        var pt = new Native.POINT { X = (int)_anchor.CenterX, Y = (int)_anchor.CenterY };
+        var anchor = Elsewhere is var (from, to) ? FullScreen.Carry(_anchor, from, to) : _anchor;
+        var pt = new Native.POINT { X = (int)anchor.CenterX, Y = (int)anchor.CenterY };
         var work = Native.WorkAreaAt(pt);
 
         const int gap = 2;
-        var x = (int)_anchor.Left - (int)(ShadowMargin * scale); // align the card edge (inside the shadow margin) with the word
-        var y = (int)_anchor.Bottom + gap;
-        if (y + h > work.Bottom) y = (int)_anchor.Top - h - gap;     // no room below: go above
+        var x = (int)anchor.Left - (int)(ShadowMargin * scale); // align the card edge (inside the shadow margin) with the word
+        var y = (int)anchor.Bottom + gap;
+        if (y + h > work.Bottom) y = (int)anchor.Top - h - gap;      // no room below: go above
         if (y < work.Top) y = Math.Max(work.Top, work.Bottom - h);    // no room at all: pin to the edge
         x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - w));
 

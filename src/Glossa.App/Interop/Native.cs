@@ -169,6 +169,23 @@ internal static partial class Native
         return info.rcMonitor;
     }
 
+    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, ref RECT bounds, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc proc, IntPtr data);
+
+    /// <summary>Every monitor's bounds, in physical pixels.</summary>
+    public static List<RECT> MonitorBounds()
+    {
+        var list = new List<RECT>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr _, IntPtr _, ref RECT bounds, IntPtr _) =>
+        {
+            list.Add(bounds);
+            return true;
+        }, IntPtr.Zero);
+        return list;
+    }
+
     public static RECT WorkAreaAt(POINT pt)
     {
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };

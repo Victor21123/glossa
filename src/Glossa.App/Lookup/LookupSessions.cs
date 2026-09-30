@@ -48,6 +48,12 @@ public sealed class LookupSessions
     private FrozenFrame? _frame;
     private Session? _session;
 
+    /// <summary>A game in exclusive full screen at the lookup: once the card shows, whether it took the game out is measured.</summary>
+    private (GameWindow Game, GameProfile Profile)? _fullScreen;
+
+    /// <summary>The game the card took out of full screen: it gets the focus back when the card closes.</summary>
+    private GameWindow? _knocked;
+
     private sealed class Session
     {
         public required GameWindow Game { get; init; }
@@ -87,6 +93,7 @@ public sealed class LookupSessions
         _pad = pad;
         _log = log;
         popup.Dismissed += OnCardClosed;
+        popup.Shown += OnCardShown;
         pad.Changed += OnPad;
         _repeatTimer.Tick += (_, _) => Step();
     }
@@ -252,6 +259,7 @@ public sealed class LookupSessions
         // A lookup in another program wakes a game paused by the previous one; in the same game it stays paused.
         if (_session is { Paused: true, Still: null } paused && paused.Game.Pid != game.Pid) End();
         var (profile, choices) = _games.Touch(game);
+        var s = _settings();
         if (profile is not null)
         {
             if (profile is { Borderless: true, IsProtected: false } && game.Mode == WindowMode.Windowed && game.MakeBorderless())
@@ -259,13 +267,16 @@ public sealed class LookupSessions
                 await Task.Delay(150); // let the game draw itself stretched before the screenshot
                 game = GameWindow.Of(game.Hwnd);
             }
-            if (game.Mode == WindowMode.Exclusive && _games.WarnExclusiveOnce(profile))
-                Notice?.Invoke($"\"{profile.Name}\" идёт в эксклюзивном полноэкранном режиме - карточку может быть не видно. " +
-                               "Включите в настройках игры \"Окно без рамки\" (Borderless).");
             if (choices.PauseRefused is { } why && _told.Add(profile.Name + why))
                 Notice?.Invoke($"\"{profile.Name}\": {why}. Вместо паузы - стоп-кадр.");
         }
-        var s = _settings();
+        // Windows reports exclusive full screen also for games that full screen optimizations keep borderless, where the
+        // card does no harm: whether it takes this game out of full screen is measured once it shows (OnCardShown).
+        _fullScreen = profile is not null && game.Mode == WindowMode.Exclusive ? (game, profile) : null;
+        _popup.Elsewhere = profile is { CardKnocksOut: true } && s.CardOnOtherMonitor
+            && FullScreen.OtherMonitor(game.Monitor, Native.MonitorBounds().Select(r => new PixelRect(r.Left, r.Top, r.Right, r.Bottom))) is { } other
+            ? (game.Monitor, other)
+            : null;
         var cjk = choices.Language is "ja" or "zh" ? choices.Language : s.PreferredCjk;
         return (game, new LookupContext(trigger, game.Title, game.ExeName, choices), cjk);
     }
@@ -297,6 +308,8 @@ public sealed class LookupSessions
                 : _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
         };
         _session = session;
+        // The still frame covers the game's monitor and takes the focus itself: the card goes beside the word on it.
+        _popup.Elsewhere = null;
         _frame.SetHint(zone ? ZoneHint : pad ? "Распознаю текст..." : MouseHint);
         _frame.ShowFrame(still, _settings().Popup.HideFromCapture);
         _frame.SelectZone(zone);
@@ -456,7 +469,10 @@ public sealed class LookupSessions
         return false;
     }
 
-    /// <summary>The card closed by itself (Esc, a click beside it): a pause without a still frame ends with it.</summary>
+    /// <summary>
+    /// The card closed by itself (Esc, a click beside it): a pause without a still frame ends with it; a game the card
+    /// took out of full screen gets the focus back (and with it its full screen) unless the user went somewhere else.
+    /// </summary>
     private void OnCardClosed()
     {
         if (_session is { Paused: true, Still: null } s)
@@ -464,6 +480,47 @@ public sealed class LookupSessions
             _session = null;
             Task.Run(_guard.Resume);
             _log.Info($"resumed {s.Game.ExeName}");
+        }
+        if (_knocked is { } game)
+        {
+            _knocked = null;
+            var front = Native.GetForegroundWindow();
+            Native.GetWindowThreadProcessId(front, out var pid);
+            if (front == IntPtr.Zero || pid == Environment.ProcessId) game.Focus();
+        }
+    }
+
+    /// <summary>
+    /// The card on screen over a game that held it in exclusive full screen: a moment later, is it still full screen? If
+    /// the card took it out (<see cref="FullScreen.KnockedOut"/>), the game's profile remembers it, the user is told once
+    /// what to do, and the game gets the focus back when the card closes. A still frame takes the focus itself.
+    /// </summary>
+    private async void OnCardShown()
+    {
+        if (_fullScreen is not var (game, profile) || _session?.Still is not null || _popup.Elsewhere is not null) return;
+        _fullScreen = null;
+        try
+        {
+            await Task.Delay(FullScreen.CheckAfter);
+            var state = Native.SHQueryUserNotificationState(out var st) == 0 ? st : -1;
+            if (!FullScreen.KnockedOut(heldScreen: true, state, Native.GetForegroundWindow() == game.Hwnd)) return;
+            _knocked = game;
+            _log.Info($"the card took {game.ExeName} out of exclusive full screen (state {state})");
+            if (!profile.CardKnocksOut)
+            {
+                profile.CardKnocksOut = true;
+                _games.Save();
+            }
+            if (!_games.WarnKnockedOnce(profile)) return;
+            var others = Native.MonitorBounds().Count > 1;
+            Notice?.Invoke($"\"{profile.Name}\" в эксклюзивном полноэкранном режиме: карточка выбивает игру из полного экрана. " +
+                           (others && _settings().CardOnOtherMonitor ? "Следующие карточки для неё - на другом мониторе."
+                               : others ? "Включите в игре \"Окно без рамки\" (Borderless) или Вызов и клавиши -> \"Карточка на другом мониторе\"."
+                               : "Включите в игре \"Окно без рамки\" (Borderless)."));
+        }
+        catch (Exception ex)
+        {
+            _log.Error("full screen check", ex);
         }
     }
 

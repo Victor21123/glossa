@@ -12,7 +12,7 @@ namespace Glossa.App.Games;
 /// </summary>
 public sealed class GameRegistry(Func<AppSettings> settings, Action<AppSettings> save, ILog log)
 {
-    private readonly HashSet<GameProfile> _warnedExclusive = [];
+    private readonly HashSet<GameProfile> _warnedKnocked = [];
 
     /// <summary>A profile was created, changed or removed (raised on the UI thread).</summary>
     public event Action? Changed;
@@ -41,12 +41,18 @@ public sealed class GameRegistry(Func<AppSettings> settings, Action<AppSettings>
             profile.WindowMode = WindowModes.Code(w.Mode);
             changed = true;
         }
+        // Switched to a window or borderless (as the notice advised): the card no longer takes it out of full screen.
+        if (profile.CardKnocksOut && w.Mode is WindowMode.Windowed or WindowMode.Borderless)
+        {
+            profile.CardKnocksOut = false;
+            changed = true;
+        }
         if (changed) Save();
         return (profile, GameProfiles.Resolve(s.ScreenLanguage, s.DuringLookup, profile, w.ExePath));
     }
 
-    /// <summary>True once per profile per run: the game holds the screen exclusively and the card may stay hidden.</summary>
-    public bool WarnExclusiveOnce(GameProfile profile) => _warnedExclusive.Add(profile);
+    /// <summary>True once per profile per run: the card took the game out of exclusive full screen.</summary>
+    public bool WarnKnockedOnce(GameProfile profile) => _warnedKnocked.Add(profile);
 
     /// <summary>The anti-cheat of a profile checked again in the background (the page shows it fresh).</summary>
     public void Recheck(GameProfile profile) => Task.Run(() =>

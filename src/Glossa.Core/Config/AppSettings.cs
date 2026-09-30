@@ -26,6 +26,12 @@ public sealed class AppSettings
     /// <summary>On a still frame, words already in the dictionary get a thin frame, «Не могу запомнить» ones a bold one.</summary>
     public bool MarkKnownWords { get; set; } = true;
 
+    /// <summary>
+    /// A game the card takes out of exclusive full screen (<see cref="GameProfile.CardKnocksOut"/>) gets its cards on
+    /// another monitor, where they leave it in full screen (decided 2026-09-30; with one monitor it changes nothing).
+    /// </summary>
+    public bool CardOnOtherMonitor { get; set; }
+
     /// <summary>dictionary (Alt+Q: the word card, saved to the dictionary) or translate (Alt+Q: translation only, <see cref="TranslateMode"/>).</summary>
     public string Purpose { get; set; } = "dictionary";
 

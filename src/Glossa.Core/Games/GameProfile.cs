@@ -33,6 +33,13 @@ public sealed class GameProfile
     /// <summary>How the game's window looked at the last lookup: windowed, borderless or exclusive.</summary>
     public string? WindowMode { get; set; }
 
+    /// <summary>
+    /// The card took this game out of exclusive full screen at a lookup (measured, <see cref="FullScreen"/>): its status
+    /// says so, and with «Карточка на другом мониторе» its cards go there. Cleared when the game is seen windowed or
+    /// borderless again.
+    /// </summary>
+    public bool CardKnocksOut { get; set; }
+
     public DateTime CreatedUtc { get; set; }
 
     [System.Text.Json.Serialization.JsonIgnore]

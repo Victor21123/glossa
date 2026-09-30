@@ -177,6 +177,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Frames on the still frame around words already in the dictionary.</summary>
     public bool MarkKnownWords { get => S.MarkKnownWords; set => Set(() => S.MarkKnownWords = value); }
+    public bool CardOnOtherMonitor { get => S.CardOnOtherMonitor; set => Set(() => S.CardOnOtherMonitor = value); }
 
     // ---- ИИ и модели ----
 

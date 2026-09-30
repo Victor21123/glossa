@@ -170,7 +170,8 @@ public partial class GamesSection : UserControl
         {
             WindowMode.Borderless => ("OkText", "без рамки - карточка видна поверх игры"),
             WindowMode.Windowed => ("OkText", "в окне - карточка видна поверх игры"),
-            WindowMode.Exclusive => ("WarnText", "эксклюзивный полноэкранный режим - карточку может быть не видно"),
+            WindowMode.Exclusive when p.CardKnocksOut => ("WarnText", "эксклюзивный полноэкранный режим - карточка выбивает игру из полного экрана"),
+            WindowMode.Exclusive => ("OkText", "полноэкранный режим - карточка видна поверх игры"),
             _ => null,
         };
         if (status is { } s)
@@ -188,7 +189,10 @@ public partial class GamesSection : UserControl
         BorderlessSwitch.IsChecked = p.Borderless;
         BorderlessSwitch.IsEnabled = !p.IsProtected;
         var notes = new List<string>();
-        if (mode == WindowMode.Exclusive) notes.Add("Включи в настройках игры \"Окно без рамки\" (Borderless) - тогда и карточка, и стоп-кадр будут поверх неё.");
+        if (mode == WindowMode.Exclusive)
+            notes.Add(p.CardKnocksOut
+                ? "Включи в настройках игры \"Окно без рамки\" (Borderless) - или \"Карточка на другом мониторе\" в \"Вызове и клавишах\", если мониторов два."
+                : "Если карточка выбьет игру из полного экрана, Glossa заметит это при поиске и подскажет, что делать.");
         notes.Add(p.IsProtected
             ? "В игре с античитом окно не трогаем."
             : "Для игр, которые умеют только окно с рамкой: Glossa снимет рамку и растянет окно при следующем поиске.");

@@ -109,6 +109,11 @@
                                 <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" TextWrapping="Wrap"
                                            Text='Отмечать на стоп-кадре слова из словаря: тонкой пунктирной рамкой, а "Не могу запомнить" - жирной янтарной.' />
                             </DockPanel>
+                            <DockPanel x:Name="OtherMonitorRow" Margin="0,14,0,0">
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding CardOnOtherMonitor}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" TextWrapping="Wrap"
+                                           Text='Карточка на другом мониторе - для игр, которые она выбивает из эксклюзивного полноэкранного режима (Glossa замечает это при поиске). Там игра остаётся в полном экране.' />
+                            </DockPanel>
                         </StackPanel>
                     </HeaderedContentControl>
 
