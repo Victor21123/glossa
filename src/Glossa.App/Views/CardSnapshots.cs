@@ -91,6 +91,45 @@ internal static class CardSnapshots
         library.CreateCollection("Сленг и мат", new Glossa.Core.Library.SmartFilter { Language = "en", Register = null, MinLookups = null });
         library.CreateCollection("Искал 2+ раза", new Glossa.Core.Library.SmartFilter { MinLookups = 2 });
 
+        // «Цитаты»: lines of the drawn scene as «Только перевод» keeps them, the frame downscaled with the line ringed; one
+        // from another game without a frame, one live subtitle.
+        using (var scene = SkiaSharp.SKBitmap.Decode(Path.Combine(data, shot)))
+        {
+            var bgra = scene.Bytes;
+            (string, PixelRect?)? Frame(PixelRect line)
+            {
+                var (file, scale) = Glossa.Core.Library.ShotStore.SaveQuoteFrame(data, bgra, scene.Width, scene.Height, scene.RowBytes);
+                return (file, new PixelRect(line.Left * scale, line.Top * scale, line.Right * scale, line.Bottom * scale));
+            }
+            var now = DateTime.UtcNow;
+            library.RecordQuote(new Glossa.Core.Library.Quote
+            {
+                Language = "en", Text = "He looks at his shit-stained coat with a grim expression.",
+                Translation = "Он с мрачным видом смотрит на свой заляпанный дерьмом плащ.", AppExe = "NightHarbor.exe", WindowTitle = "Night Harbor",
+                CreatedUtc = now.AddMinutes(-9), SeenUtc = now.AddMinutes(-9), Source = Glossa.Core.Library.QuoteSource.Line,
+            }, () => Frame(new PixelRect(245, 912, 1330, 962)));
+            library.RecordQuote(new Glossa.Core.Library.Quote
+            {
+                Language = "ja", Text = "スライムたちが どんどん 合体していく！", Translation = "Слаймы всё больше и больше сливаются воедино!",
+                AppExe = "DQXIS.exe", WindowTitle = "Dragon Quest XI S", CreatedUtc = now.AddHours(-2), SeenUtc = now.AddHours(-2),
+                Source = Glossa.Core.Library.QuoteSource.Zone,
+            });
+            library.RecordQuote(new Glossa.Core.Library.Quote
+            {
+                Language = "en", Text = "Let's get out of here before the tide turns.", Translation = "Уходим отсюда, пока не сменился прилив.",
+                AppExe = "NightHarbor.exe", WindowTitle = "Night Harbor", CreatedUtc = now.AddDays(-1), SeenUtc = now.AddDays(-1),
+                Source = Glossa.Core.Library.QuoteSource.Live,
+            });
+            // The newest, met twice: counted, not copied.
+            for (var i = 0; i < 2; i++)
+                library.RecordQuote(new Glossa.Core.Library.Quote
+                {
+                    Language = "en", Text = "I'd reconsider the offer if I were you.", Translation = "На твоём месте я бы пересмотрел предложение.",
+                    AppExe = "NightHarbor.exe", WindowTitle = "Night Harbor", CreatedUtc = now.AddMinutes(-40), SeenUtc = now.AddMinutes(-2 + i),
+                    Source = Glossa.Core.Library.QuoteSource.Line,
+                }, () => Frame(new PixelRect(245, 850, 1010, 900)));
+        }
+
         // «Картинка значения»: drawn stand-ins, credited as a Commons picture is; reconsider has none (it cannot be pictured).
         foreach (var (head, seed, query) in new[] { ("tsundere", 1, "tsundere anime girl"), ("shit-stained", 3, "stained coat") })
         {
@@ -171,6 +210,13 @@ internal static class CardSnapshots
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}-picker.png"));
             window.CloseModal();
             vm.Selected = vm.Items.First(i => i.Headword == "reconsider");
+            // «Словарь» → «Цитаты»: the newest quote with its frame, then two chosen at once.
+            window.ShowDictionary(quotes: true);
+            SaveWindow(window, Path.Combine(folder, $"quotes-{themeName}.png"));
+            window.QuotesPage.QuotesList.SelectedItems.Clear();
+            foreach (var item in window.QuotesPage.QuotesList.Items.Cast<object>().Take(2)) window.QuotesPage.QuotesList.SelectedItems.Add(item);
+            SaveWindow(window, Path.Combine(folder, $"quotes-{themeName}-chosen.png"));
+            window.ShowDictionary(quotes: false);
             // «Учёба»: today's session, then the first card before and after Space.
             window.ShowTab(MainTab.Study);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}.png"));
@@ -231,6 +277,9 @@ internal static class CardSnapshots
             settings.TranslateMode = "live";
             var translate = new MainWindow(services);
             SaveWindow(translate, Path.Combine(folder, $"home-{themeName}-translate.png"));
+            // «Словарь» in «Только перевод»: only its quotes, no switch to words.
+            translate.ShowTab(MainTab.Words);
+            SaveWindow(translate, Path.Combine(folder, $"quotes-{themeName}-translate.png"));
             translate.ShowTab(MainTab.Settings);
             translate.SettingsPage.Show("keys");
             SaveWindow(translate, Path.Combine(folder, $"settings-{themeName}-keys-translate.png"));

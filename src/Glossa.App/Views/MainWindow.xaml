@@ -255,6 +255,12 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                            <!-- «Слова / Цитаты» (decided 2026-09-30); «Цитаты» is its own page, QuotesPage. -->
+                            <ListBox x:Name="WordsSwitch" DockPanel.Dock="Top" Style="{StaticResource Segmented}" Margin="0,0,0,14" SelectedIndex="0"
+                                     SelectionChanged="OnWordsSwitch">
+                                <ListBoxItem Content="Слова" />
+                                <ListBoxItem Content="Цитаты" />
+                            </ListBox>
                             <Button DockPanel.Dock="Top" Click="OnAddWord" Height="40" Margin="0,0,0,22" Background="{DynamicResource Surface}">
                                 <StackPanel Orientation="Horizontal">
                                     <Viewbox Width="15" Height="15" Margin="0,0,8,0">
@@ -653,6 +659,9 @@
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
+
+                <!-- ============ Словарь -> Цитаты (the whole «Словарь» in «Только перевод») ============ -->
+                <v:QuotesPage x:Name="QuotesPage" Visibility="Collapsed" />
 
                 <!-- ============ Настройки ============ -->
                 <!-- ============ Учёба ============ -->

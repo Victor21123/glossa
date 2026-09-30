@@ -289,6 +289,9 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool AnkiImages { get => S.Anki.IncludeImages; set => Set(() => S.Anki.IncludeImages = value); }
     public bool AnkiMeaningPictures { get => S.Anki.IncludeMeaningPictures; set => Set(() => S.Anki.IncludeMeaningPictures = value); }
+    public bool QuotesSave { get => S.Quotes.Save; set => Set(() => S.Quotes.Save = value); }
+    public bool QuotesFrames { get => S.Quotes.SaveFrames; set => Set(() => S.Quotes.SaveFrames = value); }
+    public string QuotesLiveHotkey => S.Quotes.LiveHotkey;
 
     public bool AnkiAudio { get => S.Anki.IncludeAudio; set => Set(() => S.Anki.IncludeAudio = value); }
 

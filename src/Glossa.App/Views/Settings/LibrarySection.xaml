@@ -10,7 +10,7 @@
     <StackPanel>
         <StackPanel Margin="0,0,0,22">
             <TextBlock Text="Словарь и Anki" Style="{StaticResource PageTitle}" />
-            <TextBlock Text="Что сохраняется из игры и как слова попадают в Anki." Style="{StaticResource SectionDescription}" />
+            <TextBlock Text="Что сохраняется из игры, цитаты и как слова попадают в Anki." Style="{StaticResource SectionDescription}" />
         </StackPanel>
         <Grid>
             <Grid.ColumnDefinitions>
@@ -34,6 +34,38 @@
                                 <ContentControl x:Name="ShotsFolder" Style="{StaticResource PathBox}" MaxWidth="360" />
                                 <TextBlock x:Name="ShotsSize" FontSize="14" VerticalAlignment="Center" Margin="14,0,0,0" />
                                 <Button Content="Открыть" Margin="14,0,0,0" Click="OnOpenShots" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- «Цитаты» (decided 2026-09-30): lines translated in «Только перевод»; the frame switch says what a frame weighs,
+                     and their frames can be measured and cleared (the chosen ones in «Словарь» → «Цитаты», all of them here). -->
+                <TextBlock Text="Цитаты" FontSize="18" FontWeight="Bold" Margin="0,30,0,12" />
+                <Border Style="{StaticResource SettingRows}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Сохранять цитаты" Tag='в "Только перевод"' Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Settings.QuotesSave}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="QuotesNote" Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Кадр к цитате" Tag="весь кадр, уменьшенный" Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Settings.QuotesFrames}" VerticalAlignment="Center" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Text="1280 px по ширине: около 90 КБ на цитату, 200 реплик за вечер - около 17 МБ" />
+                            </DockPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Кадры цитат" Tag="место на диске" Style="{StaticResource SettingRow}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="QuoteShotsSize" Text="считаю..." FontSize="14" VerticalAlignment="Center" MinWidth="150" />
+                                    <Button Content="Открыть" Margin="14,0,0,0" Click="OnOpenQuoteShots" />
+                                    <Button x:Name="ClearQuoteShotsButton" Content="Очистить все" Margin="8,0,0,0" Click="OnClearQuoteShots" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Note}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text='цитаты остаются, пропадают только кадры; выборочно - в "Словаре" -> "Цитаты": выделить и "Убрать кадры"' />
                             </StackPanel>
                         </HeaderedContentControl>
                     </StackPanel>

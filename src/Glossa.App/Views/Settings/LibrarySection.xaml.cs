@@ -29,11 +29,14 @@ public partial class LibrarySection : UserControl
         _library = library;
         DataContext = new LibrarySectionContext(model, library);
         ShotsFolder.Content = DataPaths.Shots;
+        QuotesNote.Text = $"\"Реплика\", \"Зона\" и \"Весь экран\" - сами, живой перевод - по {services.Settings.Quotes.LiveHotkey}; "
+                          + "смотреть - \"Словарь\" -> \"Цитаты\"";
         FillPreview();
         FaceShot.SizeChanged += (_, _) => ArrangeFace();
         Loaded += async (_, _) =>
         {
             ShotsSize.Text = Sizes.Format(await Task.Run(() => Sizes.Folder(DataPaths.Shots)));
+            await ShowQuoteShotsAsync();
             var up = await new AnkiConnectSync(_services.LocalHttp).IsAvailableAsync(CancellationToken.None);
             AnkiDot.SetResourceReference(Shape.FillProperty, up ? "Good" : "Page");
             AnkiDot.SetResourceReference(Shape.StrokeProperty, up ? "Good" : "Muted");
@@ -135,6 +138,68 @@ public partial class LibrarySection : UserControl
     {
         Directory.CreateDirectory(DataPaths.Shots);
         Process.Start("explorer.exe", DataPaths.Shots);
+    }
+
+    /// <summary>"12,4 МБ, 140 кадров": what the quotes' frames take.</summary>
+    private async Task ShowQuoteShotsAsync()
+    {
+        var (bytes, count) = await Task.Run(() =>
+        {
+            if (!Directory.Exists(DataPaths.QuoteShots)) return (0L, 0);
+            var files = Directory.EnumerateFiles(DataPaths.QuoteShots, "*.jpg", SearchOption.AllDirectories).ToList();
+            return (Sizes.Folder(DataPaths.QuoteShots), files.Count);
+        });
+        QuoteShotsSize.Text = count == 0 ? "кадров нет"
+            : $"{Sizes.Format(bytes)}, {count} {Glossa.Core.Text.Russian.Plural(count, "кадр", "кадра", "кадров")}";
+        ClearQuoteShotsButton.IsEnabled = count > 0;
+    }
+
+    private void OnOpenQuoteShots(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(DataPaths.QuoteShots);
+        Process.Start("explorer.exe", DataPaths.QuoteShots);
+    }
+
+    /// <summary>
+    /// «Очистить все»: every quote forgets its frame and the folder is emptied (the quotes stay). Files written after the
+    /// click - a quote being kept this very moment - are left alone.
+    /// </summary>
+    private async void OnClearQuoteShots(object sender, RoutedEventArgs e)
+    {
+        var window = Window.GetWindow(this);
+        if (MessageBox.Show(window!, $"Удалить все кадры цитат ({QuoteShotsSize.Text})? Сами цитаты останутся.", "Glossa",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+            return;
+        var started = DateTime.Now;
+        try
+        {
+            _services.Library.ClearQuoteShots(null);
+            var failed = await Task.Run(() =>
+            {
+                var left = 0;
+                foreach (var file in Directory.Exists(DataPaths.QuoteShots)
+                             ? Directory.EnumerateFiles(DataPaths.QuoteShots, "*", SearchOption.AllDirectories).ToList() : [])
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTime(file) < started) File.Delete(file);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        left++;
+                    }
+                }
+                return left;
+            });
+            if (failed > 0) _services.Log.Warn($"quote frames: {failed} could not be deleted");
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Error("clear quote frames", ex);
+            MessageBox.Show(window!, $"Кадры не удалось очистить: {ex.Message}", "Glossa", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        _services.NotifyLibraryChanged();
+        await ShowQuoteShotsAsync();
     }
 
     private async void OnSync(object sender, RoutedEventArgs e) => await _library.SyncAnki();

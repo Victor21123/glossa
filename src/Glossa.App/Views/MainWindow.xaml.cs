@@ -56,6 +56,8 @@ public partial class MainWindow : Window
         };
         HomePage.OpenStudy += () => ShowTab(MainTab.Study);
         StudyPage.Attach(services);
+        QuotesPage.Attach(services);
+        QuotesPage.WordsRequested += () => ShowDictionary(quotes: false);
         StudyPage.PickPicture += OpenPicturePicker;
         PicturePicker.Chosen += OnPictureChosen;
         PicturePicker.Removed += OnPictureRemoved;
@@ -70,12 +72,26 @@ public partial class MainWindow : Window
         _library.PropertyChanged += OnLibraryChanged;
         _library.Items.CollectionChanged += (_, _) => UpdateEmpty();
         // The app outlives this window: listen only while it is open.
-        Action reload = () => Dispatcher.Invoke(() =>
+        void Reload()
         {
             _library.Reload();
+            QuotesPage.Reload();
             if (HomePage.IsVisible) HomePage.Refresh();
             StudyPage.Refresh();
-        });
+        }
+        // On the UI thread at once (a word saved); from elsewhere - quotes kept beside a translation, one per paragraph of
+        // «Весь экран» - once for the whole burst.
+        var pending = 0;
+        Action reload = () =>
+        {
+            if (Dispatcher.CheckAccess()) Reload();
+            else if (Interlocked.Exchange(ref pending, 1) == 0)
+                Dispatcher.BeginInvoke(() =>
+                {
+                    Volatile.Write(ref pending, 0);
+                    Reload();
+                }, DispatcherPriority.Background);
+        };
         services.LibraryChanged += reload;
         // A game profile created or renamed: the catalogue names the game by its profile.
         if (services.Games is { } games) games.Changed += reload;
@@ -107,18 +123,44 @@ public partial class MainWindow : Window
         ShowTab(MainTab.Words);
     }
 
-    /// <summary>«Только перевод»: Glossa saves nothing, so the dictionary is out of sight.</summary>
+    /// <summary>«Только перевод»: no words are saved, only the lines translated (quotes).</summary>
     private bool TranslateOnly => _services.Settings.Purpose == "translate";
 
-    /// <summary>«Только перевод» hides «Словарь» and «Учёба»; the window stays on «Главная».</summary>
+    /// <summary>«Словарь» shows the quotes rather than the words (the switch at the top of both).</summary>
+    private bool _quotes;
+
+    /// <summary>
+    /// «Только перевод» hides «Учёба»; its «Словарь» holds only the quotes, without the switch to words (decided
+    /// 2026-09-30).
+    /// </summary>
     private void ApplyPurpose()
     {
-        NavWords.Visibility = NavStudy.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
-        if (TranslateOnly && (NavWords.IsChecked == true || NavStudy.IsChecked == true)) NavHome.IsChecked = true;
+        NavStudy.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
+        if (TranslateOnly && NavStudy.IsChecked == true) NavHome.IsChecked = true;
+        QuotesPage.ShowSwitch(!TranslateOnly);
         SettingsPage.SetSectionVisible("study", !TranslateOnly);
+        OnNav(this, new RoutedEventArgs());
     }
 
-    /// <summary>Главная, Словарь (Главная in «Только перевод»), Настройки → Справочники, or Настройки at the section last open.</summary>
+    /// <summary>«Словарь»: the words or the quotes.</summary>
+    public void ShowDictionary(bool quotes)
+    {
+        _quotes = quotes;
+        NavWords.IsChecked = true;
+        OnNav(this, new RoutedEventArgs());
+    }
+
+    private void OnWordsSwitch(object sender, SelectionChangedEventArgs e)
+    {
+        if (WordsSwitch.SelectedIndex != 1) return;
+        WordsSwitch.SelectedIndex = 0; // back to «Слова» for the next time the words show
+        ShowDictionary(quotes: true);
+    }
+
+    /// <summary>
+    /// Главная, Словарь (its quotes in «Только перевод»), Учёба (Главная in «Только перевод»), Настройки → Справочники, or
+    /// Настройки at the section last open.
+    /// </summary>
     public void ShowTab(MainTab tab)
     {
         switch (tab)
@@ -126,7 +168,7 @@ public partial class MainWindow : Window
             case MainTab.Home:
                 NavHome.IsChecked = true;
                 break;
-            case MainTab.Words or MainTab.Study when TranslateOnly:
+            case MainTab.Study when TranslateOnly:
                 NavHome.IsChecked = true;
                 break;
             case MainTab.Words:
@@ -144,12 +186,14 @@ public partial class MainWindow : Window
 
     private void OnNav(object sender, RoutedEventArgs e)
     {
-        if (WordsPage is null || HomePage is null || StudyPage is null) return;
+        if (WordsPage is null || HomePage is null || StudyPage is null || QuotesPage is null) return;
         var home = NavHome.IsChecked == true;
         var words = NavWords.IsChecked == true;
         var study = NavStudy.IsChecked == true;
+        var quotes = words && (_quotes || TranslateOnly);
         HomePage.Visibility = home ? Visibility.Visible : Visibility.Collapsed;
-        WordsPage.Visibility = words ? Visibility.Visible : Visibility.Collapsed;
+        WordsPage.Visibility = words && !quotes ? Visibility.Visible : Visibility.Collapsed;
+        QuotesPage.Visibility = quotes ? Visibility.Visible : Visibility.Collapsed;
         StudyPage.Visibility = study ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = home || words || study ? Visibility.Collapsed : Visibility.Visible;
         if (home) HomePage.Refresh();
@@ -325,11 +369,15 @@ public partial class MainWindow : Window
             _library.CancelEdit();
             e.Handled = true;
         }
-        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control && !TranslateOnly)
+        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
             NavWords.IsChecked = true;
-            SearchBox.Focus();
-            SearchBox.SelectAll();
+            if (_quotes || TranslateOnly) QuotesPage.FocusSearch();
+            else
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+            }
             e.Handled = true;
         }
     }
