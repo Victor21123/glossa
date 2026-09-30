@@ -28,7 +28,7 @@ public partial class StudyPage : UserControl
     private StudyStats _stats = StudyStats.Empty;
     private StudyPlan? _plan;
     private StudySession? _session;
-    private bool _filling, _flipped, _pinned;
+    private bool _filling, _flipped, _pinned, _reverse;
     private DateTime _shownUtc, _startedUtc;
     private int _answered;
     private BitmapImage? _shot;
@@ -333,6 +333,24 @@ public partial class StudyPage : UserControl
         FillMeta(w);
         ShowPin(w);
 
+        // A reverse card turns the faces round: the meaning asks, the frame, the word and its line answer.
+        _reverse = card.Direction == CardDirection.Reverse;
+        if (_reverse)
+        {
+            PromptTranslation.Text = Translation.Text;
+            PromptScene.Text = w.UsageNote;
+            PromptScene.Visibility = string.IsNullOrWhiteSpace(w.UsageNote) ? Visibility.Collapsed : Visibility.Visible;
+            ShowShot(w, now); // the frame is part of the answer, whatever the front settings say
+            Frame.Visibility = Visibility.Collapsed;
+            Reading.Visibility = !string.IsNullOrWhiteSpace(w.Reading) && w.Reading != w.Headword ? Visibility.Visible : Visibility.Collapsed;
+            Line.Visibility = string.IsNullOrWhiteSpace(w.Context) ? Visibility.Collapsed : Visibility.Visible;
+        }
+        Prompt.Visibility = _reverse ? Visibility.Visible : Visibility.Collapsed;
+        WordPanel.Visibility = _reverse ? Visibility.Collapsed : Visibility.Visible;
+        Translation.Visibility = _reverse ? Visibility.Collapsed : Visibility.Visible;
+        if (_reverse) SceneNote.Visibility = Visibility.Collapsed;
+        FlipText.Text = _reverse ? "показать слово" : "показать перевод";
+
         Back.Visibility = Visibility.Collapsed;
         FlipHint.Visibility = Visibility.Visible;
         Answers.Visibility = Visibility.Hidden;
@@ -436,6 +454,15 @@ public partial class StudyPage : UserControl
         _flipped = true;
         Back.Visibility = Visibility.Visible;
         FlipHint.Visibility = Visibility.Collapsed;
+        if (_reverse)
+        {
+            WordPanel.Visibility = Visibility.Visible;
+            if (_shot is not null)
+            {
+                Frame.Visibility = Visibility.Visible;
+                PlaceShot();
+            }
+        }
         var choices = _session.Choices(DateTime.UtcNow);
         Answers.Children.Clear();
         Answers.Children.Add(AnswerButton(Rating.Again, "Снова", "Danger", choices.Again));
@@ -500,6 +527,7 @@ public partial class StudyPage : UserControl
 
     private void Speak()
     {
+        if (_reverse && !_flipped) return; // the word is the answer of a reverse card: not before Space
         if (_session?.Current is { } card) _ = _services!.Speech.SpeakAsync(card.Word.Headword, card.Word.Language);
     }
 

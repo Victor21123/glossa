@@ -167,6 +167,18 @@ internal static class CardSnapshots
             window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back.png"));
             window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
+            // «Перевод -> слово»: a card asked by its meaning, then answered with the word, its line and frame.
+            settings.Study.Direction = "reverse";
+            window.ShowTab(MainTab.Home);
+            window.ShowTab(MainTab.Study);
+            window.StudyPage.LanguageFilter.SelectedItem = window.StudyPage.LanguageFilter.Items.OfType<System.Windows.Controls.ListBoxItem>()
+                .First(i => i.Tag as string == "en");
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-reverse-front.png"));
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-reverse-back.png"));
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
+            settings.Study.Direction = "forward";
             foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "study", "speech", "games", "load", "app" })
             {
                 window.ShowTab(MainTab.Settings);

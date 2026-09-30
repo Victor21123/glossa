@@ -97,6 +97,14 @@
 
                 <Border Margin="0,18,0,0" CornerRadius="14" BorderThickness="1" BorderBrush="{DynamicResource Rule}" Background="{DynamicResource Surface}">
                     <StackPanel>
+                        <!-- A reverse card («Перевод -> слово») asks with the meaning: the translation and the scene; the frame, the word
+                             and its line are the answer, shown on Space. -->
+                        <StackPanel x:Name="Prompt" HorizontalAlignment="Center" Margin="40,40,40,20" Visibility="Collapsed">
+                            <TextBlock x:Name="PromptTranslation" FontSize="40" FontWeight="Bold" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="900" />
+                            <TextBlock x:Name="PromptScene" FontSize="16.5" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap" TextAlignment="Center"
+                                       MaxWidth="900" Margin="0,12,0,0" />
+                        </StackPanel>
+
                         <!-- The game frame around the word, the word ringed. -->
                         <Grid x:Name="Frame" Height="330" ClipToBounds="True" Background="{DynamicResource Well}" SizeChanged="OnFrameSized">
                             <Canvas x:Name="FrameCanvas">
@@ -111,7 +119,7 @@
                             </Border>
                         </Grid>
 
-                        <StackPanel HorizontalAlignment="Center" Margin="40,26,40,22">
+                        <StackPanel x:Name="WordPanel" HorizontalAlignment="Center" Margin="40,26,40,22">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock x:Name="Headword" FontSize="46" FontWeight="Bold" />
                                 <TextBlock x:Name="Reading" FontSize="19" Foreground="{DynamicResource InkSoft}" VerticalAlignment="Bottom" Margin="14,0,0,8" />
@@ -123,7 +131,7 @@
                         <!-- Before the answer is shown. -->
                         <StackPanel x:Name="FlipHint" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4,0,28">
                             <Border Style="{StaticResource KbdBox}"><TextBlock Text="Пробел" FontSize="11" Foreground="{DynamicResource InkSoft}" /></Border>
-                            <TextBlock Text="показать перевод" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            <TextBlock x:Name="FlipText" Text="показать перевод" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
                         </StackPanel>
 
                         <!-- The back. -->
