@@ -919,26 +919,39 @@ public static class ShotStore
     public const int QuoteWidth = 1280;
 
     /// <summary>
-    /// A quote's frame, downscaled to <see cref="QuoteWidth"/> under quotes\; returns the file relative to the data
-    /// folder and the scale from screen pixels to its pixels (for the text's box).
+    /// A quote's frame, downscaled to <see cref="QuoteWidth"/>, encoded but not written: the store writes it under its
+    /// lock only when the quote takes it (<see cref="QuoteFrame"/>), so encoding never holds the library up. Returns
+    /// its file relative to the data folder (quotes\, named by content: the paragraphs of one frame share it), the JPEG,
+    /// and the scale from screen pixels to its pixels (for the text's box).
     /// </summary>
-    public static (string File, double Scale) SaveQuoteFrame(string dataRoot, byte[] bgra, int width, int height, int stride) =>
-        (SaveJpeg(dataRoot, bgra, width, height, stride, quality: 80, folder: QuotesFolder, maxWidth: QuoteWidth),
-            Math.Min(1.0, QuoteWidth / (double)width));
+    public static (string File, byte[] Jpeg, double Scale) EncodeQuoteFrame(byte[] bgra, int width, int height, int stride)
+    {
+        var scale = Math.Min(1.0, QuoteWidth / (double)width);
+        return (Name(bgra, QuotesFolder), Encode(bgra, width, height, stride, quality: 80, scale), scale);
+    }
 
-    public static string SaveJpeg(string dataRoot, byte[] bgra, int width, int height, int stride, int quality = 85,
-        string folder = "shots", int maxWidth = 0)
+    public static string SaveJpeg(string dataRoot, byte[] bgra, int width, int height, int stride, int quality = 85)
+    {
+        var rel = Name(bgra, "shots");
+        var full = Path.Combine(dataRoot, rel);
+        if (File.Exists(full)) return rel;
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllBytes(full, Encode(bgra, width, height, stride, quality, 1.0));
+        return rel;
+    }
+
+    /// <summary>folder\yyyy\MM\hash.jpg: the same pixels are the same file.</summary>
+    private static string Name(byte[] bgra, string folder)
     {
         var hash = Convert.ToHexString(SHA256.HashData(bgra))[..24].ToLowerInvariant();
         var now = DateTime.Now;
-        var rel = Path.Combine(folder, now.ToString("yyyy", CultureInfo.InvariantCulture),
-            now.ToString("MM", CultureInfo.InvariantCulture), hash + ".jpg");
-        var full = Path.Combine(dataRoot, rel);
-        if (File.Exists(full)) return rel;
+        return Path.Combine(folder, now.ToString("yyyy", CultureInfo.InvariantCulture), now.ToString("MM", CultureInfo.InvariantCulture),
+            hash + ".jpg");
+    }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+    private static byte[] Encode(byte[] bgra, int width, int height, int stride, int quality, double scale)
+    {
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-        var scale = maxWidth > 0 && width > maxWidth ? maxWidth / (double)width : 1.0;
         using var bitmap = new SKBitmap(info);
         var handle = System.Runtime.InteropServices.GCHandle.Alloc(bgra, System.Runtime.InteropServices.GCHandleType.Pinned);
         try
@@ -954,8 +967,7 @@ public static class ShotStore
         using var image = SKImage.FromBitmap(bitmap);
         using var scaled = scale < 1 ? Scaled(image, scale) : null;
         using var data = (scaled ?? image).Encode(SKEncodedImageFormat.Jpeg, quality);
-        using (var fs = File.Create(full)) data.SaveTo(fs);
-        return rel;
+        return data.ToArray();
     }
 
     /// <summary>The frame made smaller; Mitchell keeps the game's text readable at half size and below.</summary>

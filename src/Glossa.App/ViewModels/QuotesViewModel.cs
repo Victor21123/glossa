@@ -24,7 +24,17 @@ public sealed class QuoteEntry(Quote quote, string? game) : ObservableObject
     public string? Translation => Quote.Translation;
     public string LanguageCode => Quote.Language.ToUpperInvariant();
     public FontFamily TextFont => UiFonts.For(Quote.Language);
-    public string? Game { get; } = game;
+    public string? Game { get; private set; } = game;
+
+    /// <summary>The same quote as the library has it now (seen again, its frame cleared): the entry, and its selection, stay.</summary>
+    public void Update(Quote quote, string? game)
+    {
+        if (quote == Quote && game == Game) return;
+        Quote = quote;
+        Game = game;
+        OnPropertyChanged(string.Empty);
+        OnPropertyChanged(nameof(DayGroup)); // live grouping listens for the property by name
+    }
 
     public string? ShotPath => Quote.ShotFile is { } f ? Path.Combine(DataPaths.Root, f) : null;
     public bool HasShot => Quote.ShotFile is not null;
@@ -80,8 +90,6 @@ public sealed class QuoteEntry(Quote quote, string? game) : ObservableObject
             return $"{SourceName}, встречалась {times}{since}";
         }
     }
-
-    public void Forget(string? file) => Quote = Quote with { ShotFile = file, Box = file is null ? null : Quote.Box };
 }
 
 /// <summary>One entry of the quotes' catalogue: the properties the catalogue buttons show, as <see cref="SidebarItem"/>.</summary>
@@ -119,6 +127,12 @@ public sealed class QuotesViewModel : ObservableObject
         View = CollectionViewSource.GetDefaultView(Items);
         View.GroupDescriptions.Add(new PropertyGroupDescription(nameof(QuoteEntry.DayGroup)));
         View.Filter = o => o is QuoteEntry q && (_scope?.Matches(q) ?? true) && Matches(q, _search);
+        // A quote seen again today moves to «Сегодня» without a refresh (a refresh would drop a selection of several).
+        if (View is ICollectionViewLiveShaping live)
+        {
+            live.IsLiveGrouping = true;
+            live.LiveGroupingProperties.Add(nameof(QuoteEntry.DayGroup));
+        }
         Reload();
     }
 
@@ -143,22 +157,35 @@ public sealed class QuotesViewModel : ObservableObject
 
     public bool IsEmpty => Items.Count == 0;
 
-    /// <summary>Everything from the library as it is now, keeping the quote and the slice in view.</summary>
+    /// <summary>
+    /// Everything from the library as it is now, merged into the list in place: quotes kept beside a translation arrive
+    /// while the user may have several chosen, and clearing the list would drop that choice (the next «Удалить» would
+    /// then take the wrong quotes). Not under View.DeferRefresh: a grouped view refuses changes while it is deferred.
+    /// </summary>
     public void Reload()
     {
-        var selected = Selected?.Quote.Id;
         var games = _services.Games;
-        var quotes = _services.Library.ListQuotes();
-        // Not under View.DeferRefresh: a grouped view refuses changes to its items while its refresh is deferred.
-        Items.Clear();
-        foreach (var q in quotes)
+        var fresh = _services.Library.ListQuotes();
+        var ids = fresh.Select(q => q.Id).ToHashSet();
+        for (var i = Items.Count - 1; i >= 0; i--)
+            if (!ids.Contains(Items[i].Quote.Id)) Items.RemoveAt(i);
+        var known = Items.ToDictionary(e => e.Quote.Id);
+        for (var i = 0; i < fresh.Count; i++)
         {
-            var game = games is not null && !string.IsNullOrWhiteSpace(q.AppExe) ? games.DisplayName(q.AppExe, q.WindowTitle) : null;
-            Items.Add(new QuoteEntry(q, game ?? Blank(q.WindowTitle) ?? Blank(q.AppExe)));
+            var q = fresh[i];
+            var game = (games is not null && !string.IsNullOrWhiteSpace(q.AppExe) ? games.DisplayName(q.AppExe, q.WindowTitle) : null)
+                       ?? Blank(q.WindowTitle) ?? Blank(q.AppExe);
+            if (known.TryGetValue(q.Id, out var entry))
+            {
+                entry.Update(q, game);
+                var at = Items.IndexOf(entry);
+                if (at != i) Items.Move(at, i);
+            }
+            else Items.Insert(i, new QuoteEntry(q, game));
         }
         BuildSidebar();
-        Refresh();
-        Selected = Items.FirstOrDefault(q => q.Quote.Id == selected) ?? View.Cast<QuoteEntry>().FirstOrDefault();
+        OnPropertyChanged(nameof(Summary));
+        if (Selected is null || !Items.Contains(Selected)) Selected = View.Cast<QuoteEntry>().FirstOrDefault();
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -210,15 +237,12 @@ public sealed class QuotesViewModel : ObservableObject
         return search.Split(' ', StringSplitOptions.RemoveEmptyEntries).All(t => hay.Contains(t, StringComparison.CurrentCultureIgnoreCase));
     }
 
+    /// <summary>Removes the quotes; the library deletes the frames no other quote shows.</summary>
     public void Delete(IReadOnlyList<QuoteEntry> entries)
     {
         if (entries.Count == 0) return;
-        foreach (var file in _services.Library.DeleteQuotes(entries.Select(e => e.Quote.Id))) DeleteFrame(file);
-        foreach (var e in entries) Items.Remove(e);
-        BuildSidebar();
-        Refresh();
-        Selected = View.Cast<QuoteEntry>().FirstOrDefault();
-        OnPropertyChanged(nameof(IsEmpty));
+        _services.Library.DeleteQuotes(entries.Select(e => e.Quote.Id));
+        Reload();
         Status = entries.Count == 1 ? "Цитата удалена" : $"Удалено цитат: {entries.Count}";
     }
 
@@ -227,20 +251,9 @@ public sealed class QuotesViewModel : ObservableObject
     {
         var withShot = entries.Where(e => e.HasShot).ToList();
         if (withShot.Count == 0) return;
-        foreach (var file in _services.Library.ClearQuoteShots(withShot.Select(e => e.Quote.Id))) DeleteFrame(file);
-        foreach (var e in withShot) e.Forget(null);
+        _services.Library.ClearQuoteShots(withShot.Select(e => e.Quote.Id));
         Reload();
         Status = withShot.Count == 1 ? "Кадр цитаты убран" : $"Убрано кадров: {withShot.Count}";
-    }
-
-    /// <summary>Настройки → «Очистить все»: every quote's frame; returns how many files went.</summary>
-    public int ClearAllFrames()
-    {
-        var files = _services.Library.ClearQuoteShots(null);
-        foreach (var file in files) DeleteFrame(file);
-        Reload();
-        Status = $"Кадры цитат очищены: {files.Count}";
-        return files.Count;
     }
 
     public void ExportCsv(string path, IReadOnlyList<QuoteEntry> entries)
@@ -256,18 +269,6 @@ public sealed class QuotesViewModel : ObservableObject
         if (Selected is not { } q) return;
         if (!await _services.Speech.SpeakAsync(q.Text, q.Quote.Language))
             Status = $"Нет голоса для языка \"{Languages.RussianName(q.Quote.Language)}\" - Параметры -> Время и язык -> Речь.";
-    }
-
-    private void DeleteFrame(string file)
-    {
-        try
-        {
-            File.Delete(Path.Combine(DataPaths.Root, file));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _services.Log.Warn($"quote frame not deleted: {file} ({e.Message})");
-        }
     }
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

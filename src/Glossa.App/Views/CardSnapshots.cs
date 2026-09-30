@@ -96,10 +96,10 @@ internal static class CardSnapshots
         using (var scene = SkiaSharp.SKBitmap.Decode(Path.Combine(data, shot)))
         {
             var bgra = scene.Bytes;
-            (string, PixelRect?)? Frame(PixelRect line)
+            Glossa.Core.Library.QuoteFrame Frame(PixelRect line)
             {
-                var (file, scale) = Glossa.Core.Library.ShotStore.SaveQuoteFrame(data, bgra, scene.Width, scene.Height, scene.RowBytes);
-                return (file, new PixelRect(line.Left * scale, line.Top * scale, line.Right * scale, line.Bottom * scale));
+                var (file, jpeg, scale) = Glossa.Core.Library.ShotStore.EncodeQuoteFrame(bgra, scene.Width, scene.Height, scene.RowBytes);
+                return new(file, jpeg, new PixelRect(line.Left * scale, line.Top * scale, line.Right * scale, line.Bottom * scale));
             }
             var now = DateTime.UtcNow;
             library.RecordQuote(new Glossa.Core.Library.Quote
@@ -107,7 +107,7 @@ internal static class CardSnapshots
                 Language = "en", Text = "He looks at his shit-stained coat with a grim expression.",
                 Translation = "Он с мрачным видом смотрит на свой заляпанный дерьмом плащ.", AppExe = "NightHarbor.exe", WindowTitle = "Night Harbor",
                 CreatedUtc = now.AddMinutes(-9), SeenUtc = now.AddMinutes(-9), Source = Glossa.Core.Library.QuoteSource.Line,
-            }, () => Frame(new PixelRect(245, 912, 1330, 962)));
+            }, Frame(new PixelRect(245, 912, 1330, 962)));
             library.RecordQuote(new Glossa.Core.Library.Quote
             {
                 Language = "ja", Text = "スライムたちが どんどん 合体していく！", Translation = "Слаймы всё больше и больше сливаются воедино!",
@@ -127,7 +127,7 @@ internal static class CardSnapshots
                     Language = "en", Text = "I'd reconsider the offer if I were you.", Translation = "На твоём месте я бы пересмотрел предложение.",
                     AppExe = "NightHarbor.exe", WindowTitle = "Night Harbor", CreatedUtc = now.AddMinutes(-40), SeenUtc = now.AddMinutes(-2 + i),
                     Source = Glossa.Core.Library.QuoteSource.Line,
-                }, () => Frame(new PixelRect(245, 850, 1010, 900)));
+                }, Frame(new PixelRect(245, 850, 1010, 900)));
         }
 
         // «Картинка значения»: drawn stand-ins, credited as a Commons picture is; reconsider has none (it cannot be pictured).

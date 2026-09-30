@@ -46,7 +46,9 @@ public sealed class LiveTranslator(
     public void KeepCurrent()
     {
         if (!Running || _shown is not { } shown) return;
-        controller.KeepQuote(shown.Frame, shown.Line.Box, shown.Line.Text, shown.Translation, shown.Language, shown.Context, QuoteSource.Live);
+        if (!controller.KeepQuote(shown.Frame, shown.Line.Box, shown.Line.Text, shown.Translation, shown.Language, shown.Context,
+                QuoteSource.Live))
+            return;
         _overlay?.SetCaption("СОХРАНЕНО В ЦИТАТЫ");
         var restore = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
         restore.Tick += (_, _) =>

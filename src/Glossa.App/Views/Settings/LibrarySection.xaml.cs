@@ -161,8 +161,8 @@ public partial class LibrarySection : UserControl
     }
 
     /// <summary>
-    /// «Очистить все»: every quote forgets its frame and the folder is emptied (the quotes stay). Files written after the
-    /// click - a quote being kept this very moment - are left alone.
+    /// «Очистить все»: every quote forgets its frame and the folder is emptied (the quotes stay). The library does it
+    /// under its lock, so a quote being kept this very moment never ends up pointing at a deleted frame.
     /// </summary>
     private async void OnClearQuoteShots(object sender, RoutedEventArgs e)
     {
@@ -170,28 +170,10 @@ public partial class LibrarySection : UserControl
         if (MessageBox.Show(window!, $"Удалить все кадры цитат ({QuoteShotsSize.Text})? Сами цитаты останутся.", "Glossa",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
             return;
-        var started = DateTime.Now;
         try
         {
-            _services.Library.ClearQuoteShots(null);
-            var failed = await Task.Run(() =>
-            {
-                var left = 0;
-                foreach (var file in Directory.Exists(DataPaths.QuoteShots)
-                             ? Directory.EnumerateFiles(DataPaths.QuoteShots, "*", SearchOption.AllDirectories).ToList() : [])
-                {
-                    try
-                    {
-                        if (File.GetLastWriteTime(file) < started) File.Delete(file);
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        left++;
-                    }
-                }
-                return left;
-            });
-            if (failed > 0) _services.Log.Warn($"quote frames: {failed} could not be deleted");
+            var deleted = await Task.Run(_services.Library.ClearAllQuoteShots);
+            _services.Log.Info($"quote frames cleared: {deleted} files");
         }
         catch (Exception ex)
         {

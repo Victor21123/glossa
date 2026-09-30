@@ -43,26 +43,45 @@ public sealed record Quote
     public string Source { get; init; } = QuoteSource.Line;
 }
 
+/// <summary>
+/// A quote's frame, encoded beforehand (<see cref="ShotStore.EncodeQuoteFrame"/>, outside the store's lock); the store
+/// writes it only if the quote takes it. <paramref name="Box"/> is the text in its pixels.
+/// </summary>
+public sealed record QuoteFrame(string File, byte[] Jpeg, PixelRect? Box);
+
 public sealed partial class LibraryStore
 {
     /// <summary>
-    /// Keeps a translated line. The same line in the same game (spaces, punctuation and case aside) is the same quote:
-    /// it is counted and dated again, and keeps its first translation and frame. <paramref name="shot"/> is asked for
-    /// only when the quote has no frame yet, so a frame is never written for nothing. Returns the quote's id.
+    /// The data folder, which frames are relative to: the one library.db is in. Quote frames are written and deleted
+    /// by the store, under its lock, so a frame a new quote takes can never be deleted as unused a moment later.
     /// </summary>
-    public string RecordQuote(Quote quote, Func<(string File, PixelRect? Box)?>? shot = null)
+    private string DataRoot => Path.GetDirectoryName(Path.GetFullPath(_path))!;
+
+    /// <summary>Whether this line of this game is a quote with a frame already (then no frame need be encoded for it).</summary>
+    public bool QuoteHasFrame(string text, string? appExe)
+    {
+        lock (_gate)
+            return Scalar("SELECT 1 FROM quotes WHERE text_key = $k AND app_exe IS $app AND shot_file IS NOT NULL LIMIT 1",
+                ("$k", TextBlocks.Key(text)), ("$app", appExe)) is not null;
+    }
+
+    /// <summary>
+    /// Keeps a translated line. The same line in the same game (spaces, punctuation and case aside) is the same quote:
+    /// it is counted and dated again, and keeps its first translation and frame; <paramref name="frame"/> is written only
+    /// for a quote without one. A frame written for a quote that then could not be saved goes again. Returns its id.
+    /// </summary>
+    public string RecordQuote(Quote quote, QuoteFrame? frame = null)
     {
         lock (_gate)
         {
-            using var tx = _db.BeginTransaction();
             var key = TextBlocks.Key(quote.Text);
             string? id = null;
             string? file = null;
             using (var cmd = _db.CreateCommand())
             {
-                cmd.CommandText = "SELECT id, shot_file FROM quotes WHERE text_key = $k AND COALESCE(app_exe, '') = $app LIMIT 1";
+                cmd.CommandText = "SELECT id, shot_file FROM quotes WHERE text_key = $k AND app_exe IS $app LIMIT 1";
                 cmd.Parameters.AddWithValue("$k", key);
-                cmd.Parameters.AddWithValue("$app", quote.AppExe ?? "");
+                cmd.Parameters.AddWithValue("$app", (object?)quote.AppExe ?? DBNull.Value);
                 using var r = cmd.ExecuteReader();
                 if (r.Read())
                 {
@@ -70,31 +89,41 @@ public sealed partial class LibraryStore
                     file = r.IsDBNull(1) ? null : r.GetString(1);
                 }
             }
-            var frame = file is null ? shot?.Invoke() : null;
-            var box = frame?.Box is { } b ? JsonSerializer.Serialize(b) : null;
-            if (id is null)
+            var taken = file is null ? frame : null;
+            var created = taken is not null && WriteFrame(taken);
+            try
             {
-                id = quote.Id;
-                Run("""
-                    INSERT INTO quotes(id, created_utc, seen_utc, seen, language, text, text_key, translation, app_exe, window_title,
-                                       shot_file, box, source)
-                    VALUES($id, $created, $seen, 1, $lang, $text, $k, $tr, $app, $title, $shot, $box, $source)
-                    """, ("$id", id), ("$created", Iso(quote.CreatedUtc)), ("$seen", Iso(quote.SeenUtc)), ("$lang", quote.Language),
-                    ("$text", quote.Text), ("$k", key), ("$tr", quote.Translation), ("$app", quote.AppExe), ("$title", quote.WindowTitle),
-                    ("$shot", frame?.File), ("$box", box), ("$source", quote.Source));
+                using var tx = _db.BeginTransaction();
+                var box = taken?.Box is { } b ? JsonSerializer.Serialize(b) : null;
+                if (id is null)
+                {
+                    id = quote.Id;
+                    Run("""
+                        INSERT INTO quotes(id, created_utc, seen_utc, seen, language, text, text_key, translation, app_exe, window_title,
+                                           shot_file, box, source)
+                        VALUES($id, $created, $seen, 1, $lang, $text, $k, $tr, $app, $title, $shot, $box, $source)
+                        """, ("$id", id), ("$created", Iso(quote.CreatedUtc)), ("$seen", Iso(quote.SeenUtc)), ("$lang", quote.Language),
+                        ("$text", quote.Text), ("$k", key), ("$tr", quote.Translation), ("$app", quote.AppExe), ("$title", quote.WindowTitle),
+                        ("$shot", taken?.File), ("$box", box), ("$source", quote.Source));
+                }
+                else
+                {
+                    Run("""
+                        UPDATE quotes SET seen = seen + 1, seen_utc = $seen, translation = COALESCE(translation, $tr),
+                          window_title = COALESCE($title, window_title),
+                          shot_file = COALESCE(shot_file, $shot), box = CASE WHEN shot_file IS NULL THEN $box ELSE box END
+                        WHERE id = $id
+                        """, ("$seen", Iso(quote.SeenUtc)), ("$tr", quote.Translation), ("$title", quote.WindowTitle),
+                        ("$shot", taken?.File), ("$box", box), ("$id", id));
+                }
+                tx.Commit();
+                return id;
             }
-            else
+            catch
             {
-                Run("""
-                    UPDATE quotes SET seen = seen + 1, seen_utc = $seen, translation = COALESCE(translation, $tr),
-                      window_title = COALESCE($title, window_title),
-                      shot_file = COALESCE(shot_file, $shot), box = CASE WHEN shot_file IS NULL THEN $box ELSE box END
-                    WHERE id = $id
-                    """, ("$seen", Iso(quote.SeenUtc)), ("$tr", quote.Translation), ("$title", quote.WindowTitle),
-                    ("$shot", frame?.File), ("$box", box), ("$id", id));
+                if (created) DeleteFrame(taken!.File);
+                throw;
             }
-            tx.Commit();
-            return id;
         }
     }
 
@@ -112,52 +141,111 @@ public sealed partial class LibraryStore
         }
     }
 
-    /// <summary>Removes quotes; returns the frames (relative to the data folder) no quote shows any more, for the caller to delete.</summary>
-    public IReadOnlyList<string> DeleteQuotes(IEnumerable<string> ids)
+    /// <summary>Removes quotes, and the frames no other quote shows. Returns how many quotes went.</summary>
+    public int DeleteQuotes(IEnumerable<string> ids)
     {
         lock (_gate)
         {
-            using var tx = _db.BeginTransaction();
             var files = new List<string>();
-            foreach (var id in ids)
+            var deleted = 0;
+            using (var tx = _db.BeginTransaction())
             {
-                if (Scalar("SELECT shot_file FROM quotes WHERE id = $id", ("$id", id)) is string file) files.Add(file);
-                Run("DELETE FROM quotes WHERE id = $id", ("$id", id));
+                foreach (var id in ids)
+                {
+                    if (Scalar("SELECT shot_file FROM quotes WHERE id = $id", ("$id", id)) is string file) files.Add(file);
+                    using var cmd = _db.CreateCommand();
+                    cmd.CommandText = "DELETE FROM quotes WHERE id = $id";
+                    cmd.Parameters.AddWithValue("$id", id);
+                    deleted += cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
             }
-            var unused = Unused(files);
-            tx.Commit();
-            return unused;
+            foreach (var file in Unused(files)) DeleteFrame(file);
+            return deleted;
         }
     }
 
     /// <summary>
-    /// Forgets the frames of these quotes, or of all of them (null); the quotes stay. Returns the frames no quote shows
-    /// any more, for the caller to delete (a frame of «Весь экран» may be shared by several of its paragraphs).
+    /// Forgets the frames of these quotes (the quotes stay) and deletes the files no quote shows any more (a frame of
+    /// «Весь экран» may be shared by several of its paragraphs). Returns how many files went.
     /// </summary>
-    public IReadOnlyList<string> ClearQuoteShots(IEnumerable<string>? ids)
+    public int ClearQuoteShots(IEnumerable<string> ids)
     {
         lock (_gate)
         {
-            using var tx = _db.BeginTransaction();
-            var wanted = ids?.ToHashSet(StringComparer.Ordinal);
-            var cleared = new List<(string Id, string File)>();
-            using (var cmd = _db.CreateCommand())
+            var files = new List<string>();
+            using (var tx = _db.BeginTransaction())
             {
-                cmd.CommandText = "SELECT id, shot_file FROM quotes WHERE shot_file IS NOT NULL";
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                    if (wanted is null || wanted.Contains(r.GetString(0))) cleared.Add((r.GetString(0), r.GetString(1)));
+                foreach (var id in ids)
+                {
+                    if (Scalar("SELECT shot_file FROM quotes WHERE id = $id", ("$id", id)) is not string file) continue;
+                    files.Add(file);
+                    Run("UPDATE quotes SET shot_file = NULL, box = NULL WHERE id = $id", ("$id", id));
+                }
+                tx.Commit();
             }
-            foreach (var (id, _) in cleared) Run("UPDATE quotes SET shot_file = NULL, box = NULL WHERE id = $id", ("$id", id));
-            var unused = Unused(cleared.Select(c => c.File));
-            tx.Commit();
-            return unused;
+            var unused = Unused(files);
+            foreach (var file in unused) DeleteFrame(file);
+            return unused.Count;
+        }
+    }
+
+    /// <summary>
+    /// «Очистить все»: every quote forgets its frame and the quotes folder is emptied, leftovers of earlier runs included.
+    /// Under the lock: a quote being kept this very moment either comes before (and loses its frame too) or after.
+    /// Returns how many files went.
+    /// </summary>
+    public int ClearAllQuoteShots()
+    {
+        lock (_gate)
+        {
+            Exec("UPDATE quotes SET shot_file = NULL, box = NULL WHERE shot_file IS NOT NULL");
+            var folder = Path.Combine(DataRoot, ShotStore.QuotesFolder);
+            if (!Directory.Exists(folder)) return 0;
+            var deleted = 0;
+            foreach (var path in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).ToList())
+                if (TryDelete(path)) deleted++;
+            return deleted;
         }
     }
 
     /// <summary>The frames among <paramref name="files"/> that no quote refers to.</summary>
     private List<string> Unused(IEnumerable<string> files) =>
         files.Distinct().Where(f => Scalar("SELECT 1 FROM quotes WHERE shot_file = $f LIMIT 1", ("$f", f)) is null).ToList();
+
+    /// <summary>
+    /// Writes the frame unless its file is there; true when it wrote it. A file already there (the same frame, another
+    /// paragraph of it) is touched, so it counts as new for anything that goes by file times.
+    /// </summary>
+    private bool WriteFrame(QuoteFrame frame)
+    {
+        var path = Path.Combine(DataRoot, frame.File);
+        if (File.Exists(path))
+        {
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+            return false;
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, frame.Jpeg);
+        return true;
+    }
+
+    private void DeleteFrame(string file) => TryDelete(Path.Combine(DataRoot, file));
+
+    /// <summary>A frame locked by a viewer or gone already stays for the next «Очистить все».</summary>
+    private static bool TryDelete(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     private static Quote ReadQuote(SqliteDataReader r)
     {

@@ -100,6 +100,8 @@ public sealed class LookupSessions
     /// <summary>The live subtitle on screen goes to the quotes (its key, Alt+S by default).</summary>
     public void KeepLiveQuote() => _live.KeepCurrent();
 
+    public bool LiveRunning => _live.Running;
+
     public bool FrameOpen => _session?.Still is not null;
 
     /// <summary>

@@ -780,11 +780,12 @@ public sealed class LookupController(
     /// (the frame takes ~30-50 ms to encode) and never fails it: a quote that cannot be kept is only logged.
     /// </summary>
     /// <param name="box">The text on screen, in desktop pixels.</param>
-    public void KeepQuote(CapturedFrame? frame, PixelRect box, string text, string translation, string lang, LookupContext context,
+    /// <returns>Whether the line goes to the quotes (saving quotes on, a line and its translation there).</returns>
+    public bool KeepQuote(CapturedFrame? frame, PixelRect box, string text, string translation, string lang, LookupContext context,
         string source)
     {
         var s = settings().Quotes;
-        if (!s.Save || string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(translation)) return;
+        if (!s.Save || string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(translation)) return false;
         var quote = new Quote
         {
             Language = lang, Text = text.Trim(), Translation = translation.Trim(), Source = source,
@@ -795,13 +796,16 @@ public sealed class LookupController(
         {
             try
             {
-                library.RecordQuote(quote, !withFrame ? null : () =>
+                // Encoded here, off the library's lock, and only for a quote that has no frame yet.
+                QuoteFrame? shot = null;
+                if (withFrame && !library.QuoteHasFrame(quote.Text, quote.AppExe))
                 {
-                    var (file, scale) = ShotStore.SaveQuoteFrame(DataPaths.Root, frame!.Bgra, frame.Width, frame.Height, frame.Stride);
+                    var (file, jpeg, scale) = ShotStore.EncodeQuoteFrame(frame!.Bgra, frame.Width, frame.Height, frame.Stride);
                     var b = frame.Bounds;
-                    return (file, new PixelRect((box.Left - b.Left) * scale, (box.Top - b.Top) * scale, (box.Right - b.Left) * scale,
-                        (box.Bottom - b.Top) * scale));
-                });
+                    shot = new QuoteFrame(file, jpeg, new PixelRect((box.Left - b.Left) * scale, (box.Top - b.Top) * scale,
+                        (box.Right - b.Left) * scale, (box.Bottom - b.Top) * scale));
+                }
+                library.RecordQuote(quote, shot);
                 QuoteKept?.Invoke();
             }
             catch (Exception ex)
@@ -809,6 +813,7 @@ public sealed class LookupController(
                 log.Error("keep quote", ex); // a side effect: the translation on screen stays as it is
             }
         });
+        return true;
     }
 
     /// <summary>

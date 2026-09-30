@@ -224,12 +224,8 @@ public partial class App : Application
         _pad.ComboPressed += _sessions.PadCombo;
         _pad.MousePressed += _sessions.Pointer;
         _sessions.Notice += text => _tray?.ShowBalloonTip(6000, "Glossa", text, WinForms.ToolTipIcon.Warning);
-        _sessions.LiveChanged += on =>
-        {
-            if (!on) _hotkeys?.Unregister(HotkeyQuote);
-            else if (_settings.Quotes.Save && _settings.Quotes.LiveHotkey.Length > 0 && _hotkeys?.Register(HotkeyQuote, _settings.Quotes.LiveHotkey) == false)
-                log.Warn($"live quote key {_settings.Quotes.LiveHotkey} is taken by another program");
-        };
+        _sessions.LiveChanged += ApplyQuoteKey;
+        _services.SettingsChanged += () => ApplyQuoteKey(_sessions.LiveRunning); // «Сохранять цитаты» switched while live runs
         _services.RecordGamepad = _pad.Record;
         _services.CancelGamepadRecording = _pad.CancelRecording;
 
@@ -363,6 +359,16 @@ public partial class App : Application
         var old = _levels;
         _levels = new LevelService(DataPaths.Levels);
         old?.Dispose();
+    }
+
+    /// <summary>Live translation's «в цитаты» key: held while it runs and quotes are saved, let go otherwise.</summary>
+    private void ApplyQuoteKey(bool live)
+    {
+        if (_hotkeys is not { } hotkeys) return;
+        hotkeys.Unregister(HotkeyQuote);
+        var key = _settings.Quotes.LiveHotkey;
+        if (live && _settings.Quotes.Save && key.Length > 0 && !hotkeys.Register(HotkeyQuote, key))
+            _log?.Warn($"live quote key {key} is taken by another program");
     }
 
     private void OnHotkey(int id)
