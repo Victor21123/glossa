@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Glossa.Core.Config;
 using Glossa.Core.Llm;
 using Glossa.Core.Lookup;
@@ -83,6 +85,177 @@ public static class VisionReading
         var text = string.Join("\n", lines);
         return text.Any(char.IsLetter) ? text : null;
     }
+
+    /// <summary>
+    /// A point where the recognizer found no text, or only a scrap of it (<see cref="Scrap"/>): the model reads the piece
+    /// of screen around the point as lines with their boxes, and its lines stand in for the recognizer's there. Measured
+    /// 2026-09-30 on 13 points (neon menu buttons, Persona 5 Royal menus, 5 points on no text): asked for lines with boxes
+    /// the model read 8 of 8 labels and nothing on 5 of 5 empty points, ~4.2 s with sight on the processor; asked for the
+    /// text at the middle of the piece 7 of 8 and 3 of 5 (twice it answered with the prompt), with a ring drawn at the
+    /// point 3 of 8.
+    /// </summary>
+    public const string LinesPrompt = "Find every line of text in the picture. Answer with JSON only: a list of objects " +
+        "{\"text\": the line exactly as written, \"box_2d\": [ymin, xmin, ymax, xmax]} with coordinates from 0 to 1000 " +
+        "relative to the picture. If there is no text, answer [].";
+
+    /// <summary>The lines' JSON the server holds the answer to: no code fence, no prompt said back, at most 12 lines.</summary>
+    public static JsonObject LinesSchema() => JsonNode.Parse("""
+        {"type": "array", "maxItems": 12, "items": {"type": "object", "required": ["text", "box_2d"], "properties": {
+          "text": {"type": "string"},
+          "box_2d": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}}}
+        """)!.AsObject();
+
+    /// <summary>
+    /// Half the piece of screen read around a point: 600x180 read 8 of 8 labels; 900x220 (smaller letters at the same
+    /// 280 image tokens) 6, 400x140 (a long label cut off) 7, 500x160 7 (2026-09-30).
+    /// </summary>
+    public const int PointHalfWidth = 300, PointHalfHeight = 90;
+
+    public static PixelRect PointPiece(double x, double y) =>
+        new(x - PointHalfWidth, y - PointHalfHeight, x + PointHalfWidth, y + PointHalfHeight);
+
+    /// <summary>Below this a word alone in a line of up to three letters counts as a <see cref="Scrap"/>.</summary>
+    public const float ScrapScore = 0.9f;
+
+    /// <summary>
+    /// A scrap of a stylized label rather than a word: a line of at most three letters the recognizer is not sure of
+    /// (回想モード in neon outlines read as 回想毛, オート as オー卜). On 911 words of ordinary frames (2026-09-30) 12 were such:
+    /// the model read 3 of them right, found no text on 6 (an icon, a microphone, armour read as 西, x, AA) and one in a
+    /// dense paragraph it placed a line off (<see cref="Settle"/> keeps the recognizer's word there).
+    /// </summary>
+    public static bool Scrap(WordHit hit) => hit.Score < ScrapScore && hit.Line.Count(char.IsLetter) <= 3;
+
+    /// <summary>
+    /// Tokens the model must not write in its reading: Gemma 4 26B wrote ニューゲーム as "ニューget" and "get-game" - the same
+    /// "get" it glues into Russian words. Not banned where the text is English: set so, or Latin with no CJK on the page.
+    /// </summary>
+    public static IReadOnlyList<string>? Banned(string? forced, OcrPage page)
+    {
+        if (forced == "en") return null;
+        if (forced is null)
+        {
+            var text = string.Concat(page.Lines.Select(l => l.Text));
+            if (!Scripts.ContainsCjk(text) && text.Any(c => Scripts.Of(c) == Script.Latin)) return null;
+        }
+        return ["get"];
+    }
+
+    /// <summary>The model's lines with boxes for the picture (<see cref="LinesPrompt"/>), as it answered.</summary>
+    public static async Task<string> ReadLinesAsync(ILlmClient model, byte[] png, IReadOnlyList<string>? banned, CancellationToken ct)
+    {
+        var request = new LlmRequest([new LlmMessage("user", LinesPrompt, png)], LinesSchema(), Temperature: 0, MaxTokens: 600,
+            BannedTokens: banned);
+        var sb = new StringBuilder();
+        await foreach (var part in model.StreamAsync(request, ct).ConfigureAwait(false)) sb.Append(part);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// The model's lines (<see cref="LinesPrompt"/>) as the recognizer's page for the <paramref name="piece"/> of screen
+    /// the model saw: each line's box from its box_2d (0-1000 of the piece), words cut from the box by their letters (each
+    /// kana and kanji its own unit, as the recognizer gives them; a Latin word's box is as wide as its share of letters, a
+    /// little off in a proportional font); a sign read as lines of one item is cut into rows. An answer cut off by the
+    /// token limit keeps its whole lines; null when the answer is not the lines' JSON at all (a failed reading, not "no
+    /// text").
+    /// </summary>
+    public static OcrPage? LinesPage(string answer, PixelRect piece)
+    {
+        var start = answer.IndexOf('[');
+        if (start < 0 || (Parse(answer[start..]) ?? Salvage(answer[start..])) is not JsonArray items) return null;
+        var lines = new List<OcrLine>();
+        foreach (var item in items)
+        {
+            if (item is not JsonObject o || o["box_2d"] is not JsonArray { Count: 4 } b) continue;
+            string? text;
+            double[] v;
+            try
+            {
+                text = (string?)o["text"];
+                v = b.Select(n => Math.Clamp((double?)n ?? 0, 0, 1000)).ToArray();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+            {
+                continue; // a number where the text should be, or the other way round
+            }
+            double top = Math.Min(v[0], v[2]), bottom = Math.Max(v[0], v[2]), left = Math.Min(v[1], v[3]), right = Math.Max(v[1], v[3]);
+            var box = new PixelRect(piece.Left + left / 1000 * piece.Width, piece.Top + top / 1000 * piece.Height,
+                piece.Left + right / 1000 * piece.Width, piece.Top + bottom / 1000 * piece.Height);
+            var rows = (text ?? "").Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (rows.Length == 0 || box.Width < 1 || box.Height < 1) continue;
+            var rowHeight = box.Height / rows.Length;
+            for (var k = 0; k < rows.Length; k++)
+                lines.Add(Line(rows[k], box with { Top = box.Top + k * rowHeight, Bottom = box.Top + (k + 1) * rowHeight }));
+        }
+        return new OcrPage(lines, piece, TimeSpan.Zero);
+    }
+
+    /// <summary>The JSON up to its last closing bracket, or null (text after it - a stray fence - is left out).</summary>
+    private static JsonNode? Parse(string json)
+    {
+        var end = json.LastIndexOf(']');
+        if (end < 0) return null;
+        try
+        {
+            return JsonNode.Parse(json[..(end + 1)]);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The whole lines of an answer cut off mid-line: up to the last complete object, the list closed after it.</summary>
+    private static JsonNode? Salvage(string json)
+    {
+        for (var end = json.LastIndexOf('}'); end > 0; end = json.LastIndexOf('}', end - 1))
+        {
+            try
+            {
+                return JsonNode.Parse(json[..(end + 1)] + "]");
+            }
+            catch (JsonException)
+            {
+                // a brace inside a line's text, or an object not yet complete: try the one before
+            }
+        }
+        return null;
+    }
+
+    private static OcrLine Line(string text, PixelRect box)
+    {
+        var words = new List<OcrWord>();
+        var step = box.Width / text.Length;
+        for (var at = 0; at < text.Length;)
+        {
+            if (char.IsWhiteSpace(text[at]))
+            {
+                at++;
+                continue;
+            }
+            var length = Scripts.IsCjk(text[at]) ? 1
+                : text.Skip(at).TakeWhile(c => !char.IsWhiteSpace(c) && !Scripts.IsCjk(c)).Count();
+            words.Add(new OcrWord(text.Substring(at, length), box with { Left = box.Left + at * step, Right = box.Left + (at + length) * step }, 1f));
+            at += length;
+        }
+        return new OcrLine(text, box, words, 1f);
+    }
+
+    /// <summary>
+    /// The word at the point once the model has read the piece around it (<paramref name="seen"/>, its word there, from
+    /// <paramref name="page"/>, its lines): with nothing recognized there, the model's word (null when it read no text
+    /// either). With a scrap recognized, the model's word when it lies in the same line of screen - in a dense paragraph
+    /// its boxes may sit a line off, and there the recognizer's word stays, as it does when the model read a line in that
+    /// row that just misses the point; null when the model read nothing in that row at all: the scrap was an icon or a
+    /// drawing (x on a close button, 西 on a microphone).
+    /// </summary>
+    public static WordHit? Settle(WordHit? recognized, WordHit? seen, OcrPage page)
+    {
+        if (recognized is null) return seen;
+        if (seen is not null) return SameRow(recognized.Box, seen.Box) ? seen : recognized;
+        return page.Lines.Any(l => SameRow(recognized.Box, l.Box)) ? recognized : null;
+    }
+
+    private static bool SameRow(PixelRect a, PixelRect b) => Math.Abs(a.CenterY - b.CenterY) <= Math.Max(a.Height, b.Height) / 2;
 
     /// <summary>What the model reads in the picture, as it answered (one screen line per line).</summary>
     public static async Task<string> ReadAsync(ILlmClient model, byte[] png, CancellationToken ct, string prompt = Prompt)

@@ -86,6 +86,9 @@ public sealed class LookupController(
         /// <summary>Saved even with autosave off: the corrected word of a card the user had saved.</summary>
         public bool SaveAnyway { get; init; }
 
+        /// <summary>The word was read by the model from the picture where the recognizer found no text: not read again.</summary>
+        public bool Seen { get; set; }
+
         public LookupStages Stages(long? first = null, long? ai = null) => new(Capture, Ocr, Plan, Card, first, ai);
     }
 
@@ -268,15 +271,126 @@ public sealed class LookupController(
         var run = new Run(frame, cursor, context, sw, s, forced, cjk, ct) { Capture = tCapture, Ocr = tOcr };
         page = words.Normalize(page, forced);
         var hit = words.Hit(page, cursor.X, cursor.Y, cjk);
-        if (hit is null)
+        if (hit is not null)
         {
-            vm.ShowMessage("Под курсором не найден текст");
-            popup.ShowNear(new PixelRect(cursor.X, cursor.Y, cursor.X + 1, cursor.Y + 1));
-            log.Info($"lookup: no text (capture {tCapture} ms, ocr {tOcr} ms, {page.Lines.Count} lines)");
-            Report(context.Trigger, "под курсором нет текста", ok: false, stages: run.Stages());
+            await ShowAsync(run, hit, page);
             return;
         }
-        await ShowAsync(run, hit, page);
+        log.Info($"lookup: no text recognized (capture {tCapture} ms, ocr {tOcr} ms, {page.Lines.Count} lines)");
+        // A stylized font (neon outlines, glow: a title menu, 2026-09-30) the recognizer does not find at all: the model
+        // with sight reads the piece of screen around the point - at once, or on Tab when the AI waits for it.
+        if (context.Choices?.Ai == "off")
+        {
+            NoText(run);
+        }
+        else if (s.Performance.AiOnDemand)
+        {
+            vm.ShowMessage("Под курсором не найден текст. Tab - прочитать по картинке");
+            popup.ShowNear(new PixelRect(cursor.X, cursor.Y, cursor.X + 1, cursor.Y + 1));
+            _deferred = () => SeeAsync(run, page);
+            Report(context.Trigger, "под курсором нет текста, по картинке - Tab", ok: false, stages: run.Stages());
+        }
+        else
+        {
+            await SeeAsync(run, page);
+        }
+    }
+
+    /// <param name="why">Why the picture was not read either (the model not downloaded, the AI off for lack of memory).</param>
+    private void NoText(Run run, string? why = null)
+    {
+        vm.ShowMessage(why is null ? "Под курсором не найден текст" : $"Под курсором не найден текст ({why})");
+        popup.ShowNear(new PixelRect(run.Cursor.X, run.Cursor.Y, run.Cursor.X + 1, run.Cursor.Y + 1));
+        Report(run.Context.Trigger, "под курсором нет текста", ok: false, stages: run.Stages());
+    }
+
+    /// <summary>
+    /// The point the recognizer found no text at (<paramref name="page"/>), read by the model with sight: the card for its
+    /// word there, or "no text" - also without sight, with the AI unavailable, or when the reading fails.
+    /// </summary>
+    private async Task SeeAsync(Run run, OcrPage page)
+    {
+        var (cursor, ct) = (run.Cursor, run.Ct);
+        vm.ShowMessage(ai.Current is null ? "Загружаю модель..." : "Читаю текст по картинке...");
+        vm.IsBusy = true;
+        popup.ShowNear(new PixelRect(cursor.X, cursor.Y, cursor.X + 1, cursor.Y + 1));
+        (OcrPage Page, WordHit? Hit)? seen = null;
+        string? why = null;
+        using (ai.Use())
+        {
+            try
+            {
+                var clients = await ai.GetAsync(ct, run.Context.Choices?.Ai == "lowvram" ? "lowvram" : null);
+                ct.ThrowIfCancellationRequested();
+                if (clients.Vision is { } eyes)
+                {
+                    vm.ShowMessage("Читаю текст по картинке...");
+                    vm.IsBusy = true;
+                    seen = await ReadPointAsync(eyes, run, page);
+                }
+            }
+            catch (LlmException ex)
+            {
+                log.Warn($"lookup: no AI to read the point ({ex.Message})");
+                why = ex.Message;
+            }
+        }
+        ct.ThrowIfCancellationRequested();
+        if (seen is not ({ } seenPage, { } hit))
+        {
+            NoText(run, why);
+            return;
+        }
+        log.Info($"lookup: the model read '{hit.Word}' where the recognizer found no text, at {run.Sw.ElapsedMilliseconds} ms");
+        run.Seen = true;
+        await ShowAsync(run, hit, seenPage);
+    }
+
+    /// <summary>The model's readings of pieces of screen by the picture sent: a menu looked up again needs no second look.</summary>
+    private readonly Dictionary<string, string> _pointReadings = [];
+
+    /// <summary>
+    /// The model's lines in the piece of screen around the lookup's point (<see cref="VisionReading.PointPiece"/>) as a
+    /// recognizer's page, and the word they give at the point (null: no text there); null when the reading failed or ran
+    /// over <see cref="ReadingLimit"/> (logged). Only a newer lookup's cancellation passes through.
+    /// </summary>
+    private async Task<(OcrPage Page, WordHit? Hit)?> ReadPointAsync(ILlmClient eyes, Run run, OcrPage recognized)
+    {
+        var (x, y) = (run.Cursor.X, run.Cursor.Y);
+        var piece = run.Frame.Crop(VisionReading.PointPiece(x, y));
+        if (piece.Width < 4 || piece.Height < 4) return null; // the point is off the frame
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(run.Ct);
+        limit.CancelAfter(ReadingLimit);
+        try
+        {
+            var png = VisionReading.Png(piece.Bgra, piece.Width, piece.Height, piece.Stride);
+            var banned = VisionReading.Banned(run.Forced, recognized);
+            var key = $"{eyes.Endpoint.Model}|{(banned is null ? "" : "ban")}|{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png))}";
+            string? answer;
+            lock (_pointReadings) _pointReadings.TryGetValue(key, out answer);
+            var known = answer is not null;
+            answer ??= await VisionReading.ReadLinesAsync(eyes, png, banned, limit.Token);
+            if (VisionReading.LinesPage(answer, piece.Region) is not { } lines)
+            {
+                log.Warn($"lookup: the model's reading of the point is not its lines' JSON: {answer[..Math.Min(answer.Length, 200)]}");
+                return null;
+            }
+            if (!known)
+                lock (_pointReadings)
+                {
+                    if (_pointReadings.Count >= 100) _pointReadings.Clear();
+                    _pointReadings[key] = answer;
+                }
+            var seen = words.Normalize(lines, run.Forced);
+            var hit = words.Hit(seen, x, y, run.Cjk);
+            log.Info($"lookup: the model read {seen.Lines.Count} lines around the point, '{hit?.Word}' at it");
+            return (seen, hit);
+        }
+        catch (Exception ex) when (!run.Ct.IsCancellationRequested)
+        {
+            log.Warn($"lookup: reading the point failed ({ex.GetType().Name}): {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -314,9 +428,10 @@ public sealed class LookupController(
         LastAppExe = exe;
         if (s.Popup.AutoPlayAudio) Speak();
 
-        // A doubtful word (not in the dictionaries, unsure letters, a letter lost at the line's end) is marked on the
-        // card only while the doubt stands: the model did not read it again (off, no vision, no AI yet) or failed to.
-        var doubtful = page is not null && VisionReading.Doubtful(hit, plan.Known, page);
+        // A doubtful word (not in the dictionaries, unsure letters, a letter lost at the line's end, a scrap of a stylized
+        // label) is marked on the card only while the doubt stands: the model did not read it again (off, no vision, no AI
+        // yet) or failed to. A word the model itself read from the picture is not read again.
+        var doubtful = page is not null && !run.Seen && (VisionReading.Doubtful(hit, plan.Known, page) || VisionReading.Scrap(hit));
         void StillUnsure()
         {
             if (doubtful) vm.SetRecognition(unsure: true, readFrom: null);
@@ -396,9 +511,33 @@ public sealed class LookupController(
         // A failed reading only costs the second look: the card is made from the word as recognized.
         if (doubtful && page is not null)
         {
-            var reading = clients.Vision is { } eyes ? await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) : null;
-            var again = reading is null ? null : words.Hit(words.Normalize(VisionReading.Correct(page, hit, reading), forced), cursor.X, cursor.Y, cjk);
-            if (reading is not null) log.Info($"lookup: read again '{hit.Word}' -> '{again?.Word}' at {sw.ElapsedMilliseconds} ms");
+            WordHit? again;
+            if (VisionReading.Scrap(hit))
+            {
+                // A scrap of a stylized label (回想モード read as 回想毛): the model reads the piece around the point as
+                // lines, and its word stands in when it lies in the same line of screen (not in the same line: unconfirmed).
+                vm.Status = "Перечитываю слово...";
+                var seen = clients.Vision is { } sight ? await ReadPointAsync(sight, run, page) : null;
+                ct.ThrowIfCancellationRequested();
+                vm.Status = null;
+                var settled = seen is { } read ? VisionReading.Settle(hit, read.Hit, read.Page) : hit;
+                if (settled is null)
+                {
+                    // No text there for the model: the scrap was an icon or a drawing (x, 西 on a microphone).
+                    log.Info($"lookup: '{hit.Word}' is no text for the model");
+                    _pending = null;
+                    NoText(run);
+                    return;
+                }
+                again = ReferenceEquals(settled, hit) ? null : settled;
+                if (seen is not null) log.Info($"lookup: scrap '{hit.Word}' read as '{again?.Word}' at {sw.ElapsedMilliseconds} ms");
+            }
+            else
+            {
+                var reading = clients.Vision is { } eyes ? await ReadAgainAsync(eyes, frame, hit, cursor.X, cursor.Y, ct) : null;
+                again = reading is null ? null : words.Hit(words.Normalize(VisionReading.Correct(page, hit, reading), forced), cursor.X, cursor.Y, cjk);
+                if (reading is not null) log.Info($"lookup: read again '{hit.Word}' -> '{again?.Word}' at {sw.ElapsedMilliseconds} ms");
+            }
             if (again is null)
             {
                 StillUnsure(); // no vision, or it could not read the piece

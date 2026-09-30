@@ -150,6 +150,13 @@ switch (args[0])
             OcrEval.Options.Parse(args, zoneLang is null ? 6 : 7), bench.Words);
         break;
     }
+    case "ocr-point":
+    {
+        // ocr-point <cases.json> --vision <api root> [center|marker|boxes] [--piece WxH]: stylized text at a point, read by the model
+        using var bench = new Bench();
+        await OcrPoint.RunAsync(args[1], args, bench.Words);
+        break;
+    }
     case "ocr-eval":
     {
         // ocr-eval <cases.json> [base|v5|v6|v6m] [--vision <api root>]: the word under the point on hard frames
