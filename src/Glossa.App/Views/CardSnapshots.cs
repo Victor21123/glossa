@@ -167,11 +167,18 @@ internal static class CardSnapshots
             window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back.png"));
             window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
-            foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "speech", "games", "load", "app" })
+            foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "study", "speech", "games", "load", "app" })
             {
                 window.ShowTab(MainTab.Settings);
                 window.SettingsPage.Show(section);
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-{section}.png"));
+            }
+            // Учёба with «Дополнительно» open, scrolled to it.
+            window.SettingsPage.Show("study");
+            if (window.SettingsPage.Section("study") is Settings.StudySection study)
+            {
+                study.OpenMore();
+                SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-study-more.png"));
             }
             window.Close();
 

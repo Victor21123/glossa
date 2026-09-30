@@ -109,6 +109,7 @@ public partial class MainWindow : Window
     {
         NavWords.Visibility = NavStudy.Visibility = TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
         if (TranslateOnly && (NavWords.IsChecked == true || NavStudy.IsChecked == true)) NavHome.IsChecked = true;
+        SettingsPage.SetSectionVisible("study", !TranslateOnly);
     }
 
     /// <summary>Главная, Словарь (Главная in «Только перевод»), Настройки → Справочники, or Настройки at the section last open.</summary>

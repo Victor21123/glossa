@@ -10,7 +10,7 @@ public partial class SettingsPage : UserControl
     private static readonly (string Key, string Name)[] Sections =
     [
         ("card", "Карточка слова"), ("keys", "Вызов и клавиши"), ("languages", "Языки"), ("ai", "ИИ и модели"),
-        ("sources", "Справочники"), ("library", "Словарь и Anki"), ("speech", "Озвучка"), ("games", "Игры и профили"),
+        ("sources", "Справочники"), ("library", "Словарь и Anki"), ("study", "Учёба"), ("speech", "Озвучка"), ("games", "Игры и профили"),
         ("load", "Нагрузка на ПК"), ("app", "Приложение"),
     ];
 
@@ -57,6 +57,14 @@ public partial class SettingsPage : UserControl
         Scroller.ScrollToTop();
     }
 
+    /// <summary>A section that has no use in the current mode (Учёба in «Только перевод») leaves the list.</summary>
+    public void SetSectionVisible(string key, bool visible)
+    {
+        if (!_tabs.TryGetValue(key, out var tab)) return;
+        tab.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible && Current == key) Show("card");
+    }
+
     /// <summary>The section's control once built (snapshots and tests reach into it).</summary>
     public FrameworkElement? Section(string key) => _built.GetValueOrDefault(key);
 
@@ -77,6 +85,7 @@ public partial class SettingsPage : UserControl
         "ai" => new AiSection(services, model),
         "sources" => new SourcesSection(services),
         "library" => new LibrarySection(services, model, library),
+        "study" => new StudySection(services, model),
         "speech" => new SpeechSection(services, model),
         "games" => new GamesSection(services),
         "load" => new LoadSection(services, model),

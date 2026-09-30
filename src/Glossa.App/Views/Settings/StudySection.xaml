@@ -1,0 +1,260 @@
+<UserControl x:Class="Glossa.App.Views.Settings.StudySection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- Настройки → Учёба (canvas «Настройки — учёба»). Only what works: no FSRS switch (Anki's own default, off), no
+         meaning picture and no reminders until their steps; Anki's finer knobs fold under «Дополнительно». -->
+    <UserControl.Resources>
+        <Style x:Key="MoreLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="MoreNote" TargetType="TextBlock" BasedOn="{StaticResource Note}">
+            <Setter Property="Margin" Value="14,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
+    <StackPanel>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="Учёба" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="Как собирается сессия повторения и что видно на карточке." Style="{StaticResource SectionDescription}" />
+        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.6*" MaxWidth="1060" />
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource SettingRows}" VerticalAlignment="Top">
+                <StackPanel>
+                    <HeaderedContentControl Header="Карточек в сессии" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="110" SelectedValuePath="Tag" SelectedValue="{Binding StudySessionSize}">
+                                <ComboBoxItem Content="10"><ComboBoxItem.Tag><sys:Int32>10</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="15"><ComboBoxItem.Tag><sys:Int32>15</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="20"><ComboBoxItem.Tag><sys:Int32>20</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="30"><ComboBoxItem.Tag><sys:Int32>30</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="50"><ComboBoxItem.Tag><sys:Int32>50</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="язык и игру для сессии выбираешь на экране &quot;Учёба&quot;" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Новых карточек в день" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="110" SelectedValuePath="Tag" SelectedValue="{Binding StudyNewPerDay}">
+                                <ComboBoxItem Content="0"><ComboBoxItem.Tag><sys:Int32>0</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="5"><ComboBoxItem.Tag><sys:Int32>5</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="10"><ComboBoxItem.Tag><sys:Int32>10</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="20"><ComboBoxItem.Tag><sys:Int32>20</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="30"><ComboBoxItem.Tag><sys:Int32>30</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="50"><ComboBoxItem.Tag><sys:Int32>50</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="как в Anki; новые берутся только из твоего словаря" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Учебные шаги" Tag="для новых слов" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ComboBox Width="200" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding StudyLearnSteps}">
+                                <ComboBoxItem Content="1 мин, 10 мин" Tag="1 10" />
+                                <ComboBoxItem Content="1 мин, 10 мин, 1 ч" Tag="1 10 60" />
+                                <ComboBoxItem Content="1 мин, 5 мин, 15 мин" Tag="1 5 15" />
+                                <ComboBoxItem Content="10 мин" Tag="10" />
+                                <ComboBoxItem Content="1 мин, 10 мин, 1 день" Tag="1 10 1440" />
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" Text="{Binding StudyLearnStepsNote}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Первый интервал" Tag="после учебных шагов" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Нормально" Style="{StaticResource MoreLabel}" Margin="0,0,10,0" />
+                            <ComboBox Width="120" SelectedValuePath="Tag" SelectedValue="{Binding StudyGraduatingInterval}">
+                                <ComboBoxItem Content="1 день"><ComboBoxItem.Tag><sys:Int32>1</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="2 дня"><ComboBoxItem.Tag><sys:Int32>2</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="3 дня"><ComboBoxItem.Tag><sys:Int32>3</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                            <TextBlock Text="Легко" Style="{StaticResource MoreLabel}" Margin="22,0,10,0" />
+                            <ComboBox Width="120" SelectedValuePath="Tag" SelectedValue="{Binding StudyEasyInterval}">
+                                <ComboBoxItem Content="3 дня"><ComboBoxItem.Tag><sys:Int32>3</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="4 дня"><ComboBoxItem.Tag><sys:Int32>4</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="5 дней"><ComboBoxItem.Tag><sys:Int32>5</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                <ComboBoxItem Content="7 дней"><ComboBoxItem.Tag><sys:Int32>7</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Если забыл" Tag="&quot;Снова&quot; у выученного слова" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="140" SelectedValuePath="Tag" SelectedValue="{Binding StudyRelearnSteps}">
+                                <ComboBoxItem Content="10 мин" Tag="10" />
+                                <ComboBoxItem Content="5 мин" Tag="5" />
+                                <ComboBoxItem Content="30 мин" Tag="30" />
+                                <ComboBoxItem Content="1 мин, 10 мин" Tag="1 10" />
+                            </ComboBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="затем снова через день; слово станет &quot;труднее&quot; на 20%" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="&quot;Не могу запомнить&quot;" Tag="слова с пометкой" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Slider Width="280" Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True" SmallChange="10"
+                                        LargeChange="10" Value="{Binding StudyPinnedPercent}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding StudyPinnedText}" FontSize="14" FontWeight="SemiBold" Margin="14,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <CheckBox Margin="0,12,0,0" Content="Предлагать снять пометку после 3 верных ответов в разные дни"
+                                      IsChecked="{Binding StudySuggestUnpin}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Новые слова" Tag="в каком порядке" Style="{StaticResource SettingRow}">
+                        <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding StudyNewOrder}" HorizontalAlignment="Left">
+                            <ListBoxItem Content="Чаще искал" Tag="lookups" />
+                            <ListBoxItem Content="Недавние" Tag="recent" />
+                            <ListBoxItem Content="Вперемешку" Tag="random" />
+                        </ListBox>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Направление" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding StudyDirection}" HorizontalAlignment="Left">
+                                <ListBoxItem Content="Слово -&gt; перевод" Tag="forward" />
+                                <ListBoxItem Content="Перевод -&gt; слово" Tag="reverse" />
+                                <ListBoxItem Content="Оба" Tag="both" />
+                            </ListBox>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap" Text="{Binding StudyDirectionNote}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Лицо карточки" Style="{StaticResource SettingRow}">
+                        <WrapPanel>
+                            <CheckBox Content="Кадр из игры" IsChecked="{Binding StudyFrontShot}" Margin="0,4,28,4" />
+                            <CheckBox Content="Реплика" IsChecked="{Binding StudyFrontLine}" Margin="0,4,28,4" />
+                            <CheckBox Content="Чтение и пиньинь" IsChecked="{Binding StudyFrontReading}" Margin="0,4,0,4" />
+                        </WrapPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Оборот" Style="{StaticResource SettingRow}">
+                        <WrapPanel>
+                            <CheckBox Content="Перевод реплики" IsChecked="{Binding StudyBackLineTranslation}" Margin="0,4,28,4" />
+                            <CheckBox Content="Произносить сразу" IsChecked="{Binding StudySpeakOnFlip}" Margin="0,4,0,4" />
+                        </WrapPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="Дополнительно" Tag="расписание Anki" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <Button x:Name="MoreButton" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Content="Показать"
+                                    Click="OnMore" />
+                            <StackPanel x:Name="More" Visibility="Collapsed" Margin="0,14,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="Повторений в день" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyReviewsPerDay}">
+                                        <ComboBoxItem Content="50"><ComboBoxItem.Tag><sys:Int32>50</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="100"><ComboBoxItem.Tag><sys:Int32>100</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="200"><ComboBoxItem.Tag><sys:Int32>200</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="500"><ComboBoxItem.Tag><sys:Int32>500</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="без предела"><ComboBoxItem.Tag><sys:Int32>9999</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Column="2" Text="как в Anki: 200" Style="{StaticResource MoreNote}" />
+
+                                    <TextBlock Grid.Row="1" Text="Стартовая лёгкость" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Row="1" Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyStartingEase}">
+                                        <ComboBoxItem Content="2,0"><ComboBoxItem.Tag><sys:Double>2.0</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="2,3"><ComboBoxItem.Tag><sys:Double>2.3</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="2,5"><ComboBoxItem.Tag><sys:Double>2.5</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="2,8"><ComboBoxItem.Tag><sys:Double>2.8</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="3,0"><ComboBoxItem.Tag><sys:Double>3.0</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="во сколько раз растёт интервал; 2,5" Style="{StaticResource MoreNote}" />
+
+                                    <TextBlock Grid.Row="2" Text="Бонус &quot;Легко&quot;" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Row="2" Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyEasyBonus}">
+                                        <ComboBoxItem Content="1,15"><ComboBoxItem.Tag><sys:Double>1.15</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,3"><ComboBoxItem.Tag><sys:Double>1.3</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,5"><ComboBoxItem.Tag><sys:Double>1.5</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="на сколько дольше интервал после &quot;Легко&quot;; 1,3" Style="{StaticResource MoreNote}" />
+
+                                    <TextBlock Grid.Row="3" Text="Интервал &quot;Сложно&quot;" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Row="3" Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyHardMultiplier}">
+                                        <ComboBoxItem Content="1,0"><ComboBoxItem.Tag><sys:Double>1.0</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,2"><ComboBoxItem.Tag><sys:Double>1.2</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,5"><ComboBoxItem.Tag><sys:Double>1.5</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="во сколько раз растёт интервал после &quot;Сложно&quot;; 1,2" Style="{StaticResource MoreNote}" />
+
+                                    <TextBlock Grid.Row="4" Text="Множитель интервалов" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Row="4" Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyIntervalModifier}">
+                                        <ComboBoxItem Content="0,8"><ComboBoxItem.Tag><sys:Double>0.8</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="0,9"><ComboBoxItem.Tag><sys:Double>0.9</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,0"><ComboBoxItem.Tag><sys:Double>1.0</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,1"><ComboBoxItem.Tag><sys:Double>1.1</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1,2"><ComboBoxItem.Tag><sys:Double>1.2</sys:Double></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="4" Grid.Column="2" Text="меньше 1 - чаще повторения, больше 1 - реже; 1,0" Style="{StaticResource MoreNote}" />
+
+                                    <TextBlock Grid.Row="5" Text="Максимальный интервал" Style="{StaticResource MoreLabel}" />
+                                    <ComboBox Grid.Row="5" Grid.Column="1" Width="140" Margin="0,4" SelectedValuePath="Tag" SelectedValue="{Binding StudyMaximumInterval}">
+                                        <ComboBoxItem Content="6 месяцев"><ComboBoxItem.Tag><sys:Int32>180</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="1 год"><ComboBoxItem.Tag><sys:Int32>365</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="3 года"><ComboBoxItem.Tag><sys:Int32>1095</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                        <ComboBoxItem Content="без предела"><ComboBoxItem.Tag><sys:Int32>36500</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="5" Grid.Column="2" Text="как в Anki: без предела (100 лет)" Style="{StaticResource MoreNote}" />
+                                </Grid>
+                                <CheckBox Margin="0,14,0,0" Content="Откладывать вторую карточку слова до следующей сессии" IsChecked="{Binding StudyBurySiblings}" />
+                                <TextBlock Style="{StaticResource Note}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text="при направлении &quot;Оба&quot;: иначе вторая карточка может прийти сразу после ответа на первую" />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource SidePanel}">
+                <StackPanel>
+                    <TextBlock Text="ПРОГНОЗ НА НЕДЕЛЮ" Style="{StaticResource SectionCaption}" />
+                    <UniformGrid x:Name="Forecast" Columns="7" Height="200" Margin="0,12,0,12" />
+                    <TextBlock x:Name="TodayNote" Style="{StaticResource Note}" TextWrapping="Wrap" />
+                    <Border Height="1" Background="{DynamicResource Rule}" Margin="0,14" />
+                    <UniformGrid Columns="3">
+                        <StackPanel>
+                            <TextBlock Text="ЗА НЕДЕЛЮ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="WeekText" FontSize="16" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ПОМНЮ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="RetentionText" FontSize="16" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="ПОДРЯД" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="StreakText" FontSize="16" />
+                        </StackPanel>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

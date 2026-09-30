@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -315,6 +316,113 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public string SpeechVolumeText => $"{SpeechVolume:0}%";
+
+    // ---- Учёба ----
+
+    public int StudySessionSize { get => S.Study.SessionSize; set => Set(() => S.Study.SessionSize = value); }
+
+    public int StudyNewPerDay { get => S.Study.NewPerDay; set => Set(() => S.Study.NewPerDay = value, also: nameof(StudyDirectionNote)); }
+
+    public int StudyReviewsPerDay { get => S.Study.ReviewsPerDay; set => Set(() => S.Study.ReviewsPerDay = value); }
+
+    /// <summary>Steps as the list's presets name them: minutes separated by spaces ("1 10").</summary>
+    public string StudyLearnSteps
+    {
+        get => Steps(S.Study.LearnSteps);
+        set => Set(() => S.Study.LearnSteps = ParseSteps(value, S.Study.LearnSteps), also: nameof(StudyLearnStepsNote));
+    }
+
+    public string StudyRelearnSteps { get => Steps(S.Study.RelearnSteps); set => Set(() => S.Study.RelearnSteps = ParseSteps(value, S.Study.RelearnSteps)); }
+
+    /// <summary>What "Нормально" does to a new word with these steps (the mockup's note, from the real values).</summary>
+    public string StudyLearnStepsNote
+    {
+        get
+        {
+            var steps = S.Study.LearnSteps.Where(s => s > 0).ToList();
+            var next = steps.Count > 1 ? $"через {Minutes(steps[1])}" : "сразу выученным";
+            var days = S.Study.GraduatingInterval;
+            return $"новое слово: \"Нормально\" - {next}, после последнего шага - через {Days(days)}";
+        }
+    }
+
+    public int StudyGraduatingInterval
+    {
+        get => S.Study.GraduatingInterval;
+        set => Set(() => S.Study.GraduatingInterval = value, also: nameof(StudyLearnStepsNote));
+    }
+
+    public int StudyEasyInterval { get => S.Study.EasyInterval; set => Set(() => S.Study.EasyInterval = value); }
+
+    /// <summary>0-100 %, in steps of 10.</summary>
+    public double StudyPinnedPercent
+    {
+        get => Math.Round(S.Study.PinnedShare * 100);
+        set => Set(() => S.Study.PinnedShare = Math.Round(Math.Clamp(value, 0, 100) / 10) / 10, also: nameof(StudyPinnedText));
+    }
+
+    public string StudyPinnedText => StudyPinnedPercent switch
+    {
+        0 => "не брать отдельно",
+        50 => "до половины сессии",
+        100 => "вся сессия, если хватит",
+        var p => $"до {p:0}% сессии",
+    };
+
+    public bool StudySuggestUnpin { get => S.Study.SuggestUnpin; set => Set(() => S.Study.SuggestUnpin = value); }
+
+    public string StudyNewOrder { get => S.Study.NewOrder; set => Set(() => S.Study.NewOrder = value); }
+
+    public string StudyDirection { get => S.Study.Direction; set => Set(() => S.Study.Direction = value, also: nameof(StudyDirectionNote)); }
+
+    public string StudyDirectionNote => S.Study.Direction switch
+    {
+        "reverse" => "на лице перевод и контекст сцены, вспомнить нужно слово",
+        "both" => $"у слова две карточки со своим расписанием, в одну сессию попадает одна; {S.Study.NewPerDay} новых карточек в день - это около {Math.Max(1, S.Study.NewPerDay / 2)} слов",
+        _ => "на лице слово, кадр и реплика, вспомнить нужно перевод",
+    };
+
+    public bool StudyFrontShot { get => S.Study.FrontShot; set => Set(() => S.Study.FrontShot = value); }
+    public bool StudyFrontLine { get => S.Study.FrontLine; set => Set(() => S.Study.FrontLine = value); }
+    public bool StudyFrontReading { get => S.Study.FrontReading; set => Set(() => S.Study.FrontReading = value); }
+    public bool StudyBackLineTranslation { get => S.Study.BackLineTranslation; set => Set(() => S.Study.BackLineTranslation = value); }
+    public bool StudySpeakOnFlip { get => S.Study.SpeakOnFlip; set => Set(() => S.Study.SpeakOnFlip = value); }
+
+    // «Дополнительно»: rounded on the way out, so a float setting finds its double preset in the list (2.3f is not 2.3).
+    public double StudyStartingEase { get => Math.Round(S.Study.StartingEase, 2); set => Set(() => S.Study.StartingEase = (float)value); }
+    public double StudyEasyBonus { get => Math.Round(S.Study.EasyBonus, 2); set => Set(() => S.Study.EasyBonus = (float)value); }
+    public double StudyHardMultiplier { get => Math.Round(S.Study.HardMultiplier, 2); set => Set(() => S.Study.HardMultiplier = (float)value); }
+    public double StudyIntervalModifier { get => Math.Round(S.Study.IntervalModifier, 2); set => Set(() => S.Study.IntervalModifier = (float)value); }
+    public int StudyMaximumInterval { get => S.Study.MaximumInterval; set => Set(() => S.Study.MaximumInterval = value); }
+    public bool StudyBurySiblings { get => S.Study.BurySiblings; set => Set(() => S.Study.BurySiblings = value); }
+
+    private static string Steps(IEnumerable<float> steps) =>
+        string.Join(" ", steps.Select(s => s.ToString("0.##", CultureInfo.InvariantCulture)));
+
+    private static List<float> ParseSteps(string text, List<float> keep)
+    {
+        var parsed = new List<float>();
+        foreach (var part in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!float.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) || minutes <= 0) return keep;
+            parsed.Add(minutes);
+        }
+        return parsed.Count > 0 ? parsed : keep;
+    }
+
+    private static string Minutes(float minutes) => minutes switch
+    {
+        >= 1440 => Days((int)(minutes / 1440)),
+        >= 60 => $"{minutes / 60:0.#} ч",
+        _ => $"{minutes:0.#} мин",
+    };
+
+    private static string Days(int days) => days switch
+    {
+        1 => "день",
+        _ when days % 10 is >= 2 and <= 4 && days % 100 is < 12 or > 14 => $"{days} дня",
+        _ => $"{days} дней",
+    };
 
     // ---- Приложение ----
 
