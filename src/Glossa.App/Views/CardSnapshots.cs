@@ -262,6 +262,13 @@ internal static class CardSnapshots
                 window.SettingsPage.Show(section);
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-{section}.png"));
             }
+            // ИИ и модели scrolled to the eyes.
+            window.SettingsPage.Show("ai");
+            if (window.SettingsPage.Section("ai") is Settings.AiSection ai)
+            {
+                ai.ScrollToEyes();
+                SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-ai-eyes.png"));
+            }
             // Учёба with «Дополнительно» open, scrolled to it.
             window.SettingsPage.Show("study");
             if (window.SettingsPage.Section("study") is Settings.StudySection study)

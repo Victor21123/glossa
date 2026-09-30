@@ -44,11 +44,20 @@ public sealed class LlamaServerHost : IDisposable
         get { lock (_running) return _running.Keys.ToList(); }
     }
 
-    /// <summary>Servers are running and none has died (a crash or the driver killing it on VRAM loss).</summary>
-    public bool AllAlive
+    /// <summary>The role's server is running and has not died (a crash or the driver killing it on VRAM loss).</summary>
+    public bool IsAlive(string role)
     {
-        get { lock (_running) return _running.Count > 0 && _running.Values.All(i => !i.Process.HasExited); }
+        lock (_running) return _running.TryGetValue(role, out var inst) && !inst.Process.HasExited;
     }
+
+    /// <summary>A server was started for the role and not stopped (it may have died since).</summary>
+    public bool IsRunning(string role)
+    {
+        lock (_running) return _running.ContainsKey(role);
+    }
+
+    /// <summary>A server exited on its own (not stopped): its role and exit code. Raised on a thread-pool thread.</summary>
+    public event Action<string, int>? Crashed;
 
     /// <summary>
     /// Makes sure <paramref name="modelPath"/> is served for <paramref name="role"/> and returns its endpoint.
@@ -110,18 +119,31 @@ public sealed class LlamaServerHost : IDisposable
             _log.Info($"llama-server[{role}] starting {alias} on :{port} (pid {process.Id}) {string.Join(' ', placement)}");
 
             var sw = Stopwatch.StartNew();
-            // A cold start from a hard disk reads the whole file: 13 GB take about two minutes.
-            while (sw.Elapsed < TimeSpan.FromSeconds(300))
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                if (process.HasExited) throw new LlmException($"llama-server завершился с кодом {process.ExitCode} - см. лог");
-                try
+                while (true)
                 {
-                    using var resp = await _http.GetAsync($"http://127.0.0.1:{port}/health", ct).ConfigureAwait(false);
-                    if (resp.IsSuccessStatusCode) break;
+                    ct.ThrowIfCancellationRequested();
+                    if (process.HasExited)
+                        throw new LlmException($"llama-server завершился с кодом {process.ExitCode} - см. лог", new ServerExitedException(process.ExitCode));
+                    if (sw.Elapsed > StartLimit) throw new LlmException($"llama-server не ответил за {StartLimit.TotalSeconds:0} с - см. лог");
+                    try
+                    {
+                        using var resp = await _http.GetAsync($"http://127.0.0.1:{port}/health", ct).ConfigureAwait(false);
+                        if (resp.IsSuccessStatusCode) break;
+                    }
+                    catch (HttpRequestException) { }
+                    await Task.Delay(250, ct).ConfigureAwait(false);
                 }
-                catch (HttpRequestException) { }
-                await Task.Delay(250, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Not registered yet: a start given up (a newer lookup, the app closing), failed or timed out must not
+                // stay loading on its port and holding memory until Glossa exits.
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { }
+                process.Dispose();
+                throw;
             }
             _log.Info($"llama-server[{role}] ready in {sw.ElapsedMilliseconds} ms");
             lock (_running) _running[role] = new Instance(key, port, process, endpoint);
@@ -132,6 +154,9 @@ public sealed class LlamaServerHost : IDisposable
             _gate.Release();
         }
     }
+
+    /// <summary>A cold start from a hard disk reads the whole file: 13 GB take about two minutes.</summary>
+    private static readonly TimeSpan StartLimit = TimeSpan.FromSeconds(300);
 
     public void Stop(string role)
     {
@@ -163,7 +188,9 @@ public sealed class LlamaServerHost : IDisposable
         // Stopping removes the role first, so a registered process that exits has crashed.
         bool crashed;
         lock (_running) crashed = _running.TryGetValue(role, out var inst) && ReferenceEquals(inst.Process, process);
-        if (crashed) _log.Info($"llama-server[{role}] exited unexpectedly (code {process.ExitCode}); it restarts on the next lookup");
+        if (!crashed) return;
+        _log.Info($"llama-server[{role}] exited unexpectedly (code {process.ExitCode}); it restarts on the next lookup");
+        Crashed?.Invoke(role, process.ExitCode);
     }
 
     private static readonly bool LogAll = Environment.GetEnvironmentVariable("GLOSSA_LLAMA_LOG") == "all";
@@ -184,4 +211,10 @@ public sealed class LlamaServerHost : IDisposable
         StopAll();
         _gate.Dispose();
     }
+}
+
+/// <summary>llama-server exited while starting (out of memory, a bad file, the port taken): its exit code.</summary>
+public sealed class ServerExitedException(int code) : Exception($"llama-server exited with code {code}")
+{
+    public int Code { get; } = code;
 }

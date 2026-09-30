@@ -198,6 +198,21 @@ public sealed class SettingsViewModel : ObservableObject
     /// <summary>Minutes without lookups before the model leaves video memory; 0 keeps it loaded.</summary>
     public int IdleUnloadMinutes { get => S.LocalAi.IdleUnloadMinutes; set => Set(() => S.LocalAi.IdleUnloadMinutes = value); }
 
+    /// <summary>Глаза: where the small model that reads stylized text runs - cpu, gpu or off.</summary>
+    public string EyesDevice { get => S.Eyes.Device; set => Set(() => S.Eyes.Device = value, also: nameof(EyesNote)); }
+
+    /// <summary>What the place chosen for the eyes costs (measured 2026-09-30 for an i5-11400 with an RTX 3060 12 GB).</summary>
+    public string EyesNote => S.Eyes.Device switch
+    {
+        "gpu" => "Видеокарта: чтение около 1 с, но глаза занимают около 4,2 ГБ видеопамяти. На карте 12 ГБ с моделью 12B это " +
+                 "замедлит каждую карточку на 20-60% и может подвешивать игру.",
+        "off" => "Выключены: трудный текст читает сама модель, неон - почти никогда.",
+        _ => "Процессор: видеопамять остаётся модели и игре, чтение около 10 с на среднем ПК, около 4 ГБ ОЗУ, пока глаза загружены.",
+    };
+
+    /// <summary>Minutes without a reading before the eyes leave memory; 0 keeps them.</summary>
+    public int EyesIdleUnloadMinutes { get => S.Eyes.IdleUnloadMinutes; set => Set(() => S.Eyes.IdleUnloadMinutes = value); }
+
     public int VramReserveMb { get => S.LocalAi.VramReserveMb; set => Set(() => S.LocalAi.VramReserveMb = value, also: nameof(AiModeNote)); }
 
     public string Gemma26bModel { get => S.LocalAi.Gemma26bModel; set => Set(() => S.LocalAi.Gemma26bModel = value.Trim()); }

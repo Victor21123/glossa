@@ -65,6 +65,20 @@ public static class ModelCatalog
     ];
 
     public static ModelEntry? For(string profile) => Items.FirstOrDefault(e => e.Profile == profile);
+
+    public const string EyesKey = "eyes";
+
+    /// <summary>
+    /// The eyes: a small model that reads text by the picture where the recognizer found none (neon menu buttons) for
+    /// the models whose own sight misreads stylized text. Qwen3-VL 4B was the best of the three measured on 2026-09-30:
+    /// the tester's neon 3 of 3, 74 of 80 synthetic neon points and nothing read on 40 of 40 empty ones, against 2B (2 of
+    /// 3, text seen on 2 empty points) and PaddleOCR-VL 1.6 (0 of 3). Not a profile, so not in <see cref="Items"/>.
+    /// </summary>
+    public static ModelEntry Eyes { get; } = new(EyesKey, "Qwen3-VL 4B Instruct (Q4_K_M)", "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+        "1cd86afb9a95c410a6038ab3b40d8b578c892266", "Qwen3VL-4B-Instruct-Q4_K_M.gguf", 2497281664,
+        "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a",
+        new ModelPart("Qwen/Qwen3-VL-4B-Instruct-GGUF", "1cd86afb9a95c410a6038ab3b40d8b578c892266", "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+            836180256, "256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331", "mmproj-Qwen3VL-4B-Instruct-F16.gguf"));
 }
 
 /// <summary>Where a model download stands: bytes received, then the check of the whole file.</summary>

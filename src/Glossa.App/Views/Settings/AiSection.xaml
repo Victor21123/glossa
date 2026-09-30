@@ -154,6 +154,39 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
+                    <!-- The eyes: a small model that reads stylized text (neon menus) for the models whose own sight cannot. -->
+                    <HeaderedContentControl x:Name="EyesRow" Header="Глаза" Tag="читают текст по картинке, когда распознавание его не нашло"
+                                            Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Note}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                       Text="Маленькая модель Qwen3-VL 4B для неона и стилизованных надписей. Нужна Gemma 4 12B, E4B и своей модели; Gemma 4 26B читает такой текст сама." />
+                            <ListBox Style="{StaticResource Segmented}" SelectedValuePath="Tag" SelectedValue="{Binding EyesDevice}" HorizontalAlignment="Left">
+                                <ListBoxItem Content="Процессор" Tag="cpu" />
+                                <ListBoxItem Content="Видеокарта" Tag="gpu" />
+                                <ListBoxItem Content="Выкл." Tag="off" />
+                            </ListBox>
+                            <TextBlock Style="{StaticResource Note}" TextWrapping="Wrap" Margin="0,8,0,0" Text="{Binding EyesNote}" />
+                            <ContentControl x:Name="EyesOk" Style="{StaticResource OkText}" FontSize="12.5" Margin="0,10,0,0" />
+                            <ContentControl x:Name="EyesWarn" Style="{StaticResource WarnText}" FontSize="12.5" Margin="0,10,0,0" />
+                            <TextBlock x:Name="EyesProgress" FontSize="12.5" Foreground="{DynamicResource InkSoft}" Margin="0,6,0,0" />
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button x:Name="EyesDownload" Content="Скачать" Click="OnDownloadEyes" Margin="0,0,8,0" />
+                                <Button x:Name="EyesCancel" Content="Отмена" Style="{StaticResource GhostButton}" Click="OnCancelEyes" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <TextBlock Style="{StaticResource Note}" Text="выгружать" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <ComboBox Width="200" SelectedValuePath="Tag" SelectedValue="{Binding EyesIdleUnloadMinutes}">
+                                    <ComboBoxItem Content="через 5 минут"><ComboBoxItem.Tag><sys:Int32>5</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                    <ComboBoxItem Content="через 15 минут"><ComboBoxItem.Tag><sys:Int32>15</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                    <ComboBoxItem Content="через 30 минут"><ComboBoxItem.Tag><sys:Int32>30</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                    <ComboBoxItem Content="никогда"><ComboBoxItem.Tag><sys:Int32>0</sys:Int32></ComboBoxItem.Tag></ComboBoxItem>
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                           Text="первое чтение после выгрузки загружает глаза несколько секунд" />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
                     <HeaderedContentControl Header="Своё API" Tag="ключи хранятся зашифрованными, только на этом ПК"
                                             Style="{StaticResource SettingRowTop}">
                         <StackPanel>

@@ -77,6 +77,9 @@ public sealed class AppServices(
     /// <summary>Настройки → Игры и профили: the programs looked up in (null only in design snapshots without games).</summary>
     public Games.GameRegistry? Games { get; set; }
 
+    /// <summary>The eyes' server (null only in design snapshots): where they read now, for Настройки -> ИИ и модели.</summary>
+    public Ai.EyesService? Eyes { get; set; }
+
     private ModelDownloads? _models;
 
     /// <summary>
@@ -87,6 +90,13 @@ public sealed class AppServices(
     public ModelDownloads ModelDownloads => _models ??= new ModelDownloads(RemoteHttp, DirectHttp, Log, (key, path) =>
     {
         var ai = settings().LocalAi;
+        // The eyes are no profile: they are found in the models folder and read from the next lookup on.
+        if (key == Glossa.Core.Llm.ModelCatalog.EyesKey)
+        {
+            Eyes?.Reset();
+            NotifySettingsChanged();
+            return;
+        }
         if (key == ModelDownloads.Runtime)
         {
             if (Glossa.Core.Llm.RuntimeCatalog.Items.FirstOrDefault(e =>

@@ -88,7 +88,7 @@ public sealed class AiRouter : IDisposable
     {
         _lastUse = DateTime.UtcNow;
         mode ??= _settings().LocalAi.Mode;
-        bool Usable(AiClients c) => _currentMode == mode && (c.Dictionary is null || _host.AllAlive || !c.Dictionary.Endpoint.IsLocal);
+        bool Usable(AiClients c) => _currentMode == mode && (c.Dictionary is null || _host.IsAlive(DictRole) || !c.Dictionary.Endpoint.IsLocal);
         if (_current is { } c && Usable(c)) return c;
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -99,13 +99,17 @@ public sealed class AiRouter : IDisposable
             {
                 _log.Info($"AI: switching to mode {mode}");
                 _current = null;
-                _host.StopAll();
+                _host.Stop(DictRole);
             }
             _currentMode = mode;
+            // The model is fitted to the video memory it finds free: eyes on the card would squeeze it (every card 57%
+            // slower, measured 2026-09-30), so they leave first and come back after it.
+            Eyes?.StopIfGpu();
             _current = await ResolveAsync(mode, ct).ConfigureAwait(false);
             _loadedAt = DateTime.UtcNow;
             _freeAfterLoad = -1;
             _log.Info($"AI: {_current.Description}");
+            Eyes?.WarmAfterMain(_current, () => Volatile.Read(ref _inUse) > 0);
             return _current;
         }
         finally
@@ -118,7 +122,21 @@ public sealed class AiRouter : IDisposable
     public void Reset()
     {
         _current = null;
-        _host.StopAll();
+        _host.Stop(DictRole);
+        Eyes?.Reset();
+    }
+
+    /// <summary>The eyes, brought up after the model and stopped before it loads; set once at start.</summary>
+    public EyesService? Eyes { get; set; }
+
+    /// <summary>
+    /// The eyes came up on the video card or left it: the free video memory after the load is read again, so their
+    /// 4.2 GB are not taken for a game's and the model is not unloaded for them.
+    /// </summary>
+    public void Rebaseline()
+    {
+        _loadedAt = DateTime.UtcNow;
+        _freeAfterLoad = -1;
     }
 
     /// <summary>Настройки → Нагрузка на ПК → «Низкий»: llama-server's threads yield to the game as well.</summary>
@@ -193,7 +211,7 @@ public sealed class AiRouter : IDisposable
     {
         try
         {
-            if (Volatile.Read(ref _inUse) > 0 || _host.RunningRoles.Count == 0) return;
+            if (Volatile.Read(ref _inUse) > 0 || !_host.IsRunning(DictRole)) return;
             var s = _settings();
             var game = InGame?.Invoke() == true;
             var now = DateTime.UtcNow;
@@ -216,7 +234,10 @@ public sealed class AiRouter : IDisposable
     private void Unload()
     {
         _current = null;
-        _host.StopAll();
+        _host.Stop(DictRole);
+        // Unloaded for a game short of video memory (or idle): eyes on the card leave with the model, those on the
+        // processor keep their own idle time.
+        Eyes?.StopIfGpu();
     }
 
     /// <summary>Free memory on GPU 0 in MB via NVML (ships with the NVIDIA driver); -1 when unavailable.</summary>

@@ -23,6 +23,7 @@ public sealed class LookupController(
     OcrEngine ocr,
     WordLookup words,
     AiRouter ai,
+    EyesService eyesService,
     LibraryStore library,
     LookupPopup popup,
     LookupViewModel vm,
@@ -314,19 +315,21 @@ public sealed class LookupController(
         vm.ShowMessage(ai.Current is null ? "Загружаю модель..." : "Читаю текст по картинке...");
         vm.IsBusy = true;
         popup.ShowNear(new PixelRect(cursor.X, cursor.Y, cursor.X + 1, cursor.Y + 1));
-        (OcrPage Page, WordHit? Hit)? seen = null;
+        PointReading? seen = null;
         string? why = null;
         using (ai.Use())
+        using (eyesService.Use())
         {
             try
             {
                 var clients = await ai.GetAsync(ct, run.Context.Choices?.Ai == "lowvram" ? "lowvram" : null);
                 ct.ThrowIfCancellationRequested();
-                if (clients.Vision is { } eyes)
+                if (eyesService.UsesEyes(run.Settings) && eyesService.Device is null) vm.ShowMessage("Загружаю глаза...");
+                if (await PointReaderAsync(clients, run) is { } reader)
                 {
                     vm.ShowMessage("Читаю текст по картинке...");
                     vm.IsBusy = true;
-                    seen = await ReadPointAsync(eyes, run, page);
+                    seen = await ReadPointAsync(reader, run, page);
                 }
             }
             catch (LlmException ex)
@@ -336,61 +339,102 @@ public sealed class LookupController(
             }
         }
         ct.ThrowIfCancellationRequested();
-        if (seen is not ({ } seenPage, { } hit))
+        if (seen is not { Hit: { } hit })
         {
             NoText(run, why);
             return;
         }
         log.Info($"lookup: the model read '{hit.Word}' where the recognizer found no text, at {run.Sw.ElapsedMilliseconds} ms");
         run.Seen = true;
-        await ShowAsync(run, hit, seenPage);
+        await ShowAsync(run, hit, seen.Page);
     }
 
-    /// <summary>The model's readings of pieces of screen by the picture sent: a menu looked up again needs no second look.</summary>
-    private readonly Dictionary<string, string> _pointReadings = [];
+    /// <summary>
+    /// A reading of the text at a lookup's point: its word there (null - no text) over its page. <paramref name="Direct"/>:
+    /// the eyes read the line under the point again on its own, and its word is taken as it is.
+    /// </summary>
+    private sealed record PointReading(OcrPage Page, WordHit? Hit, bool Direct);
+
+    /// <summary>First looks at pieces of screen by the picture sent: a menu looked up again needs no second look.</summary>
+    private readonly ReadingMemory _pointReadings = new();
 
     /// <summary>
-    /// The model's lines in the piece of screen around the lookup's point (<see cref="VisionReading.PointPiece"/>) as a
-    /// recognizer's page, and the word they give at the point (null: no text there); null when the reading failed or ran
-    /// over <see cref="ReadingLimit"/> (logged). Only a newer lookup's cancellation passes through.
+    /// Who reads the text at a point: the eyes when the model's own sight misreads stylized text (their server brought
+    /// up first when needed), else that sight; null - no one can.
     /// </summary>
-    private async Task<(OcrPage Page, WordHit? Hit)?> ReadPointAsync(ILlmClient eyes, Run run, OcrPage recognized)
+    private async Task<(ILlmClient Client, bool Eyes)?> PointReaderAsync(AiClients clients, Run run)
+    {
+        if (eyesService.UsesEyes(run.Settings) && await eyesService.EnsureAsync(run.Ct) is { } eyes) return (eyes, true);
+        return clients.Vision is { } sight ? (sight, false) : null;
+    }
+
+    /// <summary>
+    /// The text around the lookup's point read by the picture (<see cref="VisionReading.PointPiece"/>) and the word it
+    /// gives at the point; null when the reading failed or ran over its limit (logged). Only a newer lookup's
+    /// cancellation passes through.
+    /// </summary>
+    private async Task<PointReading?> ReadPointAsync((ILlmClient Client, bool Eyes) reader, Run run, OcrPage recognized)
     {
         var (x, y) = (run.Cursor.X, run.Cursor.Y);
-        var piece = run.Frame.Crop(VisionReading.PointPiece(x, y));
-        if (piece.Width < 4 || piece.Height < 4) return null; // the point is off the frame
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(run.Ct);
-        limit.CancelAfter(ReadingLimit);
+        limit.CancelAfter(reader.Eyes ? EyesReadingLimit : ReadingLimit);
         try
         {
+            if (reader.Eyes) return await ReadWithEyesAsync(reader.Client, run, recognized, limit.Token);
+            var piece = run.Frame.Crop(VisionReading.PointPiece(x, y));
+            if (piece.Width < 4 || piece.Height < 4) return null; // the point is off the frame
             var png = VisionReading.Png(piece.Bgra, piece.Width, piece.Height, piece.Stride);
             var banned = VisionReading.Banned(run.Forced, recognized);
-            var key = $"{eyes.Endpoint.Model}|{(banned is null ? "" : "ban")}|{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png))}";
-            string? answer;
-            lock (_pointReadings) _pointReadings.TryGetValue(key, out answer);
-            var known = answer is not null;
-            answer ??= await VisionReading.ReadLinesAsync(eyes, png, banned, limit.Token);
+            var key = ReadingMemory.Key(reader.Client.Endpoint.Model, banned is null ? "" : "ban",
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)));
+            var known = _pointReadings.TryGet(key, out var remembered);
+            var answer = known ? remembered : await VisionReading.ReadLinesAsync(reader.Client, png, banned, limit.Token);
             if (VisionReading.LinesPage(answer, piece.Region) is not { } lines)
             {
                 log.Warn($"lookup: the model's reading of the point is not its lines' JSON: {answer[..Math.Min(answer.Length, 200)]}");
                 return null;
             }
-            if (!known)
-                lock (_pointReadings)
-                {
-                    if (_pointReadings.Count >= 100) _pointReadings.Clear();
-                    _pointReadings[key] = answer;
-                }
+            if (!known) _pointReadings.Set(key, answer);
             var seen = words.Normalize(lines, run.Forced);
             var hit = words.Hit(seen, x, y, run.Cjk);
             log.Info($"lookup: the model read {seen.Lines.Count} lines around the point, '{hit?.Word}' at it");
-            return (seen, hit);
+            return new PointReading(seen, hit, Direct: false);
         }
         catch (Exception ex) when (!run.Ct.IsCancellationRequested)
         {
             log.Warn($"lookup: reading the point failed ({ex.GetType().Name}): {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>The eyes' two looks at the point; a server that died under them (out of video memory) is started again once.</summary>
+    private async Task<PointReading?> ReadWithEyesAsync(ILlmClient eyes, Run run, OcrPage recognized, CancellationToken ct)
+    {
+        var pointWords = new PointWords(p => words.Normalize(p, run.Forced), (p, px, py) => words.Hit(p, px, py, run.Cjk));
+        Task<EyesResult?> Read(ILlmClient client, CancellationToken token) =>
+            EyesReading.ReadPointAsync(client, run.Frame.Crop, run.Cursor.X, run.Cursor.Y, recognized, pointWords, run.Forced, _pointReadings, null, token);
+        EyesResult? read;
+        try
+        {
+            read = await Read(eyes, ct);
+        }
+        catch (Exception ex) when (ex is LlmException or HttpRequestException or IOException && !eyesService.IsAlive && !ct.IsCancellationRequested)
+        {
+            // The second try gets a limit of its own: the restart (on the processor) has taken part of the first one.
+            log.Warn($"lookup: the eyes died while reading ({ex.Message}); once more");
+            if (await eyesService.RecoverAsync(run.Ct) is not { } again) return null;
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(run.Ct);
+            limit.CancelAfter(EyesReadingLimit);
+            read = await Read(again, limit.Token);
+        }
+        if (read is null)
+        {
+            log.Warn("lookup: the eyes' reading of the point is not their lines' JSON");
+            return null;
+        }
+        log.Info($"lookup: the eyes read {read.Page.Lines.Count} lines, '{read.Hit?.Word}' at the point" +
+                 $" ({read.Language ?? "-"}: '{read.Reading}'), {read.Pass1.TotalMilliseconds:F0} + {read.Pass2.TotalMilliseconds:F0} ms");
+        return new PointReading(read.Page, read.Hit, read.Direct);
     }
 
     /// <summary>
@@ -520,11 +564,15 @@ public sealed class LookupController(
             {
                 // A scrap of a stylized label (回想モード read as 回想毛): the model reads the piece around the point as
                 // lines, and its word stands in when it lies in the same line of screen (not in the same line: unconfirmed).
-                vm.Status = "Перечитываю слово...";
-                var seen = clients.Vision is { } sight ? await ReadPointAsync(sight, run, page) : null;
+                vm.Status = eyesService.UsesEyes(run.Settings) && eyesService.Device is null ? "Загружаю глаза..." : "Перечитываю слово...";
+                PointReading? seen = null;
+                using (eyesService.Use())
+                    if (await PointReaderAsync(clients, run) is { } reader) seen = await ReadPointAsync(reader, run, page);
                 ct.ThrowIfCancellationRequested();
                 vm.Status = null;
-                var settled = seen is { } read ? VisionReading.Settle(hit, read.Hit, read.Page) : hit;
+                // The eyes' word, read again from the line under the point alone, is taken as it is (the same-row check
+                // lost right readings of small letters, measured 2026-09-30).
+                var settled = seen is { Direct: true } direct ? direct.Hit : seen is { } read ? VisionReading.Settle(hit, read.Hit, read.Page) : hit;
                 if (settled is null)
                 {
                     // No text there for the model: the scrap was an icon or a drawing (x, 西 on a microphone).
@@ -637,6 +685,9 @@ public sealed class LookupController(
 
     /// <summary>A reading that takes longer than this is given up (a stuck server; on the processor one takes ~4 s).</summary>
     private static readonly TimeSpan ReadingLimit = TimeSpan.FromSeconds(20);
+
+    /// <summary>The eyes' two looks on the processor: ~11 s on an i5-11400 (estimated 2026-09-30), more beside a busy game.</summary>
+    private static readonly TimeSpan EyesReadingLimit = TimeSpan.FromSeconds(40);
 
     /// <summary>The model's readings by the misread word and its line: the same line again needs no second look.</summary>
     private readonly Dictionary<string, string> _readings = [];

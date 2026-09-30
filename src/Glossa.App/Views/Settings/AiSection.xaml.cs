@@ -54,11 +54,17 @@ public partial class AiSection : UserControl
         AddFileFields();
         ShowState();
         ShowRuntime();
+        ShowEyes();
 
-        _status.Tick += (_, _) => ShowState();
+        _status.Tick += (_, _) =>
+        {
+            ShowState();
+            ShowEyes();
+        };
         Action<string> downloadChanged = key =>
         {
             if (key == ModelDownloads.Runtime) ShowRuntime();
+            else if (key == ModelCatalog.EyesKey) ShowEyes();
             else _tiles.FirstOrDefault(t => t.Key == key)?.Refresh();
         };
         Loaded += (_, _) =>
@@ -69,6 +75,7 @@ public partial class AiSection : UserControl
             _services.ModelDownloads.Changed += downloadChanged;
             foreach (var t in _tiles) t.Refresh();
             ShowRuntime();
+            ShowEyes();
         };
         Unloaded += (_, _) =>
         {
@@ -87,7 +94,79 @@ public partial class AiSection : UserControl
             foreach (var t in _tiles) t.Refresh();
         if (e.PropertyName is nameof(SettingsViewModel.AiProfile)) AddFileFields();
         if (e.PropertyName is nameof(SettingsViewModel.Runtime) or nameof(SettingsViewModel.LlamaServerPath)) ShowRuntime();
+        if (e.PropertyName is nameof(SettingsViewModel.EyesDevice) or nameof(SettingsViewModel.AiProfile) or nameof(SettingsViewModel.ModelsFolder))
+            ShowEyes();
     }
+
+    /// <summary>
+    /// Глаза: downloaded or not (and how far), where they read now, and a warning when the video card is chosen but the
+    /// memory left beside the model will not hold them (the choice stays the user's).
+    /// </summary>
+    private void ShowEyes()
+    {
+        var s = _services.Settings;
+        var ai = s.LocalAi;
+        var downloads = _services.ModelDownloads;
+        var running = downloads.IsRunning(ModelCatalog.EyesKey);
+        var eyes = ModelCatalog.Eyes;
+        string? ok = null, warn = null;
+        if (ai.HasEyes())
+        {
+            var where = _services.Eyes?.Device switch
+            {
+                "gpu" => "сейчас на видеокарте",
+                "cpu" => _services.Eyes!.ForcedToProcessor ? "сейчас на процессоре (на видеокарте не поместились)" : "сейчас на процессоре",
+                _ => "загрузятся при первом трудном тексте",
+            };
+            ok = s.Eyes.Device == "off" ? "скачаны, выключены"
+                : ModelCatalog.For(ai.Profile)?.ReadsStylized == true ? "скачаны; Gemma 4 26B читает такой текст сама, глаза не нужны"
+                : "скачаны, " + where;
+        }
+        else if (!running)
+            warn = downloads.ErrorOf(ModelCatalog.EyesKey)
+                ?? string.Format(Russian, "не скачаны, {0:0.0} ГБ, {1}", eyes.TotalSize / 1e9, eyes.Page);
+        if (warn is null && EyesVramLeft() is var left && EyesPolicy.VramShort(s.Eyes.Device, left))
+            warn = string.Format(Russian, "Свободно видеопамяти около {0:0.0} ГБ, глазам нужно около {1:0.0} ГБ. Карточки станут медленнее " +
+                "на 20-60%, игра может замирать. Выбор остаётся за тобой.", left / 1024.0, (EyesPolicy.NeedVramMb + EyesPolicy.VramMarginMb) / 1024.0);
+        EyesOk.Content = ok;
+        EyesOk.Visibility = ok is null ? Visibility.Collapsed : Visibility.Visible;
+        EyesWarn.Content = warn;
+        EyesWarn.Visibility = warn is null ? Visibility.Collapsed : Visibility.Visible;
+        var progress = downloads.ProgressOf(ModelCatalog.EyesKey) is not { } p ? null
+            : p.Verifying ? "Проверяю файл..."
+            : string.Format(Russian, "Загрузка {0:0.0} из {1:0.0} ГБ, {2:0}%", p.Done / 1e9, p.Total / 1e9, 100.0 * p.Done / Math.Max(1, p.Total));
+        EyesProgress.Text = progress ?? "";
+        EyesProgress.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
+        EyesDownload.Visibility = !running && !ai.HasEyes() ? Visibility.Visible : Visibility.Collapsed;
+        EyesCancel.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Video memory the eyes would find beside the model, MB (the driver's figure, not CUDA's): what is free now, plus
+    /// what the eyes on the card already hold, minus the model's file while it is not loaded yet; -1 when unknown.
+    /// </summary>
+    private int EyesVramLeft()
+    {
+        var free = AiRouter.FreeVramMb();
+        if (free < 0) return -1;
+        if (_services.Eyes?.Device == "gpu") free += EyesPolicy.NeedVramMb;
+        var ai = _services.Settings.LocalAi;
+        if (_services.Ai.Current is null && ai.SingleModel(ai.Profile) is { Length: > 0 } model && File.Exists(model))
+            free -= (int)(new FileInfo(model).Length >> 20);
+        return Math.Max(0, free);
+    }
+
+    /// <summary>For the snapshots (--render-main): the section scrolled to the eyes' row.</summary>
+    internal void ScrollToEyes()
+    {
+        UpdateLayout();
+        EyesRow.BringIntoView();
+    }
+
+    private void OnDownloadEyes(object sender, RoutedEventArgs e) =>
+        _services.ModelDownloads.Start(ModelCatalog.Eyes, _services.Settings.LocalAi.ModelsFolderResolved());
+
+    private void OnCancelEyes(object sender, RoutedEventArgs e) => _services.ModelDownloads.Cancel(ModelCatalog.EyesKey);
 
     /// <summary>Движок: one's own llama-server, the downloaded build, or what «Скачать» would fetch and how far it got.</summary>
     private void ShowRuntime()

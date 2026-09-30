@@ -98,12 +98,22 @@ public static class VisionReading
         "{\"text\": the line exactly as written, \"box_2d\": [ymin, xmin, ymax, xmax]} with coordinates from 0 to 1000 " +
         "relative to the picture. If there is no text, answer [].";
 
+    /// <summary>
+    /// <see cref="LinesPrompt"/> in Qwen3-VL's own grounding: "bbox_2d" is [x1, y1, x2, y2]. Asked for Gemma's box_2d it
+    /// kept its own order anyway, and every line landed turned over (2026-09-30).
+    /// </summary>
+    public const string LinesPromptXy = "Find every line of text in the picture. Answer with JSON only: a list of objects " +
+        "{\"text\": the line exactly as written, \"bbox_2d\": [x1, y1, x2, y2]} with coordinates from 0 to 1000 " +
+        "relative to the picture. If there is no text, answer [].";
+
     /// <summary>The lines' JSON the server holds the answer to: no code fence, no prompt said back, at most 12 lines.</summary>
-    public static JsonObject LinesSchema() => JsonNode.Parse("""
-        {"type": "array", "maxItems": 12, "items": {"type": "object", "required": ["text", "box_2d"], "properties": {
+    public static JsonObject LinesSchema(bool xy = false) => JsonNode.Parse("""
+        {"type": "array", "maxItems": 12, "items": {"type": "object", "required": ["text", "BOX"], "properties": {
           "text": {"type": "string"},
-          "box_2d": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}}}
-        """)!.AsObject();
+          "BOX": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}}}
+        """.Replace("BOX", BoxKey(xy)))!.AsObject();
+
+    private static string BoxKey(bool xy) => xy ? "bbox_2d" : "box_2d";
 
     /// <summary>
     /// Half the piece of screen read around a point: 600x180 read 8 of 8 labels; 900x220 (smaller letters at the same
@@ -152,7 +162,8 @@ public static class VisionReading
 
     /// <summary>
     /// The model's lines (<see cref="LinesPrompt"/>) as the recognizer's page for the <paramref name="piece"/> of screen
-    /// the model saw: each line's box from its box_2d (0-1000 of the piece), words cut from the box by their letters (each
+    /// the model saw: each line's box from its box_2d, [ymin, xmin, ymax, xmax], or bbox_2d, [x1, y1, x2, y2] (both 0-1000
+    /// of the piece, <see cref="LinesPromptXy"/>), words cut from the box by their letters (each
     /// kana and kanji its own unit, as the recognizer gives them; a Latin word's box is as wide as its share of letters, a
     /// little off in a proportional font); a sign read as lines of one item is cut into rows. An answer cut off by the
     /// token limit keeps its whole lines; null when the answer is not the lines' JSON at all (a failed reading, not "no
@@ -165,7 +176,9 @@ public static class VisionReading
         var lines = new List<OcrLine>();
         foreach (var item in items)
         {
-            if (item is not JsonObject o || o["box_2d"] is not JsonArray { Count: 4 } b) continue;
+            if (item is not JsonObject o) continue;
+            var xy = o["box_2d"] is null;
+            if (o[BoxKey(xy)] is not JsonArray { Count: 4 } b) continue;
             string? text;
             double[] v;
             try
@@ -177,6 +190,7 @@ public static class VisionReading
             {
                 continue; // a number where the text should be, or the other way round
             }
+            if (xy) v = [v[1], v[0], v[3], v[2]];
             double top = Math.Min(v[0], v[2]), bottom = Math.Max(v[0], v[2]), left = Math.Min(v[1], v[3]), right = Math.Max(v[1], v[3]);
             var box = new PixelRect(piece.Left + left / 1000 * piece.Width, piece.Top + top / 1000 * piece.Height,
                 piece.Left + right / 1000 * piece.Width, piece.Top + bottom / 1000 * piece.Height);

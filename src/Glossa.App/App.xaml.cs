@@ -60,6 +60,8 @@ public partial class App : Application
     private ScreenCapture? _capture;
     private LlamaServerHost? _llama;
     private AiRouter? _router;
+    private EyesService? _eyes;
+    private string? _eyesState;
     private HotkeyManager? _hotkeys;
     private LookupPopup? _popup;
     private LookupController? _controller;
@@ -116,6 +118,8 @@ public partial class App : Application
             _settings.LocalAi.BasePort += 100;
             if (Environment.GetEnvironmentVariable("GLOSSA_PRIORITY") is { Length: > 0 } priority) _settings.Performance.Priority = priority;
             if (Environment.GetEnvironmentVariable("GLOSSA_VISION") is { Length: > 0 } vision) _settings.Performance.VisionReading = vision;
+            if (Environment.GetEnvironmentVariable("GLOSSA_EYES") is { Length: > 0 } eyes) _settings.Eyes.Device = eyes;
+            if (Environment.GetEnvironmentVariable("GLOSSA_PROFILE") is { Length: > 0 } profile) _settings.LocalAi.Profile = profile;
         }
         _theme.Install(this, _settings.Theme);
 
@@ -127,8 +131,10 @@ public partial class App : Application
             return;
         }
 
-        // Local servers must bypass the system SOCKS proxy; cloud endpoints go through it.
-        _localHttp = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromMinutes(5) };
+        // Local servers must bypass the system SOCKS proxy; cloud endpoints go through it. An answer left early (a loop
+        // cut, the eyes' first look stopped at the point) closes its connection at once: drained for reuse, llama-server
+        // would go on generating the rest and keep the next request waiting (B-33).
+        _localHttp = new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxResponseDrainSize = 0 }) { Timeout = TimeSpan.FromMinutes(5) };
         _remoteHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
         _directHttp = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromMinutes(2) };
 
@@ -146,9 +152,14 @@ public partial class App : Application
         _keys = new KeyStore(DataPaths.Keys);
         _speech = new Speech.SpeechService(DataPaths.Audio, () => _settings.Speech);
         _router = new AiRouter(() => _settings, _llama, _localHttp, _remoteHttp, name => _keys.Get(name), log);
+        _eyes = new EyesService(() => _settings, _llama, _localHttp, Interop.Native.FreeRamMb, AiRouter.FreeVramMb, log);
+        _router.Eyes = _eyes;
+        _eyes.MovedOnCard += _router.Rebaseline;
+        _eyes.Notice += text => Dispatcher.BeginInvoke(() => _tray?.ShowBalloonTip(8000, "Glossa", text, WinForms.ToolTipIcon.Warning));
         _services = new AppServices(() => _settings, s => _store!.Save(s), _library, _keys, _speech, _router,
             _dictionaries, () => _levels, ReloadDictionaries, _localHttp, _remoteHttp, _directHttp, _theme, log);
         _games = _services.Games = new Games.GameRegistry(() => _settings, s => _store!.Save(s), log);
+        _services.Eyes = _eyes;
 
         var vm = new LookupViewModel();
         _popup = new LookupPopup(vm);
@@ -157,7 +168,7 @@ public partial class App : Application
         _popup.ApplyLook(_settings.Popup, _theme);
         _theme.Changed += () => _popup.ApplyLook(_settings.Popup, _theme); // the card may follow the window theme
         var words = new WordLookup(() => _japanese, () => _chinese, _dictionaries, () => _levels);
-        _controller = new LookupController(() => _settings, _ocr, words, _router, _library, _popup, vm, _speech, log);
+        _controller = new LookupController(() => _settings, _ocr, words, _router, _eyes, _library, _popup, vm, _speech, log);
         _services.AddWord = _controller.AddWordAsync;
         // «In a game»: the program of the last lookup is still in front (not Glossa itself).
         _router.InGame = () => _controller.LastAppExe is { Length: > 0 } last
@@ -179,14 +190,20 @@ public partial class App : Application
         _controller.ActivityCounted += _services.NotifyActivity;
         // Settings apply as they change; the AI is restarted only when something it runs on changed.
         _aiState = AiState(_settings);
+        _eyesState = _settings.Eyes.Device;
         _services.SettingsChanged += () =>
         {
             var ai = AiState(_settings);
             if (ai != _aiState)
             {
                 _aiState = ai;
-                _router.Reset();
+                _router.Reset(); // the eyes with it
             }
+            else if (_settings.Eyes.Device != _eyesState)
+            {
+                _eyes.Reset(); // only the eyes move: the model stays loaded
+            }
+            _eyesState = _settings.Eyes.Device;
             _popup.SetHiddenFromCapture(_settings.Popup.HideFromCapture);
             _theme.Apply(_settings.Theme);
             _popup.ApplyLook(_settings.Popup, _theme);
@@ -559,6 +576,7 @@ public partial class App : Application
         _guard?.Dispose(); // a paused game wakes before Glossa goes
         _input?.Dispose();
         _router?.Dispose();
+        _eyes?.Dispose();
         _llama?.Dispose();
         _capture?.Dispose();
         _ocr?.Dispose();

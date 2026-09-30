@@ -74,6 +74,15 @@ public sealed class OcrEngine : IDisposable
     /// <summary>For measuring: how far the detector's line boxes are widened (DBNet unclip); null keeps the preset's.</summary>
     public float? UnClipRatio { get; init; }
 
+    /// <summary>For measuring: the detector's pixel threshold on its text map (DBNet); null keeps the preset's.</summary>
+    public float? BoxThresh { get; init; }
+
+    /// <summary>For measuring: the mean text-map score a box needs to be kept; null keeps the preset's.</summary>
+    public float? BoxScoreThresh { get; init; }
+
+    /// <summary>For measuring: the recognizer's score a line needs to be kept; null keeps the preset's.</summary>
+    public float? TextScore { get; init; }
+
     /// <summary>Raised after an idle trim (for the log).</summary>
     public event Action? Trimmed;
 
@@ -183,6 +192,9 @@ public sealed class OcrEngine : IDisposable
             DoAngle = false,
         };
         if (UnClipRatio is { } unclip) options = options with { UnClipRatio = unclip };
+        if (BoxThresh is { } box) options = options with { BoxThresh = box };
+        if (BoxScoreThresh is { } boxScore) options = options with { BoxScoreThresh = boxScore };
+        if (TextScore is { } textScore) options = options with { TextScore = textScore };
 
         var result = engine.Detect(bitmap, options, ct);
         var lines = new List<OcrLine>(result.TextBlocks.Length);

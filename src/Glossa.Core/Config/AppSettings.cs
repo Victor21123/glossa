@@ -102,8 +102,34 @@ public sealed class AppSettings
 
     public StudySettings Study { get; set; } = new();
 
+    /// <summary>Настройки -> ИИ и модели -> Глаза: the small model that reads stylized text for the models that cannot.</summary>
+    public EyesSettings Eyes { get; set; } = new();
+
     /// <summary>Saves each OCR input image to the logs folder and logs lookup geometry.</summary>
     public bool DebugOcrDumps { get; set; }
+}
+
+/// <summary>
+/// The eyes (<see cref="Llm.ModelCatalog.Eyes"/>): read the text by the picture where the recognizer found none or a
+/// scrap, for the models whose own sight misreads stylized text (Gemma 4 12B, E4B, one's own model).
+/// </summary>
+public sealed class EyesSettings
+{
+    /// <summary>
+    /// cpu (default: the video memory stays the model's and the game's; ~11 s a reading on an i5-11400), gpu (~1 s,
+    /// but 4.2 GB of video memory: on a 12 GB card every card of the 12B 19-57% slower and the game may freeze - the user
+    /// is warned and chooses) or off (the model's own sight reads, poorly).
+    /// </summary>
+    public string Device { get; set; } = "cpu";
+
+    /// <summary>Minutes without a reading before the eyes leave memory; 0 - never.</summary>
+    public int IdleUnloadMinutes { get; set; } = 15;
+
+    public void Normalize()
+    {
+        if (Device is not ("cpu" or "gpu" or "off")) Device = "cpu";
+        if (IdleUnloadMinutes < 0) IdleUnloadMinutes = 0;
+    }
 }
 
 /// <summary>Настройки → Нагрузка на ПК: keeping the game smooth while Glossa runs beside it.</summary>
@@ -365,6 +391,24 @@ public sealed class LocalAiSettings
     /// <summary>The profile's model is there but its sight is not (a model downloaded before sight was added).</summary>
     public bool LacksVision(string profile) => HasModel(profile) && VisionFile(profile) is { } file && !File.Exists(file);
 
+    /// <summary>The eyes' model and projector: in the models folder, beside the profiles' models.</summary>
+    public string EyesModel() => Path.Combine(ModelsFolderResolved(), Llm.ModelCatalog.Eyes.File);
+
+    public string EyesVisionFile() => Path.Combine(ModelsFolderResolved(), Llm.ModelCatalog.Eyes.Vision!.LocalName);
+
+    /// <summary>Both files of the eyes are there (half a download is no eyes).</summary>
+    public bool HasEyes() => File.Exists(EyesModel()) && File.Exists(EyesVisionFile());
+
+    /// <summary>The eyes' llama-server port, next to the main model's.</summary>
+    public int EyesPort => BasePort + 1;
+
+    /// <summary>
+    /// Whether the eyes read for the current profile: they are on and downloaded, and the profile's own sight is not
+    /// trusted with stylized text (the 26B reads it itself; one's own model has no catalog sight at all).
+    /// </summary>
+    public bool UsesEyes(EyesSettings eyes) =>
+        eyes.Device != "off" && Llm.ModelCatalog.For(Profile)?.ReadsStylized != true && HasEyes();
+
     /// <summary>Settings from before 2026-09-29: the retired Qwen + Hy-MT2 pair and its tiers become the default model and modes.</summary>
     public void Normalize()
     {
@@ -495,6 +539,7 @@ public sealed class SettingsStore(string path)
             if (File.Exists(Path) && JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Path), Json) is { } loaded)
             {
                 loaded.LocalAi.Normalize();
+                loaded.Eyes.Normalize();
                 if (loaded.TranslateMode is not ("screen" or "live")) loaded.TranslateMode = "zone";
                 return loaded;
             }

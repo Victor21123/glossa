@@ -37,7 +37,9 @@ public static class OcrEval
         }
 
         public ILlmClient? Client() => Vision is null ? null
-            : new OpenAiCompatibleClient(new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromMinutes(3) },
+            // MaxResponseDrainSize 0: an answer left early (the eyes' first pass cut at the line under the point) closes
+            // the connection at once; drained for reuse, llama-server would go on generating the rest of it.
+            : new OpenAiCompatibleClient(new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxResponseDrainSize = 0 }) { Timeout = TimeSpan.FromMinutes(3) },
                 new LlmEndpoint("vision", LlmProviderKind.LlamaServer, Vision, "local"));
     }
 
@@ -101,12 +103,20 @@ public static class OcrEval
             $"-- {options.Model}{(vision is null ? "" : " + vision")}: words {right}/{cases.Count}, mean line cer {cerSum / n:0.000}, mean {msSum / n} ms; doubtful {doubtful}, read again {reread}{(reread > 0 ? $" ({visionMs / reread} ms each)" : "")}"));
     }
 
-    /// <summary>The recognizer; GLOSSA_OCR_UNCLIP widens its line boxes for a measurement.</summary>
-    private static OcrEngine Engine() => new(DataPaths.OcrModels)
+    /// <summary>
+    /// The recognizer; for a measurement GLOSSA_OCR_UNCLIP widens its line boxes, GLOSSA_OCR_BOX, GLOSSA_OCR_BOXSCORE and
+    /// GLOSSA_OCR_TEXTSCORE lower (or raise) the detector's and recognizer's thresholds.
+    /// </summary>
+    internal static OcrEngine Engine() => new(DataPaths.OcrModels)
     {
-        UnClipRatio = float.TryParse(Environment.GetEnvironmentVariable("GLOSSA_OCR_UNCLIP"), System.Globalization.NumberStyles.Float,
-            CultureInfo.InvariantCulture, out var u) ? u : null,
+        UnClipRatio = Knob("GLOSSA_OCR_UNCLIP"),
+        BoxThresh = Knob("GLOSSA_OCR_BOX"),
+        BoxScoreThresh = Knob("GLOSSA_OCR_BOXSCORE"),
+        TextScore = Knob("GLOSSA_OCR_TEXTSCORE"),
     };
+
+    private static float? Knob(string name) =>
+        float.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
 
     private static string Known(bool? known) => known switch { true => "yes", false => "no ", null => "-  " };
 
