@@ -10,6 +10,7 @@ using Glossa.Core.Dictionaries;
 //   glossa-cli lookup <lang> <term> [more candidates…]
 //   glossa-cli level <lang> <term> [reading]
 //   glossa-cli runtime [cuda|vulkan]
+//   glossa-cli pictures <query…>   (meaning pictures: search, fetch, shrink; nothing written)
 Console.OutputEncoding = Encoding.UTF8;
 if (args.Length == 0)
 {
@@ -54,6 +55,28 @@ switch (args[0])
             .InstallAsync(entry, DataPaths.Runtime, shown, CancellationToken.None);
         Console.WriteLine();
         Console.WriteLine($"{entry.Release} {entry.Id}: {server} in {sw.Elapsed.TotalSeconds:F0} s");
+        break;
+    }
+    case "pictures":
+    {
+        // «Картинка значения» as the dialog finds it: the search, each thumbnail fetched and shrunk, all in memory.
+        using var proxied = new HttpClient();
+        using var direct = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        var pictures = new Glossa.Core.Pictures.MeaningPictures(direct, proxied);
+        var query = string.Join(' ', args.Skip(1));
+        var search = await pictures.SearchAsync(query, CancellationToken.None);
+        Console.WriteLine($"\"{query}\": {search.Found.Count} found{(search.Offline ? ", offline" : "")} in {sw.Elapsed.TotalSeconds:F1} s");
+        foreach (var c in search.Found)
+        {
+            var t0 = sw.Elapsed;
+            var bytes = await pictures.FetchAsync(c, CancellationToken.None);
+            var stored = bytes is null ? null : Glossa.Core.Pictures.PictureFiles.Shrink(bytes);
+            using var decoded = stored is null ? null : SkiaSharp.SKBitmap.Decode(stored);
+            Console.WriteLine($"  {c.Source,-17} {(bytes is null ? "fetch failed" : $"{bytes.Length / 1024} KB")} -> "
+                + $"{(decoded is null ? "not a picture" : $"{decoded.Width}x{decoded.Height} {stored!.Length / 1024} KB")} "
+                + $"{(sw.Elapsed - t0).TotalMilliseconds:F0} ms  {c.Keep("").Credit}");
+            Console.WriteLine($"    {c.ThumbUrl}");
+        }
         break;
     }
     case "import":

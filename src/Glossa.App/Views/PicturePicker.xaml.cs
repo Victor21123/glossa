@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -101,13 +102,28 @@ public partial class PicturePicker : UserControl
                 return;
             }
             Status.Text = Clicking;
-            var tiles = search.Found.Select(c => new Tile(c, query)).ToList();
+            var tiles = new ObservableCollection<Tile>(search.Found.Take(MeaningPictures.Count).Select(c => new Tile(c, query)));
+            var spares = new Queue<PictureCandidate>(search.Found.Skip(MeaningPictures.Count));
             Tiles.ItemsSource = tiles;
-            await Task.WhenAll(tiles.Select(async t =>
+
+            // A picture that will not load gives its place to a spare, or goes: no dead tiles to click.
+            async Task LoadAsync(Tile tile)
             {
-                var bytes = await pictures.FetchAsync(t.Candidate, cts.Token);
-                if (!cts.IsCancellationRequested) t.Take(bytes);
-            }));
+                var bytes = await pictures.FetchAsync(tile.Candidate, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                tile.Take(bytes);
+                if (tile.Ready) return;
+                if (spares.TryDequeue(out var next))
+                {
+                    var spare = new Tile(next, query);
+                    tiles[tiles.IndexOf(tile)] = spare;
+                    await LoadAsync(spare);
+                }
+                else tiles.Remove(tile);
+            }
+            await Task.WhenAll(tiles.ToList().Select(LoadAsync));
+            if (!cts.IsCancellationRequested && tiles.Count == 0)
+                Status.Text = "Картинки нашлись, но ни одна не загрузилась. Попробуйте ещё раз или другие слова.";
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {

@@ -30,13 +30,20 @@ public sealed record PictureSearch(IReadOnlyList<PictureCandidate> Found, bool O
 /// <summary>
 /// Pictures of a word's meaning (decided 2026-09-28, sources chosen to be reachable from Russia): the picture of the
 /// Wikipedia article first (it shows the thing itself), then Wikimedia Commons, then Openverse, until there are
-/// <see cref="Count"/>; no filter for sensitive pictures ("ПО для личного использования"). Each request goes out
-/// directly first and through the system proxy when that fails; once one way has failed and the other worked, the
-/// other goes first for the rest of the run.
+/// <see cref="Count"/> and <see cref="Spare"/>; no filter for sensitive pictures ("ПО для личного использования").
+/// Each request goes out directly first and through the system proxy when there is no answer; once one way has failed
+/// and the other worked, the other goes first for the rest of the run. Live 2026-09-30: 6 found in 1.6-2.2 s directly.
 /// </summary>
 public sealed class MeaningPictures(HttpClient direct, HttpClient proxied)
 {
+    /// <summary>Pictures shown to choose from.</summary>
     public const int Count = 6;
+
+    /// <summary>
+    /// Found beyond <see cref="Count"/>, to take the place of one that will not load: Openverse still lists Flickr
+    /// photos long gone (2 of 4 for "fruit bat" answered 403, live 2026-09-30).
+    /// </summary>
+    public const int Spare = 3;
 
     /// <summary>A width Wikimedia keeps ready-made thumbnails for: other widths may be refused to programs.</summary>
     private const int ThumbWidth = 500;
@@ -52,15 +59,16 @@ public sealed class MeaningPictures(HttpClient direct, HttpClient proxied)
         if (query.Length == 0) return new PictureSearch([], Offline: false);
         Func<string, int, CancellationToken, Task<IReadOnlyList<PictureCandidate>>>[] sources = [WikipediaAsync, CommonsAsync, OpenverseAsync];
         var found = new List<PictureCandidate>();
+        const int wanted = Count + Spare;
         int tried = 0, failed = 0;
         foreach (var source in sources)
         {
-            if (found.Count >= Count) break;
+            if (found.Count >= wanted) break;
             tried++;
             try
             {
-                foreach (var c in await source(query, Count - found.Count, ct).ConfigureAwait(false))
-                    if (found.Count < Count && !found.Any(f => f.ThumbUrl == c.ThumbUrl)) found.Add(c);
+                foreach (var c in await source(query, wanted - found.Count, ct).ConfigureAwait(false))
+                    if (found.Count < wanted && !found.Any(f => SamePicture(f, c))) found.Add(c);
             }
             catch (Exception e) when (IsNetwork(e, ct) || e is JsonException or InvalidOperationException or KeyNotFoundException)
             {
@@ -69,6 +77,15 @@ public sealed class MeaningPictures(HttpClient direct, HttpClient proxied)
         }
         return new PictureSearch(found, Offline: failed == tried && found.Count == 0);
     }
+
+    /// <summary>
+    /// A Wikipedia article's picture usually lives on Commons, and Commons may find it again: one file page, and one
+    /// thumbnail but for the "?utm_source=" each site adds (seen live 2026-09-30).
+    /// </summary>
+    internal static bool SamePicture(PictureCandidate a, PictureCandidate b) =>
+        a.Page is not null && a.Page == b.Page || Bare(a.ThumbUrl) == Bare(b.ThumbUrl);
+
+    private static string Bare(string url) => url.IndexOf('?') is var q and >= 0 ? url[..q] : url;
 
     /// <summary>The candidate's picture, or null when it cannot be had (its address comes from the site's answer).</summary>
     public async Task<byte[]?> FetchAsync(PictureCandidate candidate, CancellationToken ct)

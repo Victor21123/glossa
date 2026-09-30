@@ -71,21 +71,22 @@ public sealed class MeaningPicturesTests : IDisposable
     }
 
     [Fact]
-    public async Task Wikipedia_comes_first_then_commons_then_openverse_until_six()
+    public async Task Wikipedia_comes_first_then_commons_then_openverse_until_six_and_spares()
     {
         var web = new Web();
         var search = await new MeaningPictures(new HttpClient(web), new HttpClient(new Web(fail: true))).SearchAsync(" bat ", CancellationToken.None);
 
         Assert.False(search.Offline);
-        Assert.Equal(MeaningPictures.Count, search.Found.Count);
-        // Wikipedia in its search's order, Commons in its own without the picture Wikipedia gave, Openverse without Wikimedia.
+        // Wikipedia in its search's order, Commons in its own without the picture Wikipedia gave, Openverse without Wikimedia;
+        // all the sites have here is 7, fewer than six and three spares.
         Assert.Equal(new[]
         {
             "https://upload.wikimedia.org/thumb/bat-500.jpg", "https://upload.wikimedia.org/thumb/megabat-500.jpg",
             "https://upload.wikimedia.org/thumb/b-500.jpg", "https://upload.wikimedia.org/thumb/c-500.png",
             "https://api.openverse.org/v1/images/2/thumb/", "https://api.openverse.org/v1/images/3/thumb/",
+            "https://api.openverse.org/v1/images/4/thumb/",
         }, search.Found.Select(f => f.ThumbUrl));
-        Assert.Equal(new[] { "Википедия", "Википедия", "Wikimedia Commons", "Wikimedia Commons", "Openverse", "Openverse" },
+        Assert.Equal(new[] { "Википедия", "Википедия", "Wikimedia Commons", "Wikimedia Commons", "Openverse", "Openverse", "Openverse" },
             search.Found.Select(f => f.Source));
 
         var megabat = search.Found[1];
@@ -104,7 +105,7 @@ public sealed class MeaningPicturesTests : IDisposable
         var pictures = new MeaningPictures(new HttpClient(direct), new HttpClient(proxied));
 
         var search = await pictures.SearchAsync("bat", CancellationToken.None);
-        Assert.Equal(MeaningPictures.Count, search.Found.Count);
+        Assert.Equal(7, search.Found.Count);
         Assert.NotNull(await pictures.FetchAsync(search.Found[0], CancellationToken.None));
         Assert.Single(direct.Asked);
     }
@@ -130,6 +131,16 @@ public sealed class MeaningPicturesTests : IDisposable
         Assert.True(search.Offline);
         Assert.Empty(search.Found);
         Assert.Null(await pictures.FetchAsync(new PictureCandidate("Openverse", "https://x/1.jpg", null, null, null), CancellationToken.None));
+    }
+
+    [Fact]
+    public void One_file_found_by_wikipedia_and_commons_is_one_picture()
+    {
+        const string thumb = "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Fox.jpg/500px-Fox.jpg";
+        var wiki = new PictureCandidate("Википедия", thumb + "?utm_source=en.wikipedia.org", "https://commons.wikimedia.org/wiki/File:Fox.jpg", null, null);
+        Assert.True(MeaningPictures.SamePicture(wiki, wiki with { Source = "Wikimedia Commons", ThumbUrl = thumb + "?utm_source=commons.wikimedia.org" }));
+        Assert.True(MeaningPictures.SamePicture(wiki, wiki with { Page = null, ThumbUrl = thumb }));
+        Assert.False(MeaningPictures.SamePicture(wiki, new PictureCandidate("Openverse", "https://api.openverse.org/v1/images/2/thumb/", null, null, null)));
     }
 
     [Theory]
