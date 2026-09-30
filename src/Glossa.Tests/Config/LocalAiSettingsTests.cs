@@ -73,7 +73,9 @@ public class LocalAiSettingsTests
             Assert.Equal(e.Size + v.Size, e.TotalSize);
         }
         Assert.Equal(["gemma26b", "gemma12b", "light"], ModelCatalog.Items.Select(e => e.Profile));
-        Assert.NotNull(ModelCatalog.For("gemma26b")!.Vision);
+        Assert.All(ModelCatalog.Items, e => Assert.NotNull(e.Vision)); // every profile reads by sight (2026-09-30)
+        // Only the 26B read the neon menu buttons (3 of 3 against 0 and 1): the others' readings of it are marked unsure.
+        Assert.Equal(["gemma26b"], ModelCatalog.Items.Where(e => e.ReadsStylized).Select(e => e.Profile));
     }
 
     [Fact]
@@ -86,7 +88,9 @@ public class LocalAiSettingsTests
             var ai = new LocalAiSettings { Gemma26bModel = Path.Combine(dir, "my-gemma.gguf") };
             var vision = Path.Combine(dir, ModelCatalog.For("gemma26b")!.Vision!.LocalName);
             Assert.Equal(vision, ai.VisionFile("gemma26b"));
-            Assert.Null(ai.VisionFile("light")); // no sight in the catalog for it
+            ai.LightModel = Path.Combine(dir, "sub", "e4b.gguf");
+            Assert.Equal(Path.Combine(dir, "sub", ModelCatalog.For("light")!.Vision!.LocalName), ai.VisionFile("light"));
+            Assert.Null(ai.VisionFile("custom")); // a model of one's own has no sight in the catalog
             Assert.False(ai.LacksVision("gemma26b")); // no model yet: the model is what is missing
             File.WriteAllText(ai.SingleModel("gemma26b")!, "");
             Assert.True(ai.LacksVision("gemma26b"));

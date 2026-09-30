@@ -416,6 +416,9 @@ public sealed class LookupController(
 
         vm.Begin(hit, seed, lang, library.Contains(lang, seed.DictionaryForm ?? hit.Word));
         if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
+        // Sight that reads stylized text poorly (12B, E4B: neon 0-1 of 3, measured 2026-09-30): its word is marked.
+        var sightTrusted = ModelCatalog.For(s.LocalAi.Profile)?.ReadsStylized == true;
+        if (run.Seen && !sightTrusted) vm.SetRecognition(unsure: true, readFrom: null);
         popup.ShowNear(hit.Box);
         run.Card = sw.ElapsedMilliseconds;
         // A lookup counts once: the word corrected by hand (F2) is the same lookup shown again.
@@ -512,7 +515,8 @@ public sealed class LookupController(
         if (doubtful && page is not null)
         {
             WordHit? again;
-            if (VisionReading.Scrap(hit))
+            var fromLines = VisionReading.Scrap(hit);
+            if (fromLines)
             {
                 // A scrap of a stylized label (回想モード read as 回想毛): the model reads the piece around the point as
                 // lines, and its word stands in when it lies in the same line of screen (not in the same line: unconfirmed).
@@ -557,7 +561,7 @@ public sealed class LookupController(
                     if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
                     if (hit.Word != misread)
                     {
-                        vm.SetRecognition(unsure: false, readFrom: misread);
+                        vm.SetRecognition(unsure: fromLines && !sightTrusted, readFrom: misread);
                         pending.Misread = misread;
                     }
                     pending.Hit = hit;

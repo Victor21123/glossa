@@ -10,8 +10,10 @@ namespace Glossa.Core.Llm;
 /// </summary>
 /// <param name="Vision">The model's sight (its vision projector), downloaded with it: the lookup reads a doubtful word
 /// again from the picture.</param>
+/// <param name="ReadsStylized">Its sight reads stylized text (neon outlined menu buttons) as measured: a word it reads
+/// where the recognizer found none is trusted; otherwise the card marks it "Распознано неуверенно".</param>
 public sealed record ModelEntry(string Profile, string Title, string Repo, string Revision, string File, long Size, string Sha256,
-    ModelPart? Vision = null)
+    ModelPart? Vision = null, bool ReadsStylized = false)
 {
     public string Url => $"https://huggingface.co/{Repo}/resolve/{Revision}/{File}";
 
@@ -36,7 +38,10 @@ public static class ModelCatalog
     /// <summary>
     /// The models of the local profiles (test of 2026-09-29: 93%, 94% and 75% of the 62 cases). Gemma 26B's sight is
     /// the original model's projector (unsloth F16): the abliteration changed only the language weights, and with it
-    /// the model read 32 of 32 lines and 7 of 7 covered words on the recognition sets of 2026-09-29.
+    /// the model read 32 of 32 lines and 7 of 7 covered words on the recognition sets of 2026-09-29. The 12B and E4B got
+    /// theirs on 2026-09-30 (the 12B's own repository, the original E4B's projector): 7 of 7 covered words like the 26B
+    /// and faster (0.7 and 1.4 s a reading against 3.6), nothing read on 5 of 5 empty points, but neon menu buttons
+    /// 0 of 3 and 1 of 3 against 3 of 3 - so only the 26B's readings of stylized text are trusted.
     /// </summary>
     public static IReadOnlyList<ModelEntry> Items { get; } =
     [
@@ -44,13 +49,19 @@ public static class ModelCatalog
             "5d4351c2dfd4a11f36ede3c3eaa0a4595c1d150e", "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", 13418748864,
             "1cde6460e82c26afb90f63bfcb2511a654c31f90cb987d2558f4f834cfbf6978",
             new ModelPart("unsloth/gemma-4-26B-A4B-it-GGUF", "c099eb48e663fd284577b04978a94ffccb261841", "mmproj-F16.gguf", 1193058784,
-                "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f", "gemma-4-26B-A4B-mmproj-F16.gguf")),
+                "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f", "gemma-4-26B-A4B-mmproj-F16.gguf"),
+            ReadsStylized: true),
         new("gemma12b", "Gemma 4 12B heretic (Q4_K_M)", "culturerevolt/gemma-4-12b-heretic-abliterated-GGUF",
             "ca1e60be3a69f79a699ff85c9c3f97a1614e5617", "gemma-4-12b-heretic-Q4_K_M.gguf", 7381382496,
-            "6c4067ea0210d2367b2dbdd460d2dd86032a9b6e8dcbe03b83a3ea0a0a16dbee"),
+            "6c4067ea0210d2367b2dbdd460d2dd86032a9b6e8dcbe03b83a3ea0a0a16dbee",
+            new ModelPart("culturerevolt/gemma-4-12b-heretic-abliterated-GGUF", "ca1e60be3a69f79a699ff85c9c3f97a1614e5617",
+                "gemma-4-12b-heretic-mmproj-f16.gguf", 175115840,
+                "2e269f906eb15169ee9ce880ea649bd6d42d4964c21f8ede10d0d0efc738bcbb", "gemma-4-12b-heretic-mmproj-f16.gguf")),
         new("light", "Gemma 4 E4B uncensored (TrevorJS, Q4_K_M)", "TrevorJS/gemma-4-E4B-it-uncensored-GGUF",
             "771f130d4c49735ace331f68a80f7ae31387e51c", "gemma-4-E4B-it-uncensored-Q4_K_M.gguf", 5335285280,
-            "b2a89ec2df7f13440c723fb3fda2c531696cbe8e20ed2f1122f97a43aaafcb50"),
+            "b2a89ec2df7f13440c723fb3fda2c531696cbe8e20ed2f1122f97a43aaafcb50",
+            new ModelPart("unsloth/gemma-4-E4B-it-GGUF", "bfc15c382204943c3a8fff0c750b94ae2364d7a3", "mmproj-F16.gguf", 990372672,
+                "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51", "gemma-4-E4B-mmproj-F16.gguf")),
     ];
 
     public static ModelEntry? For(string profile) => Items.FirstOrDefault(e => e.Profile == profile);
