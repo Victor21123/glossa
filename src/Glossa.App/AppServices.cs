@@ -150,6 +150,11 @@ public sealed class AppServices(
 
     public void NotifyLibraryChanged() => LibraryChanged?.Invoke();
 
+    /// <summary>An action counted for the days with Glossa: the series and its calendar on «Главная» follow (any thread).</summary>
+    public event Action? ActivityChanged;
+
+    public void NotifyActivity() => ActivityChanged?.Invoke();
+
     /// <summary>
     /// «Новое слово»: the lookup pipeline without a screenshot (dictionaries at once, then the AI card). Set by the app
     /// once the lookup controller exists; returns the word's id.

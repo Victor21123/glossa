@@ -176,6 +176,7 @@ public partial class App : Application
             if (ev.PropertyName == nameof(LookupViewModel.IsSaved) && vm.IsSaved) _services.NotifyLibraryChanged();
         };
         _controller.QuoteKept += _services.NotifyLibraryChanged;
+        _controller.ActivityCounted += _services.NotifyActivity;
         // Settings apply as they change; the AI is restarted only when something it runs on changed.
         _aiState = AiState(_settings);
         _services.SettingsChanged += () =>
@@ -212,6 +213,7 @@ public partial class App : Application
         if (selftest is { } st)
         {
             _popup.Offscreen = true;
+            _controller.Counting = false;
             _ = RunSelfTestAsync(st.Cases, st.Out, st.Count, log);
             return;
         }

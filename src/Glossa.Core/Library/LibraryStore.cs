@@ -130,7 +130,7 @@ public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, s
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 10;
+    private const int SchemaVersion = 11;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -336,6 +336,37 @@ public sealed partial class LibraryStore : IDisposable
                 CREATE INDEX IF NOT EXISTS quotes_key ON quotes(text_key, app_exe);
                 CREATE INDEX IF NOT EXISTS quotes_seen ON quotes(seen_utc);
                 """);
+        }
+        if (version < 11)
+        {
+            // The days with Glossa, one series for every mode (LibraryStore.Activity.cs). The days before it come from what
+            // the library already holds: sentences looked up, study answers, quotes (first and last seen). A day is local
+            // time from 4:00, as LibraryStats.Day counts it. One transaction with the version: a second run would double them.
+            using var tx = _db.BeginTransaction();
+            Exec("""
+                CREATE TABLE activity(
+                  day TEXT NOT NULL,
+                  kind TEXT NOT NULL,
+                  count INTEGER NOT NULL,
+                  PRIMARY KEY(day, kind));
+                INSERT INTO activity(day, kind, count)
+                  SELECT day, kind, COUNT(*) FROM (
+                    SELECT date(created_utc, 'localtime', '-4 hours') AS day, 'lookup' AS kind FROM contexts
+                    UNION ALL
+                    SELECT date(created_utc, 'localtime', '-4 hours'), 'lookup' FROM words w
+                      WHERE deleted = 0 AND NOT EXISTS (SELECT 1 FROM contexts c WHERE c.word_id = w.id)
+                    UNION ALL
+                    SELECT date(answered_utc, 'localtime', '-4 hours'), 'study' FROM review_log
+                    UNION ALL
+                    SELECT date(created_utc, 'localtime', '-4 hours'), source FROM quotes
+                    UNION ALL
+                    SELECT date(seen_utc, 'localtime', '-4 hours'), source FROM quotes
+                      WHERE date(seen_utc, 'localtime', '-4 hours') <> date(created_utc, 'localtime', '-4 hours'))
+                  WHERE day IS NOT NULL
+                  GROUP BY day, kind;
+                PRAGMA user_version = 11;
+                """);
+            tx.Commit();
         }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }

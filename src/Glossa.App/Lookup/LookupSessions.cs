@@ -429,6 +429,7 @@ public sealed class LookupSessions
                     context.Choices?.Ai, show, session.Stop.Token);
                 show(text);
                 _controller.KeepQuote(still, block.Box, block.Text, text, lang, context, QuoteSource.Screen);
+                _controller.CountActivity(DayAction.Screen);
                 done++;
             }
             _frame.SetHint($"Переведено: {done}, щелчок по переводу - оригинал, Esc - вернуться в игру");

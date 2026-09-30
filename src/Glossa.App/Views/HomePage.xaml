@@ -66,7 +66,7 @@
                             <TextBlock Style="{StaticResource Note}" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
                                        Text="{Binding TranslateModeNote}" />
                             <TextBlock Style="{StaticResource Note}" Margin="0,12,0,0" MaxWidth="720" HorizontalAlignment="Left"
-                                       Text='Словарь и учёба спрятаны: в этом режиме Glossa ничего не сохраняет. Вернуть их - "Сменить режим" -> "Словарь и учёба".' />
+                                       Text='Слова не сохраняются и учёбы нет; переведённые реплики - в "Словаре" -> "Цитаты". Вернуть слова и учёбу - "Сменить режим" -> "Словарь и учёба".' />
                         </StackPanel>
                     </DockPanel>
                 </Border>
@@ -126,10 +126,12 @@
                         <ColumnDefinition /><ColumnDefinition Width="20" /><ColumnDefinition /><ColumnDefinition Width="20" />
                         <ColumnDefinition /><ColumnDefinition Width="20" /><ColumnDefinition />
                     </Grid.ColumnDefinitions>
+                    <!-- One series for every mode (decided 2026-09-30): lookups, study answers and translations all count. -->
                     <Border Style="{StaticResource Tile}">
                         <StackPanel>
-                            <TextBlock Text="ДНЕЙ ПОДРЯД С ПОИСКОМ" Style="{StaticResource StatLabel}" />
+                            <TextBlock Text="ДНЕЙ ПОДРЯД С GLOSSA" Style="{StaticResource StatLabel}" />
                             <TextBlock x:Name="Streak" Style="{StaticResource Figure}" />
+                            <TextBlock x:Name="StreakNote" FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Style="{StaticResource Tile}">
@@ -140,13 +142,13 @@
                     </Border>
                     <Border Grid.Column="4" Style="{StaticResource Tile}">
                         <StackPanel>
-                            <TextBlock Text="ПОИСКОВ ВСЕГО" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="ThirdLabel" Text="ПОИСКОВ ВСЕГО" Style="{StaticResource StatLabel}" />
                             <TextBlock x:Name="Lookups" Style="{StaticResource Figure}" />
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="6" Style="{StaticResource Tile}">
                         <StackPanel>
-                            <TextBlock Text="НЕ МОГУ ЗАПОМНИТЬ" Style="{StaticResource StatLabel}" />
+                            <TextBlock x:Name="FourthLabel" Text="НЕ МОГУ ЗАПОМНИТЬ" Style="{StaticResource StatLabel}" />
                             <TextBlock x:Name="Pinned" Style="{StaticResource Figure}" />
                         </StackPanel>
                     </Border>
@@ -161,7 +163,7 @@
                 </Grid.ColumnDefinitions>
                 <Border x:Name="HeatPanel" Style="{StaticResource SidePanel}" Margin="0,0,20,0">
                     <StackPanel>
-                        <TextBlock Text="СЛОВА ПО ДНЯМ, ПОЛГОДА" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
+                        <TextBlock Text="ДНИ С GLOSSA, ПОЛГОДА" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
                         <StackPanel Orientation="Horizontal">
                             <StackPanel Margin="0,0,10,0">
                                 <TextBlock Text="пн" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" Margin="0,0,0,20" />
@@ -176,6 +178,8 @@
                             <StackPanel x:Name="Legend" Orientation="Horizontal" />
                             <TextBlock Text="больше" FontSize="11.5" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" />
                         </StackPanel>
+                        <TextBlock x:Name="HeatNote" FontSize="11.5" Foreground="{DynamicResource Muted}" Margin="32,6,0,0" TextWrapping="Wrap" MaxWidth="560"
+                                   HorizontalAlignment="Left" />
                         <Border Height="1" Background="{DynamicResource Rule}" Margin="0,20" />
                         <TextBlock Text="ЯЗЫКИ" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
                         <StackPanel x:Name="Languages" Margin="0,0,0,-10" />
@@ -187,7 +191,7 @@
                     <Rectangle RadiusX="12" RadiusY="12" Stroke="{DynamicResource Rule}" StrokeThickness="1.5" StrokeDashArray="4 3" />
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="28">
                         <TextBlock Text="Спутник" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock Text="Здесь будет твой спутник - награда за дни подряд с учёбой." Style="{StaticResource Note}"
+                        <TextBlock Text="Здесь будет твой спутник - он растёт от дней подряд с Glossa: поиска, учёбы или перевода." Style="{StaticResource Note}"
                                    TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0" />
                     </StackPanel>
                 </Grid>

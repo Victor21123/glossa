@@ -304,6 +304,8 @@ public sealed class LookupController(
         if (ds.ShowInPopup) vm.Dictionaries = ToItems(sections);
         popup.ShowNear(hit.Box);
         run.Card = sw.ElapsedMilliseconds;
+        // A lookup counts once: the word corrected by hand (F2) is the same lookup shown again.
+        if (page is not null) CountActivity(DayAction.Lookup);
         log.Info($"lookup '{hit.Word}' [{lang}] capture {run.Capture} ms, ocr {run.Ocr} ms" +
                  (page is null ? " (spelled by the user)" : $" ({page.Elapsed.TotalMilliseconds:F0})") +
                  $", card {run.Card} ms, {sections.Count} dictionaries");
@@ -654,6 +656,7 @@ public sealed class LookupController(
         vm.ContextTranslation = translation;
         LastTranslation = (text, translation);
         KeepQuote(frame, zone, text, translation, lang, context, QuoteSource.Zone);
+        CountActivity(DayAction.Zone);
         vm.IsBusy = false;
         vm.Status = null;
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
@@ -764,6 +767,7 @@ public sealed class LookupController(
         vm.ContextTranslation = text;
         LastTranslation = (block.Text, text);
         KeepQuote(frame, block.Box, block.Text, text, lang, context, QuoteSource.Line);
+        CountActivity(DayAction.Line);
         vm.IsBusy = false;
         vm.Status = null;
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
@@ -773,6 +777,30 @@ public sealed class LookupController(
 
     /// <summary>A quote went into the library (raised off the UI thread).</summary>
     public event Action? QuoteKept;
+
+    /// <summary>An action counted for the days with Glossa (may be raised off the UI thread).</summary>
+    public event Action? ActivityCounted;
+
+    /// <summary>Off for --selftest: it runs on the user's library and must not add days to their series.</summary>
+    public bool Counting { get; set; } = true;
+
+    /// <summary>
+    /// One action for the series of days with Glossa, the same in every mode (decided 2026-09-30): a word looked up, a
+    /// line translated. Study answers count where they are saved. Never fails the lookup or translation it follows.
+    /// </summary>
+    public void CountActivity(string kind)
+    {
+        if (!Counting) return;
+        try
+        {
+            library.AddActivity(kind, DateTime.UtcNow);
+            ActivityCounted?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            log.Error("count activity", ex);
+        }
+    }
 
     /// <summary>
     /// «Цитаты» (decided 2026-09-30): a line translated in «Только перевод» is kept whole with its translation and game,

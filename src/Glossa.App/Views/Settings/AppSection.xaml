@@ -1,7 +1,8 @@
 <UserControl x:Class="Glossa.App.Views.Settings.AppSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib">
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:vm="clr-namespace:Glossa.App.ViewModels">
     <!-- Настройки → Приложение (canvas «Настройки — приложение»). Scale, moving the data folder and backups are not
          built yet and are left out. -->
     <StackPanel>
@@ -42,8 +43,18 @@
                         </ListBox>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="Статистика на главной" Tag="дни с поиском, языки, игры" Style="{StaticResource SettingRow}">
+                    <HeaderedContentControl Header="Статистика на главной" Tag="серия дней, календарь, языки" Style="{StaticResource SettingRow}">
                         <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding HomeStats}" />
+                    </HeaderedContentControl>
+
+                    <!-- One series for every mode (decided 2026-09-30): any action keeps the day, a full one is darker. -->
+                    <HeaderedContentControl Header="Полный день" Tag="для серии дней" Style="{StaticResource SettingRow}">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox ItemsSource="{Binding Source={x:Static vm:SettingsViewModel.DayGoals}}" SelectedItem="{Binding DayGoal}"
+                                      Width="90" MinHeight="34" />
+                            <TextBlock Style="{StaticResource Note}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Text="действий: поиск слова, ответ в учёбе или перевод реплики. Меньше - день всё равно держит серию, но светлее в календаре" />
+                        </StackPanel>
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Папка данных" Tag="словарь, кадры, справочники" Style="{StaticResource SettingRow}">

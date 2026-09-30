@@ -81,6 +81,12 @@ public sealed class AppSettings
     /// <summary>«Главная» shows the statistics (days in a row, lookups by day, languages, games).</summary>
     public bool HomeStats { get; set; } = true;
 
+    /// <summary>
+    /// A full day with Glossa: this many actions (words looked up, study answers, lines translated). Fewer still keep
+    /// the series and show paler (decided 2026-09-30).
+    /// </summary>
+    public int DayGoal { get; set; } = 10;
+
     /// <summary>Window theme: system (follow Windows), dark, light or disco.</summary>
     public string Theme { get; set; } = "system";
 

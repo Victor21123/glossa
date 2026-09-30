@@ -130,6 +130,18 @@ internal static class CardSnapshots
                 }, Frame(new PixelRect(245, 850, 1010, 900)));
         }
 
+        // The days with Glossa: two months of lookups, lines and answers, full and partial days, one miss a freeze covered
+        // (after a week in a row) and one break.
+        var activityNow = DateTime.UtcNow;
+        for (var back = 60; back >= 0; back--)
+        {
+            if (back is 30 or 31 or 12) continue; // a break of two days, then later one missed day the freeze covers
+            var at = activityNow.AddDays(-back);
+            var weight = (back * 7 + 3) % 13;
+            library.AddActivity(Glossa.Core.Library.DayAction.Line, at, 1 + weight);
+            if (back % 3 == 0) library.AddActivity(Glossa.Core.Library.DayAction.Lookup, at, 2 + back % 4);
+        }
+
         // «Картинка значения»: drawn stand-ins, credited as a Commons picture is; reconsider has none (it cannot be pictured).
         foreach (var (head, seed, query) in new[] { ("tsundere", 1, "tsundere anime girl"), ("shit-stained", 3, "stained coat") })
         {

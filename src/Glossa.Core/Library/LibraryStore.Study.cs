@@ -51,6 +51,7 @@ public sealed partial class LibraryStore
                 ("$id", answer.Id), ("$w", answer.WordId), ("$dir", Name(answer.Direction)), ("$at", Iso(answer.AnsweredUtc)), ("$rating", (int)answer.Rating),
                 ("$queue", Name(answer.QueueBefore)), ("$early", answer.Early ? 1 : 0), ("$before", answer.IntervalBefore),
                 ("$after", answer.IntervalAfter), ("$ease", Permille(answer.Ease)), ("$taken", answer.TakenMs));
+            CountActivity(DayAction.Study, answer.AnsweredUtc);
             tx.Commit();
         }
     }

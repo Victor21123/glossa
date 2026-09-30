@@ -41,6 +41,7 @@ public partial class HomePage : UserControl
         _services = services;
         DataContext = model;
         model.PropertyChanged += OnModelChanged;
+        services.ActivityChanged += OnActivity;
         foreach (var level in Enumerable.Range(0, 5)) Legend.Children.Add(Cell(level, null));
         Refresh();
     }
@@ -48,12 +49,29 @@ public partial class HomePage : UserControl
     public void Detach()
     {
         if (DataContext is SettingsViewModel model) model.PropertyChanged -= OnModelChanged;
+        if (_services is { } services) services.ActivityChanged -= OnActivity;
     }
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SettingsViewModel.HomeStats) or nameof(SettingsViewModel.Purpose)
-            or nameof(SettingsViewModel.TranslateMode) or "") Refresh();
+            or nameof(SettingsViewModel.TranslateMode) or nameof(SettingsViewModel.DayGoal) or "") Refresh();
+    }
+
+    private int _activityPending;
+
+    /// <summary>
+    /// An action counted (any thread, often several at once - a «Весь экран»): the series follows once, and only while
+    /// the page is on screen (it refreshes whenever it is shown anyway).
+    /// </summary>
+    private void OnActivity()
+    {
+        if (Interlocked.Exchange(ref _activityPending, 1) == 1) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            Volatile.Write(ref _activityPending, 0);
+            if (IsVisible) Refresh();
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>Everything from the dictionary and the AI as it is now (the page is shown, a word was saved).</summary>
@@ -66,27 +84,53 @@ public partial class HomePage : UserControl
         RefreshAi();
 
         // «Только перевод» hides the dictionary and study, and with them everything counted from the dictionary.
+        // «Только перевод» has no words or study: its figures are the lines translated and the quotes.
         var translate = services.Settings.Purpose == "translate";
         WordsPanel.Visibility = Shown(!translate);
         TranslatePanel.Visibility = Shown(translate);
-        Lower.Visibility = StudyPanel.Visibility = Shown(!translate);
+        StudyPanel.Visibility = Shown(!translate);
+        if (translate) TranslateCall.Text = $"{Settings.KeyCaps.Display(services.Settings.Hotkey)} - {TranslateModeName(services.Settings.TranslateMode)}";
+
+        // One series for every mode (decided 2026-09-30): words looked up, study answers and lines translated all count.
+        var day = LibraryStats.Day(now);
+        var activity = services.Library.ActivityDays(DateOnly.MinValue);
+        var goal = Math.Max(1, services.Settings.DayGoal);
+        var series = ActivityStreak.Of(activity, day, goal);
+        Stats.Visibility = HeatPanel.Visibility = Shown(services.Settings.HomeStats && activity.Count > 0);
+        Streak.Text = Days(series.Days);
+        Best.Text = Days(Math.Max(series.Best, series.Days));
+        StreakNote.Text = TodayNote(series, goal);
+        FillHeat(activity, series, day, goal);
+
         if (translate)
         {
-            Stats.Visibility = Visibility.Collapsed;
-            TranslateCall.Text = $"{Settings.KeyCaps.Display(services.Settings.Hotkey)} - {TranslateModeName(services.Settings.TranslateMode)}";
+            var quotes = services.Library.ListQuotes();
+            ThirdLabel.Text = "ПЕРЕВОДОВ ВСЕГО";
+            Lookups.Text = activity.Sum(d => d.Translations).ToString("N0", Russian);
+            FourthLabel.Text = "ЦИТАТ";
+            Pinned.Text = quotes.Count.ToString("N0", Russian);
+            Bars(Languages, quotes.GroupBy(q => q.Language).Select(g => (LanguageName(g.Key), g.Count())).OrderByDescending(x => x.Item2).ToList());
             return;
         }
 
         var words = services.Library.List();
         var stats = LibraryStats.Of(words, now, (exe, title) => GameProfiles.DisplayName(services.Settings.Games, exe, title));
         FillWords(words, stats);
-        Stats.Visibility = HeatPanel.Visibility = Shown(services.Settings.HomeStats && words.Count > 0);
-        Streak.Text = Days(stats.Streak);
-        Best.Text = Days(stats.BestStreak);
+        ThirdLabel.Text = "ПОИСКОВ ВСЕГО";
         Lookups.Text = stats.Lookups.ToString("N0", Russian);
+        FourthLabel.Text = "НЕ МОГУ ЗАПОМНИТЬ";
         Pinned.Text = stats.Pinned.ToString(Russian);
-        FillHeat(stats, LibraryStats.Day(now));
         Bars(Languages, stats.Languages.Select(l => (LanguageName(l.Language), l.Count)).ToList());
+    }
+
+    /// <summary>Under the series: how today goes, and the freezes held.</summary>
+    private static string TodayNote(ActivityStreak series, int goal)
+    {
+        var today = series.TodayFull ? "сегодня полный день"
+            : series.TodayPoints > 0 ? $"сегодня {series.TodayPoints} из {goal}"
+            : series.Days > 0 ? "сегодня пока ничего - серия ждёт"
+            : "поиск слова, учёба или перевод начнут серию";
+        return series.Freezes > 0 ? $"{today}, заморозок: {series.Freezes}" : today;
     }
 
     /// <summary>The AI's state and what it runs on (also every few seconds while the window is open).</summary>
@@ -155,23 +199,54 @@ public partial class HomePage : UserControl
         }
     }
 
-    /// <summary>Half a year of lookups, a column a week from Monday, darker for more words (ink, not the accent).</summary>
-    private void FillHeat(LibraryStats stats, DateOnly today)
+    /// <summary>
+    /// Half a year of days with Glossa, a column a week from Monday (ink, not the accent): darker for more actions, the
+    /// darkest a full day; a missed day a freeze covered is outlined.
+    /// </summary>
+    private void FillHeat(IReadOnlyList<DayActivity> activity, ActivityStreak series, DateOnly today, int goal)
     {
         Heat.Children.Clear();
+        var byDay = activity.ToDictionary(d => d.Day);
         var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
         var start = monday.AddDays(-7 * (Weeks - 1));
         for (var row = 0; row < 7; row++)
             for (var week = 0; week < Weeks; week++)
             {
                 var day = start.AddDays(week * 7 + row);
-                var count = stats.PerDay.GetValueOrDefault(day);
-                Heat.Children.Add(day > today ? new Border { Width = 16, Height = 16, Margin = new Thickness(2) }
-                    : Cell(Level(count), $"{day.ToString("d MMMM", Russian)}: {count} {Plural(count, "слово", "слова", "слов")}"));
+                var date = day.ToString("d MMMM", Russian);
+                if (day > today) Heat.Children.Add(new Border { Width = 16, Height = 16, Margin = new Thickness(2) });
+                else if (series.Frozen.Contains(day)) Heat.Children.Add(Frozen($"{date}: заморозка - серия не прервалась"));
+                else
+                {
+                    var a = byDay.GetValueOrDefault(day);
+                    var points = a?.Points ?? 0;
+                    Heat.Children.Add(Cell(Level(points, goal), points == 0 ? $"{date}: ничего"
+                        : $"{date}: {(points >= goal ? "полный день" : $"{points} из {goal}")} ({What(a!)})"));
+                }
             }
+        HeatNote.Text = $"самый тёмный - полный день, {goal} {Plural(goal, "действие", "действия", "действий")}; обведён - пропуск, который закрыла заморозка";
     }
 
-    private static int Level(int count) => count switch { 0 => 0, <= 2 => 1, <= 5 => 2, <= 9 => 3, _ => 4 };
+    /// <summary>Paler below a full day: a third, two thirds, nearly there; full days are the darkest.</summary>
+    private static int Level(int points, int goal) =>
+        points <= 0 ? 0 : points >= goal ? 4 : points * 3 < goal ? 1 : points * 3 < goal * 2 ? 2 : 3;
+
+    /// <summary>"8 переводов, 3 поиска, 1 ответ в учёбе".</summary>
+    private static string What(DayActivity a)
+    {
+        var parts = new List<string>();
+        if (a.Translations > 0) parts.Add($"{a.Translations} {Plural(a.Translations, "перевод", "перевода", "переводов")}");
+        if (a.Lookups > 0) parts.Add($"{a.Lookups} {Plural(a.Lookups, "поиск", "поиска", "поисков")}");
+        if (a.Answers > 0) parts.Add($"{a.Answers} {Plural(a.Answers, "ответ", "ответа", "ответов")} в учёбе");
+        return string.Join(", ", parts);
+    }
+
+    private static Border Frozen(string tip)
+    {
+        var cell = new Border { Width = 16, Height = 16, Margin = new Thickness(2), CornerRadius = new CornerRadius(3), ToolTip = tip, BorderThickness = new Thickness(1.5) };
+        cell.SetResourceReference(Border.BorderBrushProperty, "Ink");
+        return cell;
+    }
 
     private static Border Cell(int level, string? tip)
     {

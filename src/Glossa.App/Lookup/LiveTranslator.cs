@@ -161,6 +161,7 @@ public sealed class LiveTranslator(
                     context.Choices?.Ai, t => ui.BeginInvoke(() => _overlay?.SetText(t)), ct);
                 _ = ui.BeginInvoke(() => _overlay?.SetText(text));
                 _shown = new Shown(frame, line, text, lang, context);
+                controller.CountActivity(DayAction.Live); // a line read counts for the day, kept or not
                 log.Info($"live: [{lang}] {line.Text.Length} chars translated");
             }
         }

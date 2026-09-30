@@ -462,6 +462,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Statistics on «Главная».</summary>
     public bool HomeStats { get => S.HomeStats; set => Set(() => S.HomeStats = value); }
+    public static IReadOnlyList<int> DayGoals { get; } = [5, 10, 20, 30, 50];
+    public int DayGoal { get => S.DayGoal; set => Set(() => S.DayGoal = Math.Clamp(value, 1, 500)); }
 
     public bool DebugOcrDumps { get => S.DebugOcrDumps; set => Set(() => S.DebugOcrDumps = value); }
 
