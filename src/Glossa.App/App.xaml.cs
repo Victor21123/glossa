@@ -30,6 +30,9 @@ public partial class App : Application
     private const int HotkeyWindow = 7;
     private const int HotkeyCorrect = 8;
 
+    /// <summary>Live translation's «в цитаты» (Alt+S): held only while live translation runs.</summary>
+    private const int HotkeyQuote = 9;
+
     private readonly ThemeManager _theme = new();
     private KeyStore? _keys;
     private Speech.SpeechService? _speech;
@@ -106,8 +109,9 @@ public partial class App : Application
         if (selftest is null) _store.Save(_settings); // writes defaults so the file can be edited by hand
         else
         {
-            // The test must not save words, speak, or collide with the everyday copy's llama-server.
+            // The test must not save words or quotes, speak, or collide with the everyday copy's llama-server.
             _settings.AutoSaveWords = false;
+            _settings.Quotes.Save = false;
             _settings.Popup.AutoPlayAudio = false;
             _settings.LocalAi.BasePort += 100;
             if (Environment.GetEnvironmentVariable("GLOSSA_PRIORITY") is { Length: > 0 } priority) _settings.Performance.Priority = priority;
@@ -171,6 +175,7 @@ public partial class App : Application
         {
             if (ev.PropertyName == nameof(LookupViewModel.IsSaved) && vm.IsSaved) _services.NotifyLibraryChanged();
         };
+        _controller.QuoteKept += _services.NotifyLibraryChanged;
         // Settings apply as they change; the AI is restarted only when something it runs on changed.
         _aiState = AiState(_settings);
         _services.SettingsChanged += () =>
@@ -219,6 +224,12 @@ public partial class App : Application
         _pad.ComboPressed += _sessions.PadCombo;
         _pad.MousePressed += _sessions.Pointer;
         _sessions.Notice += text => _tray?.ShowBalloonTip(6000, "Glossa", text, WinForms.ToolTipIcon.Warning);
+        _sessions.LiveChanged += on =>
+        {
+            if (!on) _hotkeys?.Unregister(HotkeyQuote);
+            else if (_settings.Quotes.Save && _settings.Quotes.LiveHotkey.Length > 0 && _hotkeys?.Register(HotkeyQuote, _settings.Quotes.LiveHotkey) == false)
+                log.Warn($"live quote key {_settings.Quotes.LiveHotkey} is taken by another program");
+        };
         _services.RecordGamepad = _pad.Record;
         _services.CancelGamepadRecording = _pad.CancelRecording;
 
@@ -366,6 +377,7 @@ public partial class App : Application
             case HotkeyDetails: _controller?.OnDetails(); break;
             case HotkeyReveal: _popup?.RevealTranslation(); break;
             case HotkeyCorrect: StartCorrection(); break;
+            case HotkeyQuote: _sessions?.KeepLiveQuote(); break;
         }
     }
 

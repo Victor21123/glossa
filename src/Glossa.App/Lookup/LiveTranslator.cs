@@ -5,6 +5,7 @@ using Glossa.App.Games;
 using Glossa.App.Interop;
 using Glossa.App.Views;
 using Glossa.Core.Config;
+using Glossa.Core.Library;
 using Glossa.Core.Llm;
 using Glossa.Core.Logging;
 using Glossa.Core.Lookup;
@@ -30,11 +31,39 @@ public sealed class LiveTranslator(
     /// <summary>Something the user should know (it stopped, the AI is missing).</summary>
     public event Action<string>? Notice;
 
+    /// <summary>On or off (on the UI thread).</summary>
+    public event Action<bool>? RunningChanged;
+
+    /// <summary>The subtitle on screen with what it came from, for its quote key; null before the first line.</summary>
+    private volatile Shown? _shown;
+
+    private sealed record Shown(CapturedFrame Frame, TextBlock Line, string Translation, string Language, LookupContext Context);
+
+    /// <summary>
+    /// Live subtitles are not kept by themselves (hundreds an evening, decided 2026-09-30); its key keeps the one on
+    /// screen, and the subtitle says so for a moment.
+    /// </summary>
+    public void KeepCurrent()
+    {
+        if (!Running || _shown is not { } shown) return;
+        controller.KeepQuote(shown.Frame, shown.Line.Box, shown.Line.Text, shown.Translation, shown.Language, shown.Context, QuoteSource.Live);
+        _overlay?.SetCaption("СОХРАНЕНО В ЦИТАТЫ");
+        var restore = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        restore.Tick += (_, _) =>
+        {
+            restore.Stop();
+            if (_shown == shown) _overlay?.SetCaption("ПЕРЕВОД");
+        };
+        restore.Start();
+    }
+
     public void Start(GameWindow game, LookupContext context, string cjk)
     {
         Stop();
         _overlay ??= new SubtitleOverlay();
+        _shown = null;
         var cts = _cts = new CancellationTokenSource();
+        RunningChanged?.Invoke(true);
         var hint = new PixelRect(game.Bounds.Left + game.Bounds.Width * 0.1, game.Bounds.Bottom - 40, game.Bounds.Right - game.Bounds.Width * 0.1, game.Bounds.Bottom);
         _overlay.ShowFor(hint, game.Bounds, "ЖИВОЙ ПЕРЕВОД", $"Включён. Новые реплики появятся здесь; {settings().Hotkey} - выключить.");
         log.Info($"live translation on: {game.ExeName}");
@@ -45,9 +74,11 @@ public sealed class LiveTranslator(
     {
         if (_cts is not { } cts) return;
         _cts = null;
+        _shown = null;
         cts.Cancel();
         _overlay?.Conceal();
         log.Info("live translation off");
+        RunningChanged?.Invoke(false);
     }
 
     /// <summary>Stops only the run it belongs to: a newer one started meanwhile keeps going.</summary>
@@ -122,10 +153,12 @@ public sealed class LiveTranslator(
                 if (watcher.NewLine(TextBlocks.Of(page), b => Languages.TargetFor(Lang(b), s.NativeLanguage)) is not { } line) continue;
 
                 var lang = Lang(line);
+                _shown = null; // a line still translating is not the one to keep
                 ui.Invoke(() => _overlay?.ShowFor(line.Box, bounds, "ПЕРЕВОД", "..."));
                 var (text, _) = await controller.TranslateTextAsync(line.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),
                     context.Choices?.Ai, t => ui.BeginInvoke(() => _overlay?.SetText(t)), ct);
                 _ = ui.BeginInvoke(() => _overlay?.SetText(text));
+                _shown = new Shown(frame, line, text, lang, context);
                 log.Info($"live: [{lang}] {line.Text.Length} chars translated");
             }
         }

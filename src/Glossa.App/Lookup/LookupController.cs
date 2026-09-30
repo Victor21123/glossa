@@ -653,6 +653,7 @@ public sealed class LookupController(
         var (translation, model) = await TranslateTextAsync(text, lang, target, context.Choices?.Ai, t => vm.ContextTranslation = t, ct);
         vm.ContextTranslation = translation;
         LastTranslation = (text, translation);
+        KeepQuote(frame, zone, text, translation, lang, context, QuoteSource.Zone);
         vm.IsBusy = false;
         vm.Status = null;
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
@@ -762,11 +763,52 @@ public sealed class LookupController(
         var (text, model) = await TranslateTextAsync(block.Text, lang, target, context.Choices?.Ai, t => vm.ContextTranslation = t, ct);
         vm.ContextTranslation = text;
         LastTranslation = (block.Text, text);
+        KeepQuote(frame, block.Box, block.Text, text, lang, context, QuoteSource.Line);
         vm.IsBusy = false;
         vm.Status = null;
         vm.Timing = string.Format(Russian, "ИИ {0:0.0} с, {1}", sw.Elapsed.TotalSeconds, model);
         Report(context.Trigger, string.Format(Russian, "перевод реплики, {0:0.0} с", sw.Elapsed.TotalSeconds), ok: true, sw.Elapsed.TotalSeconds,
             model, new LookupStages(0, tOcr, tOcr, tCard, null, sw.ElapsedMilliseconds));
+    }
+
+    /// <summary>A quote went into the library (raised off the UI thread).</summary>
+    public event Action? QuoteKept;
+
+    /// <summary>
+    /// «Цитаты» (decided 2026-09-30): a line translated in «Только перевод» is kept whole with its translation and game,
+    /// and the frame downscaled to 1280 px when wanted; the same line again only counts. It runs beside the translation
+    /// (the frame takes ~30-50 ms to encode) and never fails it: a quote that cannot be kept is only logged.
+    /// </summary>
+    /// <param name="box">The text on screen, in desktop pixels.</param>
+    public void KeepQuote(CapturedFrame? frame, PixelRect box, string text, string translation, string lang, LookupContext context,
+        string source)
+    {
+        var s = settings().Quotes;
+        if (!s.Save || string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(translation)) return;
+        var quote = new Quote
+        {
+            Language = lang, Text = text.Trim(), Translation = translation.Trim(), Source = source,
+            AppExe = string.IsNullOrEmpty(context.Exe) ? null : context.Exe, WindowTitle = string.IsNullOrEmpty(context.Title) ? null : context.Title,
+        };
+        var withFrame = s.SaveFrames && frame is not null;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                library.RecordQuote(quote, !withFrame ? null : () =>
+                {
+                    var (file, scale) = ShotStore.SaveQuoteFrame(DataPaths.Root, frame!.Bgra, frame.Width, frame.Height, frame.Stride);
+                    var b = frame.Bounds;
+                    return (file, new PixelRect((box.Left - b.Left) * scale, (box.Top - b.Top) * scale, (box.Right - b.Left) * scale,
+                        (box.Bottom - b.Top) * scale));
+                });
+                QuoteKept?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                log.Error("keep quote", ex); // a side effect: the translation on screen stays as it is
+            }
+        });
     }
 
     /// <summary>

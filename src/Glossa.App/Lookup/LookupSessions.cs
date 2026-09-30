@@ -75,6 +75,7 @@ public sealed class LookupSessions
         _saved = saved;
         _live = new LiveTranslator(settings, capture, ocr, controller, Dispatcher.CurrentDispatcher, log);
         _live.Notice += text => Notice?.Invoke(text);
+        _live.RunningChanged += on => LiveChanged?.Invoke(on);
         _settings = settings;
         _games = games;
         _capture = capture;
@@ -92,6 +93,12 @@ public sealed class LookupSessions
 
     /// <summary>Something the user should know once (a game in exclusive full screen, a pause that was refused).</summary>
     public event Action<string>? Notice;
+
+    /// <summary>Live translation went on or off: its quote key is held only while it runs.</summary>
+    public event Action<bool>? LiveChanged;
+
+    /// <summary>The live subtitle on screen goes to the quotes (its key, Alt+S by default).</summary>
+    public void KeepLiveQuote() => _live.KeepCurrent();
 
     public bool FrameOpen => _session?.Still is not null;
 
@@ -419,6 +426,7 @@ public sealed class LookupSessions
                 var (text, _) = await _controller.TranslateTextAsync(block.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),
                     context.Choices?.Ai, show, session.Stop.Token);
                 show(text);
+                _controller.KeepQuote(still, block.Box, block.Text, text, lang, context, QuoteSource.Screen);
                 done++;
             }
             _frame.SetHint($"Переведено: {done}, щелчок по переводу - оригинал, Esc - вернуться в игру");

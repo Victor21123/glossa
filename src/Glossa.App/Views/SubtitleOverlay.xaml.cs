@@ -43,6 +43,9 @@ public partial class SubtitleOverlay : Window
         Place();
     }
 
+    /// <summary>The line above the subtitle ("ПЕРЕВОД", or for a moment "СОХРАНЕНО В ЦИТАТЫ").</summary>
+    public void SetCaption(string caption) => Caption.Text = caption;
+
     /// <summary>The translation as it streams in.</summary>
     public void SetText(string text)
     {
