@@ -388,6 +388,21 @@ public sealed class SettingsViewModel : ObservableObject
     public bool StudyBackLineTranslation { get => S.Study.BackLineTranslation; set => Set(() => S.Study.BackLineTranslation = value); }
     public bool StudySpeakOnFlip { get => S.Study.SpeakOnFlip; set => Set(() => S.Study.SpeakOnFlip = value); }
 
+    public bool StudyReminders { get => S.Study.Reminders; set => Set(() => S.Study.Reminders = value); }
+
+    /// <summary>The two evening times ("18:00", "20:00"), as the lists name them.</summary>
+    public string StudyReminderFirst { get => ReminderAt(0, "18:00"); set => Set(() => SetReminderAt(0, value)); }
+    public string StudyReminderSecond { get => ReminderAt(1, "20:00"); set => Set(() => SetReminderAt(1, value)); }
+
+    private string ReminderAt(int i, string fallback) => S.Study.ReminderTimes is { } t && t.Count > i ? t[i] : fallback;
+
+    private void SetReminderAt(int i, string value)
+    {
+        var times = new List<string> { ReminderAt(0, "18:00"), ReminderAt(1, "20:00") };
+        times[i] = value;
+        S.Study.ReminderTimes = times;
+    }
+
     // «Дополнительно»: rounded on the way out, so a float setting finds its double preset in the list (2.3f is not 2.3).
     public double StudyStartingEase { get => Math.Round(S.Study.StartingEase, 2); set => Set(() => S.Study.StartingEase = (float)value); }
     public double StudyEasyBonus { get => Math.Round(S.Study.EasyBonus, 2); set => Set(() => S.Study.EasyBonus = (float)value); }

@@ -225,6 +225,13 @@ public partial class App : Application
         _hotkeys = new HotkeyManager();
         _hotkeys.Pressed += OnHotkey;
         _tray = CreateTray();
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            if (_reminderBalloon) ShowMain(MainTab.Study);
+        };
+        _tray.BalloonTipClosed += (_, _) => _reminderBalloon = false;
+        _reminders.Tick += (_, _) => CheckReminders();
+        _reminders.Start();
         if (!_hotkeys.Register(HotkeyLookup, _settings.Hotkey))
             _tray.ShowBalloonTip(5000, "Glossa", $"Не удалось занять {_settings.Hotkey} - клавиша занята другой программой. Смените её в настройках.", WinForms.ToolTipIcon.Warning);
         else
@@ -359,6 +366,41 @@ public partial class App : Application
             case HotkeyDetails: _controller?.OnDetails(); break;
             case HotkeyReveal: _popup?.RevealTranslation(); break;
             case HotkeyCorrect: StartCorrection(); break;
+        }
+    }
+
+    private readonly System.Windows.Threading.DispatcherTimer _reminders = new() { Interval = TimeSpan.FromMinutes(1) };
+    private DateTime? _reminderShown;
+    private bool _reminderBalloon;
+
+    /// <summary>
+    /// The evening reminders (Настройки → Учёба): a tray notice near 18:00 and 20:00 on a day with nothing studied and
+    /// cards waiting; a click on it opens «Учёба». Not in «Только перевод», where there is no study.
+    /// </summary>
+    private void CheckReminders()
+    {
+        try
+        {
+            if (_tray is null || _library is null || _settings.Purpose == "translate") return;
+            var times = _settings.Study.ReminderSchedule();
+            var local = DateTime.Now;
+            // Outside every reminder's window nothing is read from the library.
+            if (!times.Any(t => local >= local.Date + t.ToTimeSpan() && local < local.Date + t.ToTimeSpan() + Glossa.Core.Study.StudyReminders.Window))
+                return;
+            var now = DateTime.UtcNow;
+            var clock = Glossa.Core.Study.StudyClock.Local;
+            var today = clock.Day(now);
+            var answered = _library.Answers(now.AddDays(-2)).Where(a => clock.Day(a.AnsweredUtc) == today).ToList();
+            var study = _settings.Study;
+            var plan = Glossa.Core.Study.SessionBuilder.Build(_library.List(), _library.ReviewStates(), answered, study.Limits(), study.Config(), clock, now);
+            if (Glossa.Core.Study.StudyReminders.Due(local, times, _reminderShown, answered.Count > 0, plan.Cards.Count) is null) return;
+            _reminderShown = local;
+            _reminderBalloon = true;
+            _tray.ShowBalloonTip(8000, "Glossa", Glossa.Core.Study.StudyReminders.Text(plan.Cards.Count), WinForms.ToolTipIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn($"reminder: {ex.Message}");
         }
     }
 

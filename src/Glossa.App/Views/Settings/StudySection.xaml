@@ -149,6 +149,26 @@
                         </WrapPanel>
                     </HeaderedContentControl>
 
+                    <HeaderedContentControl Header="Напоминания" Tag="по часам компьютера" Style="{StaticResource SettingRowTop}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding StudyReminders}" VerticalAlignment="Center" />
+                                <ComboBox Width="100" Margin="16,0,0,0" SelectedValuePath="Content" SelectedValue="{Binding StudyReminderFirst}"
+                                          IsEnabled="{Binding StudyReminders}">
+                                    <ComboBoxItem Content="17:00" /><ComboBoxItem Content="18:00" /><ComboBoxItem Content="19:00" />
+                                    <ComboBoxItem Content="20:00" /><ComboBoxItem Content="21:00" /><ComboBoxItem Content="22:00" />
+                                </ComboBox>
+                                <ComboBox Width="100" Margin="10,0,0,0" SelectedValuePath="Content" SelectedValue="{Binding StudyReminderSecond}"
+                                          IsEnabled="{Binding StudyReminders}">
+                                    <ComboBoxItem Content="18:00" /><ComboBoxItem Content="19:00" /><ComboBoxItem Content="20:00" />
+                                    <ComboBoxItem Content="21:00" /><ComboBoxItem Content="22:00" /><ComboBoxItem Content="23:00" />
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="уведомление в трее, если за день ещё не занимался и есть что повторять; щелчок открывает учёбу" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
                     <HeaderedContentControl Header="Дополнительно" Tag="расписание Anki" Style="{StaticResource SettingRowTop}">
                         <StackPanel>
                             <Button x:Name="MoreButton" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Content="Показать"
