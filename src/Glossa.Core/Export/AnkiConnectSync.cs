@@ -44,10 +44,12 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
 
             var image = options.IncludeImages ? AnkiNoteType.CardImage(dataRoot, w) : null;
             var audio = options.Audio?.Invoke(w);
+            var meaning = options.IncludeMeaningPictures ? AnkiNoteType.MeaningImage(dataRoot, w) : null;
             if (image is not null) await StoreMediaAsync(AnkiNoteType.ImageFileName(w), image, ct).ConfigureAwait(false);
             if (audio is not null) await StoreMediaAsync(AnkiNoteType.AudioFileName(w), audio, ct).ConfigureAwait(false);
+            if (meaning is not null) await StoreMediaAsync(AnkiNoteType.MeaningImageFileName(w)!, meaning, ct).ConfigureAwait(false);
 
-            var values = AnkiNoteType.FieldValues(w, image is not null, audio is not null, options.ReverseCards);
+            var values = AnkiNoteType.FieldValues(w, image is not null, audio is not null, options.ReverseCards, meaning is not null);
             var fields = new JsonObject();
             for (var f = 0; f < AnkiNoteType.Fields.Length; f++) fields[AnkiNoteType.Fields[f]] = values[f];
 
@@ -98,7 +100,11 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
     private async Task EnsureModelAsync(CancellationToken ct)
     {
         var names = await InvokeAsync("modelNames", null, ct).ConfigureAwait(false) as JsonArray;
-        if (names?.Any(n => n?.GetValue<string>() == AnkiNoteType.Name) == true) return;
+        if (names?.Any(n => n?.GetValue<string>() == AnkiNoteType.Name) == true)
+        {
+            await UpgradeModelAsync(ct).ConfigureAwait(false);
+            return;
+        }
 
         var templates = new JsonArray();
         foreach (var t in AnkiNoteType.Templates)
@@ -112,6 +118,40 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
             ["css"] = AnkiNoteType.Css,
             ["isCloze"] = false,
             ["cardTemplates"] = templates,
+        }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A note type made by an older Glossa gets the fields it lacks, at the end, then this version's templates and
+    /// styling (they show the new fields). Its notes and their review history stay as they are. Templates are left
+    /// alone when no field was missing: the user may have changed them in Anki.
+    /// </summary>
+    private async Task UpgradeModelAsync(CancellationToken ct)
+    {
+        var present = await InvokeAsync("modelFieldNames", new JsonObject { ["modelName"] = AnkiNoteType.Name }, ct).ConfigureAwait(false) as JsonArray;
+        var missing = AnkiNoteType.Added(present?.Select(n => n!.GetValue<string>()) ?? []);
+        if (missing.Count == 0) return;
+        foreach (var field in missing)
+        {
+            try
+            {
+                await InvokeAsync("modelFieldAdd", new JsonObject { ["modelName"] = AnkiNoteType.Name, ["fieldName"] = field }, ct).ConfigureAwait(false);
+            }
+            catch (AnkiConnectException e) when (e.Message.Contains("unsupported action", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new AnkiConnectException(
+                    "AnkiConnect не умеет добавлять поля в тип заметки - обновите его в Anki: Инструменты -> Дополнения -> Проверить обновления.");
+            }
+        }
+        var templates = new JsonObject();
+        foreach (var t in AnkiNoteType.Templates) templates[t.Name] = new JsonObject { ["Front"] = t.Front, ["Back"] = t.Back };
+        await InvokeAsync("updateModelTemplates", new JsonObject
+        {
+            ["model"] = new JsonObject { ["name"] = AnkiNoteType.Name, ["templates"] = templates },
+        }, ct).ConfigureAwait(false);
+        await InvokeAsync("updateModelStyling", new JsonObject
+        {
+            ["model"] = new JsonObject { ["name"] = AnkiNoteType.Name, ["css"] = AnkiNoteType.Css },
         }, ct).ConfigureAwait(false);
     }
 

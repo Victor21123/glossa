@@ -66,6 +66,7 @@ public partial class LibrarySection : UserControl
         BackContext.Text = w.ContextTranslation ?? "";
         BackMeta.Text = string.Join(", ", new[] { w.Level, w.PartOfSpeech }.Where(x => !string.IsNullOrEmpty(x)));
         PreviewNote.Text = "Так заметка с последним словом выглядит в Anki с нынешними галочками.";
+        ShowPicture(w);
 
         if (w.ShotFile is { } file && File.Exists(Path.Combine(DataPaths.Root, file)))
         {
@@ -76,6 +77,15 @@ public partial class LibrarySection : UserControl
             _shot.EndInit();
             FaceImage.Source = _shot;
         }
+    }
+
+    /// <summary>The meaning picture on the note's back when the word has one («Картинка значения» shows or hides it).</summary>
+    private void ShowPicture(Glossa.Core.Library.SavedWord w)
+    {
+        var image = ImageFiles.Load(w.Picture is { } p ? Path.Combine(DataPaths.Root, p.File) : null);
+        BackPictureImage.Source = image;
+        BackPictureCredit.Text = w.Picture?.Credit;
+        BackPicture.Visibility = image is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The frame zoomed in on the word, the word ringed, as on the note's front.</summary>

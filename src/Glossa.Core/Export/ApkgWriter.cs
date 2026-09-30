@@ -6,7 +6,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Glossa.Core.Export;
 
-public sealed record AnkiExportOptions(bool ReverseCards = false, bool IncludeImages = true, Func<SavedWord, byte[]?>? Audio = null);
+/// <param name="IncludeImages">The game frame with the word ringed.</param>
+/// <param name="IncludeMeaningPictures">The picture of the meaning («Картинка значения»), with its credit.</param>
+public sealed record AnkiExportOptions(bool ReverseCards = false, bool IncludeImages = true, Func<SavedWord, byte[]?>? Audio = null,
+    bool IncludeMeaningPictures = true);
 
 /// <summary>
 /// Writes an Anki package (.apkg): a legacy collection.anki2 SQLite database plus media, the format every
@@ -45,10 +48,12 @@ public static class ApkgWriter
                     progress?.Report($"Карточки: {++i} / {words.Count}");
                     var image = options.IncludeImages ? AnkiNoteType.CardImage(dataRoot, w) : null;
                     var audio = options.Audio?.Invoke(w);
+                    var meaning = options.IncludeMeaningPictures ? AnkiNoteType.MeaningImage(dataRoot, w) : null;
                     if (image is not null) media.Add((AnkiNoteType.ImageFileName(w), image));
                     if (audio is not null) media.Add((AnkiNoteType.AudioFileName(w), audio));
+                    if (meaning is not null) media.Add((AnkiNoteType.MeaningImageFileName(w)!, meaning));
 
-                    var fields = AnkiNoteType.FieldValues(w, image is not null, audio is not null, options.ReverseCards);
+                    var fields = AnkiNoteType.FieldValues(w, image is not null, audio is not null, options.ReverseCards, meaning is not null);
                     var noteId = nextId++;
                     Exec(db, "INSERT INTO notes VALUES($id,$guid,$mid,$mod,-1,$tags,$flds,$sfld,0,0,'')",
                         ("$id", noteId), ("$guid", w.Id), ("$mid", AnkiNoteType.ModelId), ("$mod", ts),

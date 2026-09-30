@@ -7,8 +7,10 @@ using SkiaSharp;
 namespace Glossa.Core.Export;
 
 /// <summary>
-/// The "Glossa Word" note type shared by the .apkg export and AnkiConnect sync. The name carries a version:
-/// Anki cannot change the fields of an existing note type, so a new layout means a new name.
+/// The "Glossa Word v1" note type shared by the .apkg export and AnkiConnect sync. Fields are only ever added, at the
+/// end: a sync adds the missing ones to the note type already in Anki (<see cref="Added"/>), so its notes keep their
+/// review history (decided 2026-09-30, "Дописать поля в старый тип"); an .apkg imported over an older one needs
+/// Anki's "merge note types". The name stays: it is how the notes are found.
 /// </summary>
 public static class AnkiNoteType
 {
@@ -22,7 +24,16 @@ public static class AnkiNoteType
         "GlossaId", "Headword", "Reading", "Translation", "Definition", "Context", "ContextTranslation",
         "Level", "PartOfSpeech", "Synonyms", "Forms", "Components", "Explanation", "Image", "Audio",
         "Language", "Source", "Reverse",
+        // Added 2026-09-30: the register, «контекст сцены», the meaning picture and its credit.
+        "Register", "Scene", "MeaningImage", "MeaningCredit",
     ];
+
+    /// <summary>The fields a note type made by an older Glossa lacks, in the order to add them.</summary>
+    public static IReadOnlyList<string> Added(IEnumerable<string> present)
+    {
+        var have = present.ToHashSet(StringComparer.Ordinal);
+        return Fields.Where(f => !have.Contains(f)).ToList();
+    }
 
     public const string Css = """
         .card { font-family: "Segoe UI", "Yu Gothic UI", "Microsoft YaHei UI", sans-serif; font-size: 20px;
@@ -38,6 +49,13 @@ public static class AnkiNoteType
         .def { margin-top: 6px; }
         .ctxtr { color: #6f757b; font-size: 17px; margin: 10px auto; max-width: 720px; }
         .badge { display: inline-block; font-size: 13px; padding: 1px 7px; border-radius: 4px; background: #2e6ba8; color: #fff; }
+        .reg { display: inline-block; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 9px; color: #c0392b;
+               border: 1px solid #c0392b; vertical-align: middle; }
+        .scene { font-size: 16px; margin: 8px auto; max-width: 720px; }
+        .scene .label, .credit { color: #8a8f98; }
+        .meaning { margin-top: 12px; }
+        .meaning img { max-width: 320px; max-height: 240px; border-radius: 8px; }
+        .credit { font-size: 12px; margin-top: 4px; }
         details { margin-top: 12px; font-size: 16px; text-align: left; max-width: 720px; margin-left: auto; margin-right: auto; }
         """;
 
@@ -56,9 +74,11 @@ public static class AnkiNoteType
             {{FrontSide}}
             <hr id="answer">
             <div class="reading">{{Reading}}</div>
-            <div class="tr">{{Translation}}</div>
+            <div class="tr">{{Translation}}{{#Register}} <span class="reg">{{Register}}</span>{{/Register}}</div>
+            {{#Scene}}<div class="scene"><span class="label">контекст сцены:</span> {{Scene}}</div>{{/Scene}}
             <div class="def">{{Definition}}</div>
             <div class="ctxtr">{{ContextTranslation}}</div>
+            {{#MeaningImage}}<div class="meaning">{{MeaningImage}}<div class="credit">{{MeaningCredit}}</div></div>{{/MeaningImage}}
             <details><summary>Подробнее</summary>
             {{#Level}}<span class="badge">{{Level}}</span> {{/Level}}{{PartOfSpeech}}<br>
             {{#Synonyms}}Синонимы: {{Synonyms}}<br>{{/Synonyms}}
@@ -84,6 +104,7 @@ public static class AnkiNoteType
             {{Audio}}
             <div class="img">{{Image}}</div>
             <div class="ctx">{{Context}}</div>
+            {{#MeaningImage}}<div class="meaning">{{MeaningImage}}<div class="credit">{{MeaningCredit}}</div></div>{{/MeaningImage}}
             """),
     ];
 
@@ -105,8 +126,29 @@ public static class AnkiNoteType
 
     public static string AudioFileName(SavedWord w) => $"glossa_{w.Id}.wav";
 
+    /// <summary>
+    /// The meaning picture under its own file name (each chosen picture has a new one): a replaced picture never
+    /// overwrites the old one in Anki's media, and the note simply points to the new file.
+    /// </summary>
+    public static string? MeaningImageFileName(SavedWord w) => w.Picture is { } p ? "glossa_" + Path.GetFileName(p.File) : null;
+
+    /// <summary>The meaning picture's JPEG, or null when the word has none or its file is gone.</summary>
+    public static byte[]? MeaningImage(string dataRoot, SavedWord w)
+    {
+        if (w.Picture is not { } p) return null;
+        var path = Path.Combine(dataRoot, p.File);
+        try
+        {
+            return File.Exists(path) ? File.ReadAllBytes(path) : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Field values in <see cref="Fields"/> order. HTML-escapes text; the context word is bolded.</summary>
-    public static string[] FieldValues(SavedWord w, bool hasImage, bool hasAudio, bool reverse) =>
+    public static string[] FieldValues(SavedWord w, bool hasImage, bool hasAudio, bool reverse, bool hasMeaning = false) =>
     [
         w.Id,
         E(w.Headword),
@@ -126,6 +168,10 @@ public static class AnkiNoteType
         w.Language,
         E(string.Join(" · ", new[] { w.WindowTitle, w.AppExe }.Where(s => !string.IsNullOrWhiteSpace(s)))),
         reverse ? "y" : "",
+        E(Registers.RussianLabel(w.Register)),
+        E(w.UsageNote),
+        hasMeaning ? $"<img src=\"{MeaningImageFileName(w)}\">" : "",
+        hasMeaning ? E(w.Picture?.Credit) : "",
     ];
 
     private static string ContextHtml(SavedWord w)

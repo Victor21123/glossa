@@ -288,6 +288,7 @@ public sealed class SettingsViewModel : ObservableObject
     public bool AutoSaveWords { get => S.AutoSaveWords; set => Set(() => S.AutoSaveWords = value); }
 
     public bool AnkiImages { get => S.Anki.IncludeImages; set => Set(() => S.Anki.IncludeImages = value); }
+    public bool AnkiMeaningPictures { get => S.Anki.IncludeMeaningPictures; set => Set(() => S.Anki.IncludeMeaningPictures = value); }
 
     public bool AnkiAudio { get => S.Anki.IncludeAudio; set => Set(() => S.Anki.IncludeAudio = value); }
 

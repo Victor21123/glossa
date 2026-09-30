@@ -33,9 +33,10 @@ public sealed class ExportTests : IDisposable
             File.WriteAllBytes(Path.Combine(root, "shots", "scene.jpg"), data.ToArray());
         }
 
+        // Fixed ids, as a library's are: two exports of the sample are the same notes to Anki (tools\validate_apkg.py).
         var en = new SavedWord
         {
-            Language = "en", Word = "business", DictionaryForm = "business", Reading = "/ˈbɪznɪs/", Level = "B1",
+            Id = "0e5a0000000000000000000000000001", Language = "en", Word = "business", DictionaryForm = "business", Reading = "/ˈbɪznɪs/", Level = "B1",
             PartOfSpeech = "noun", Translation = "дело", Definition = "the purpose of your visit",
             Context = "State your business, stranger.", ContextOffset = 11,
             ContextTranslation = "Скажите, в чём дело, незнакомец.", Synonyms = ["purpose", "affair"],
@@ -44,7 +45,7 @@ public sealed class ExportTests : IDisposable
         };
         var ja = new SavedWord
         {
-            Language = "ja", Word = "薄暗い", DictionaryForm = "薄暗い", Reading = "うすぐらい", Level = "JLPT N2",
+            Id = "0e5a0000000000000000000000000002", Language = "ja", Word = "薄暗い", DictionaryForm = "薄暗い", Reading = "うすぐらい", Level = "JLPT N2",
             Translation = "сумрачный", Context = "薄暗い所で泣いていた。", ContextOffset = 0,
             Components = [new CardComponent("薄", null, "тонкий"), new CardComponent("暗", null, "тёмный")],
         };
@@ -55,6 +56,14 @@ public sealed class ExportTests : IDisposable
     public void Apkg_contains_collection_notes_cards_and_media()
     {
         var (root, words) = Sample();
+        // The English word also has a meaning picture, so the copy below lets the real Anki show one.
+        Directory.CreateDirectory(Path.Combine(root, "images"));
+        File.Copy(Path.Combine(root, "shots", "scene.jpg"), Path.Combine(root, "images", "business-1.jpg"));
+        words[0] = words[0] with
+        {
+            Register = "informal", UsageNote = "вежливый вопрос с угрозой",
+            Picture = new Glossa.Core.Pictures.MeaningPicture("images/business-1.jpg", "Wikimedia Commons", "Ann", "CC BY-SA 4.0"),
+        };
         var apkg = Path.Combine(root, "out.apkg");
 
         ApkgWriter.Write(apkg, root, words, new AnkiExportOptions(ReverseCards: true));
@@ -62,8 +71,8 @@ public sealed class ExportTests : IDisposable
         using var zip = ZipFile.OpenRead(apkg);
         Assert.NotNull(zip.GetEntry("collection.anki2"));
         var media = JsonNode.Parse(new StreamReader(zip.GetEntry("media")!.Open()).ReadToEnd())!.AsObject();
-        Assert.Single(media); // only the English word has a screenshot
-        Assert.Equal($"glossa_{words[0].Id}.jpg", media["0"]!.GetValue<string>());
+        // Only the English word has a screenshot and a meaning picture.
+        Assert.Equal(new[] { $"glossa_{words[0].Id}.jpg", "glossa_business-1.jpg" }, media.Select(m => m.Value!.GetValue<string>()));
 
         var db = Path.Combine(root, "check.anki2");
         zip.GetEntry("collection.anki2")!.ExtractToFile(db);
@@ -122,6 +131,72 @@ public sealed class ExportTests : IDisposable
         Assert.DoesNotContain("deleteNotes", fake.Actions);
     }
 
+    /// <summary>The fields of "Glossa Word v1" before 2026-09-30.</summary>
+    private static readonly string[] FirstFields = AnkiNoteType.Fields[..18];
+
+    [Fact]
+    public async Task A_note_type_from_an_older_glossa_gets_the_new_fields_and_templates_and_keeps_its_notes()
+    {
+        var (root, words) = Sample();
+        var fake = new FakeAnki(existingGlossaId: words[1].Id, modelFields: FirstFields);
+
+        await new AnkiConnectSync(new HttpClient(fake)).SyncAsync(root, words, [], new AnkiExportOptions(), null, CancellationToken.None);
+
+        Assert.DoesNotContain("createModel", fake.Actions);
+        Assert.Equal(new[] { "Register", "Scene", "MeaningImage", "MeaningCredit" },
+            fake.Requests.Where(r => r["action"]!.GetValue<string>() == "modelFieldAdd").Select(r => r["params"]!["fieldName"]!.GetValue<string>()));
+        var templates = Assert.Single(fake.Requests, r => r["action"]!.GetValue<string>() == "updateModelTemplates");
+        Assert.Contains("{{MeaningImage}}", templates["params"]!["model"]!["templates"]![AnkiNoteType.Templates[0].Name]!["Back"]!.GetValue<string>());
+        Assert.Contains("updateModelStyling", fake.Actions);
+        Assert.Contains("updateNoteFields", fake.Actions); // the old note is updated in place, not added again
+
+        // Up to date: nothing is added and the user's own template changes stay.
+        var current = new FakeAnki(existingGlossaId: words[1].Id, modelFields: AnkiNoteType.Fields);
+        await new AnkiConnectSync(new HttpClient(current)).SyncAsync(root, words, [], new AnkiExportOptions(), null, CancellationToken.None);
+        Assert.DoesNotContain("modelFieldAdd", current.Actions);
+        Assert.DoesNotContain("updateModelTemplates", current.Actions);
+    }
+
+    [Fact]
+    public async Task An_ankiconnect_that_cannot_add_fields_says_to_update_it()
+    {
+        var (root, words) = Sample();
+        var fake = new FakeAnki(existingGlossaId: words[1].Id, modelFields: FirstFields, unsupported: "modelFieldAdd");
+        var e = await Assert.ThrowsAsync<AnkiConnectException>(() =>
+            new AnkiConnectSync(new HttpClient(fake)).SyncAsync(root, words, [], new AnkiExportOptions(), null, CancellationToken.None));
+        Assert.Contains("обновите", e.Message);
+    }
+
+    [Fact]
+    public void The_meaning_picture_register_and_scene_go_into_the_note()
+    {
+        var (root, words) = Sample();
+        Directory.CreateDirectory(Path.Combine(root, "images"));
+        File.WriteAllBytes(Path.Combine(root, "images", "w1-8dd.jpg"), File.ReadAllBytes(Path.Combine(root, "shots", "scene.jpg")));
+        var en = words[0] with
+        {
+            Register = "slang", UsageNote = "вежливый вопрос с угрозой",
+            Picture = new Glossa.Core.Pictures.MeaningPicture("images/w1-8dd.jpg", "Wikimedia Commons", "Ann", "CC BY-SA 4.0"),
+        };
+        var apkg = Path.Combine(root, "out.apkg");
+
+        ApkgWriter.Write(apkg, root, [en], new AnkiExportOptions());
+
+        using var zip = ZipFile.OpenRead(apkg);
+        var media = JsonNode.Parse(new StreamReader(zip.GetEntry("media")!.Open()).ReadToEnd())!.AsObject();
+        Assert.Contains(media, m => m.Value!.GetValue<string>() == "glossa_w1-8dd.jpg");
+        var fields = AnkiNoteType.FieldValues(en, false, false, false, hasMeaning: true);
+        string F(string name) => fields[Array.IndexOf(AnkiNoteType.Fields, name)];
+        Assert.Equal(("сленг", "вежливый вопрос с угрозой"), (F("Register"), F("Scene")));
+        Assert.Equal("<img src=\"glossa_w1-8dd.jpg\">", F("MeaningImage"));
+        Assert.Equal("Wikimedia Commons, Ann, CC BY-SA 4.0", F("MeaningCredit"));
+        // Without the option the note has no picture and no media for it.
+        var plain = Path.Combine(root, "plain.apkg");
+        ApkgWriter.Write(plain, root, [en], new AnkiExportOptions(IncludeMeaningPictures: false));
+        using var without = ZipFile.OpenRead(plain);
+        Assert.DoesNotContain("glossa_w1-8dd.jpg", new StreamReader(without.GetEntry("media")!.Open()).ReadToEnd());
+    }
+
     [Fact]
     public async Task A_word_deleted_from_the_library_is_tagged_in_anki_not_deleted()
     {
@@ -171,7 +246,8 @@ public sealed class ExportTests : IDisposable
         Assert.DoesNotContain("addNote", fake.Actions);
     }
 
-    private sealed class FakeAnki(string existingGlossaId) : HttpMessageHandler
+    /// <summary>AnkiConnect with the Glossa note type absent, or present with <paramref name="modelFields"/>; an action can be unknown to it.</summary>
+    private sealed class FakeAnki(string existingGlossaId, string[]? modelFields = null, string? unsupported = null) : HttpMessageHandler
     {
         public List<string> Actions { get; } = [];
         public List<JsonNode> Requests { get; } = [];
@@ -185,12 +261,14 @@ public sealed class ExportTests : IDisposable
             Requests.Add(body);
             JsonNode? result = action switch
             {
-                "modelNames" => new JsonArray("Basic"),
+                "modelNames" => modelFields is null ? new JsonArray("Basic") : new JsonArray("Basic", AnkiNoteType.Name),
+                "modelFieldNames" => new JsonArray((modelFields ?? []).Select(f => (JsonNode)f).ToArray()),
                 "findNotes" => FindResult(body["params"]!["query"]!.GetValue<string>()),
                 "addNote" => 1001,
                 _ => null,
             };
-            var json = new JsonObject { ["result"] = result, ["error"] = null }.ToJsonString();
+            var error = action == unsupported ? (JsonNode)"unsupported action" : null;
+            var json = new JsonObject { ["result"] = result, ["error"] = error }.ToJsonString();
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
         }
 

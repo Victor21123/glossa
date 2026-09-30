@@ -710,7 +710,7 @@ public sealed class LibraryViewModel : ObservableObject
         Func<SavedWord, byte[]?>? audio = a.IncludeAudio
             ? w => _services.Speech.WavAsync(w.Headword, w.Language).GetAwaiter().GetResult()
             : null;
-        return new AnkiExportOptions(a.ReverseCards, a.IncludeImages, audio);
+        return new AnkiExportOptions(a.ReverseCards, a.IncludeImages, audio, a.IncludeMeaningPictures);
     }
 
     public async Task ExportApkg(string path)

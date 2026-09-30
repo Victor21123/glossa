@@ -50,12 +50,18 @@
                             <UniformGrid Columns="2" HorizontalAlignment="Left" Width="480" Margin="0,7,0,0">
                                 <CheckBox Content="Кадр из игры" IsChecked="{Binding Settings.AnkiImages}" Margin="0,0,0,12" />
                                 <CheckBox Content="Звук слова" IsChecked="{Binding Settings.AnkiAudio}" Margin="0,0,0,12" />
+                                <CheckBox Content="Картинка значения" IsChecked="{Binding Settings.AnkiMeaningPictures}" />
                                 <CheckBox Content="Обратная карточка" IsChecked="{Binding Settings.AnkiReverse}" />
                             </UniformGrid>
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Колоды" Style="{StaticResource SettingRow}">
-                            <TextBlock Style="{StaticResource Note}" FontSize="13.5"
-                                       Text='Glossa::Английский, Glossa::Японский, Glossa::Китайский - по языку слова; тип заметки "Glossa Word v1".' />
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Note}" FontSize="13.5" TextWrapping="Wrap"
+                                           Text='Glossa::Английский, Glossa::Японский, Glossa::Китайский - по языку слова; тип заметки "Glossa Word v1".' />
+                                <!-- Checked with the Anki engine 2026-09-30: with both options one import adds the new fields and fills them. -->
+                                <TextBlock Style="{StaticResource Note}" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text='Новые поля (картинка значения, регистр, контекст сцены) "Отправить сейчас" добавит в Anki само. Колоду .apkg поверх прежней импортируйте с объединением типов заметок и обновлением заметок "всегда" - история повторений сохранится.' />
+                            </StackPanel>
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Отправить в Anki" Tag="через AnkiConnect" Style="{StaticResource SettingRow}">
                             <StackPanel Orientation="Horizontal">
@@ -114,6 +120,13 @@
                             <TextBlock x:Name="BackContext" FontSize="13.5" LineHeight="19" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap"
                                        Margin="0,6,0,0" />
                             <TextBlock x:Name="BackMeta" FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,8,0,0" />
+                            <Border Visibility="{Binding Settings.AnkiMeaningPictures, Converter={StaticResource BoolToVis}}">
+                                <StackPanel x:Name="BackPicture" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <Image x:Name="BackPictureImage" MaxHeight="130" Stretch="Uniform" HorizontalAlignment="Left" />
+                                    <TextBlock x:Name="BackPictureCredit" FontSize="11.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                               Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                     <TextBlock x:Name="PreviewNote" Style="{StaticResource Note}" Margin="0,12,0,0" />

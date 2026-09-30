@@ -254,6 +254,9 @@ public sealed class AnkiSettings
     public bool ReverseCards { get; set; }
     public bool IncludeImages { get; set; } = true;
     public bool IncludeAudio { get; set; } = true;
+
+    /// <summary>«Картинка значения» on the back of the note, with its author and license.</summary>
+    public bool IncludeMeaningPictures { get; set; } = true;
 }
 
 public sealed class DictionarySettings
