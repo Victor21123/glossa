@@ -462,6 +462,10 @@
                                             </Button>
                                             <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" Click="OnSpeak" ToolTip="Произнести" />
                                         </StackPanel>
+                                        <!-- A pin the study says can go (three right days), as on the back of a study card. -->
+                                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding DataContext.UnpinHint, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                   FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                                   Visibility="{Binding DataContext.UnpinHint, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NullToCollapsed}}" />
                                         <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                                             <WrapPanel>
                                                 <TextBlock Text="{Binding Headword}" FontFamily="{Binding WordFont}" FontSize="30" FontWeight="Bold" Margin="0,0,14,0" />

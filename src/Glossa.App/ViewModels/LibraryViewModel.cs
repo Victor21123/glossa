@@ -303,6 +303,23 @@ public sealed class LibraryViewModel : ObservableObject
             if (!SetProperty(ref _selected, value)) return;
             LoadArticles();
             OnPropertyChanged(nameof(SelectedCollections));
+            OnPropertyChanged(nameof(UnpinHint));
+        }
+    }
+
+    /// <summary>
+    /// Under «Не могу запомнить» of a pinned word the user got right on three different days: the pin can go (the same
+    /// rule and words as the back of a study card; off with Настройки → Учёба).
+    /// </summary>
+    public string? UnpinHint
+    {
+        get
+        {
+            if (Selected is not { Pinned: true } entry || !_services.Settings.Study.SuggestUnpin) return null;
+            var answers = _services.Library.Answers(DateTime.UtcNow.AddDays(-400));
+            return Glossa.Core.Study.StudyPins.SuggestUnpin(entry.Word, answers, Glossa.Core.Study.StudyClock.Local)
+                ? $"Верно в {Glossa.Core.Study.StudyPins.DaysToUnpin} разных дня: пометку можно снять."
+                : null;
         }
     }
 
@@ -594,6 +611,7 @@ public sealed class LibraryViewModel : ObservableObject
         _services.Library.SetPinned(entry.Word.Id, !entry.Pinned);
         if (_services.Library.List().FirstOrDefault(w => w.Id == entry.Word.Id) is { } stored) entry.Accept(stored);
         BuildSidebar();
+        OnPropertyChanged(nameof(UnpinHint));
     }
 
     public void Step(int delta) => Selected?.Step(delta);
