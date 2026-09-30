@@ -4,48 +4,51 @@ using Microsoft.Data.Sqlite;
 
 namespace Glossa.Core.Library;
 
-/// <summary>Study: each word's Anki card state and the log of answers (schema v6).</summary>
+/// <summary>
+/// Study: the Anki state of each card (a word and a direction) and the log of answers (schema v8). The states of a
+/// direction switched off stay here unused, so switching it back on resumes them.
+/// </summary>
 public sealed partial class LibraryStore
 {
-    /// <summary>The state of every word ever answered; a word missing here is new.</summary>
-    public IReadOnlyDictionary<string, ReviewState> ReviewStates()
+    /// <summary>The state of every card ever answered; a card missing here is new.</summary>
+    public IReadOnlyDictionary<CardKey, ReviewState> ReviewStates()
     {
         lock (_gate)
         {
-            var states = new Dictionary<string, ReviewState>();
+            var states = new Dictionary<CardKey, ReviewState>();
             using var cmd = _db.CreateCommand();
             cmd.CommandText = "SELECT * FROM review_state";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
                 var state = ReadReview(r);
-                states[state.WordId] = state;
+                states[state.Key] = state;
             }
             return states;
         }
     }
 
-    /// <summary>Stores an answer: the word's new state and its log line, together or not at all.</summary>
+    /// <summary>Stores an answer: the card's new state and its log line, together or not at all.</summary>
     public void SaveAnswer(ReviewState state, ReviewAnswer answer)
     {
         lock (_gate)
         {
             using var tx = _db.BeginTransaction();
             Run("""
-                INSERT INTO review_state(word_id, queue, remaining_steps, due_at, due_day, interval_days, ease, reps, lapses, leech, answered_utc)
-                VALUES($w, $queue, $left, $dueAt, $dueDay, $ivl, $ease, $reps, $lapses, $leech, $at)
-                ON CONFLICT(word_id) DO UPDATE SET queue = $queue, remaining_steps = $left, due_at = $dueAt, due_day = $dueDay,
+                INSERT INTO review_state(word_id, direction, queue, remaining_steps, due_at, due_day, interval_days, ease, reps, lapses, leech, answered_utc)
+                VALUES($w, $dir, $queue, $left, $dueAt, $dueDay, $ivl, $ease, $reps, $lapses, $leech, $at)
+                ON CONFLICT(word_id, direction) DO UPDATE SET queue = $queue, remaining_steps = $left, due_at = $dueAt, due_day = $dueDay,
                   interval_days = $ivl, ease = $ease, reps = $reps, lapses = $lapses, leech = $leech, answered_utc = $at
                 """,
-                ("$w", state.WordId), ("$queue", Name(state.Queue)), ("$left", state.RemainingSteps),
+                ("$w", state.WordId), ("$dir", Name(state.Direction)), ("$queue", Name(state.Queue)), ("$left", state.RemainingSteps),
                 ("$dueAt", state.DueAt is { } dueAt ? Iso(dueAt) : null), ("$dueDay", state.DueDay is { } day ? DayText(day) : null),
                 ("$ivl", state.IntervalDays), ("$ease", Permille(state.Ease)), ("$reps", state.Reps), ("$lapses", state.Lapses),
                 ("$leech", state.Leech ? 1 : 0), ("$at", state.AnsweredUtc is { } at ? Iso(at) : null));
             Run("""
-                INSERT INTO review_log(id, word_id, answered_utc, rating, queue_before, early, interval_before, interval_after, ease, taken_ms)
-                VALUES($id, $w, $at, $rating, $queue, $early, $before, $after, $ease, $taken)
+                INSERT INTO review_log(id, word_id, direction, answered_utc, rating, queue_before, early, interval_before, interval_after, ease, taken_ms)
+                VALUES($id, $w, $dir, $at, $rating, $queue, $early, $before, $after, $ease, $taken)
                 """,
-                ("$id", answer.Id), ("$w", answer.WordId), ("$at", Iso(answer.AnsweredUtc)), ("$rating", (int)answer.Rating),
+                ("$id", answer.Id), ("$w", answer.WordId), ("$dir", Name(answer.Direction)), ("$at", Iso(answer.AnsweredUtc)), ("$rating", (int)answer.Rating),
                 ("$queue", Name(answer.QueueBefore)), ("$early", answer.Early ? 1 : 0), ("$before", answer.IntervalBefore),
                 ("$after", answer.IntervalAfter), ("$ease", Permille(answer.Ease)), ("$taken", answer.TakenMs));
             tx.Commit();
@@ -68,6 +71,7 @@ public sealed partial class LibraryStore
                 {
                     Id = (string)r["id"],
                     WordId = (string)r["word_id"],
+                    Direction = DirectionOf(r),
                     AnsweredUtc = Date(r["answered_utc"]),
                     Rating = (Rating)Int(r, "rating"),
                     QueueBefore = Enum.Parse<CardQueue>((string)r["queue_before"], ignoreCase: true),
@@ -88,6 +92,7 @@ public sealed partial class LibraryStore
         return new ReviewState
         {
             WordId = (string)r["word_id"],
+            Direction = DirectionOf(r),
             Queue = Enum.Parse<CardQueue>((string)r["queue"], ignoreCase: true),
             RemainingSteps = Int(r, "remaining_steps"),
             DueAt = S("due_at") is { } at ? Date(at) : null,
@@ -104,6 +109,10 @@ public sealed partial class LibraryStore
     private static int Int(SqliteDataReader r, string col) => Convert.ToInt32(r[col], CultureInfo.InvariantCulture);
 
     private static string Name(CardQueue queue) => queue.ToString().ToLowerInvariant();
+
+    private static string Name(CardDirection direction) => direction.ToString().ToLowerInvariant();
+
+    private static CardDirection DirectionOf(SqliteDataReader r) => Enum.Parse<CardDirection>((string)r["direction"], ignoreCase: true);
 
     private static string DayText(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

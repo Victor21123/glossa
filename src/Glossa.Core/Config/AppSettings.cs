@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Glossa.Core.Games;
@@ -125,11 +126,25 @@ public sealed class PerformanceSettings
 /// <summary>Настройки → Учёба: the session around Anki's scheduler and what the card shows (Anki's defaults).</summary>
 public sealed class StudySettings
 {
-    /// <summary>Cards in one session; pinned words take up to half of it.</summary>
+    /// <summary>Cards in one session; pinned words take up to <see cref="PinnedShare"/> of it.</summary>
     public int SessionSize { get; set; } = 20;
 
+    /// <summary>New cards a day, as Anki counts them: with both directions each word has two.</summary>
     public int NewPerDay { get; set; } = 20;
+
     public int ReviewsPerDay { get; set; } = 200;
+
+    /// <summary>The share of a session "Не могу запомнить" words may take, 0..1 (a slider, 0-100% in steps of 10).</summary>
+    public double PinnedShare { get; set; } = 0.5;
+
+    /// <summary>
+    /// forward (слово -> перевод), reverse (перевод -> слово) or both: two cards a word, each on its own schedule. The
+    /// cards of a direction switched off keep their schedule and resume when it is switched back on.
+    /// </summary>
+    public string Direction { get; set; } = "forward";
+
+    /// <summary>With both directions: one card of a word per session, the other waits for a later one (Anki's "bury siblings").</summary>
+    public bool BurySiblings { get; set; } = true;
 
     /// <summary>Learning steps in minutes (Anki: 1 and 10).</summary>
     public List<float> LearnSteps { get; set; } = [1, 10];
@@ -141,6 +156,21 @@ public sealed class StudySettings
     public int GraduatingInterval { get; set; } = 1;
 
     public int EasyInterval { get; set; } = 4;
+
+    /// <summary>"Дополнительно", Anki's advanced options with Anki's ranges: the ease a word graduates with (1.31-5).</summary>
+    public float StartingEase { get; set; } = 2.5f;
+
+    /// <summary>The extra of "Легко" over "Нормально" (1-5).</summary>
+    public float EasyBonus { get; set; } = 1.3f;
+
+    /// <summary>The interval "Сложно" gives, as a multiple of the last one (0.5-1.3).</summary>
+    public float HardMultiplier { get; set; } = 1.2f;
+
+    /// <summary>All review intervals are multiplied by it (0.5-2).</summary>
+    public float IntervalModifier { get; set; } = 1f;
+
+    /// <summary>The longest review interval in days (1-36500).</summary>
+    public int MaximumInterval { get; set; } = 36500;
 
     /// <summary>lookups (looked up most often first), recent or random: which new words come first.</summary>
     public string NewOrder { get; set; } = "lookups";
@@ -165,17 +195,46 @@ public sealed class StudySettings
 
     public List<string> ReminderTimes { get; set; } = ["18:00", "20:00"];
 
+    /// <summary>The scheduler's options, held to the ranges Anki's deck options allow.</summary>
     public Study.StudyConfig Config() => new()
     {
-        LearnSteps = [.. LearnSteps.Where(s => s > 0)],
-        RelearnSteps = [.. RelearnSteps.Where(s => s > 0)],
+        LearnSteps = Steps(LearnSteps, [1, 10]),
+        RelearnSteps = Steps(RelearnSteps, [10]),
         GraduatingInterval = Math.Max(GraduatingInterval, 1),
         EasyInterval = Math.Max(EasyInterval, 1),
+        StartingEase = Range(StartingEase, 1.31f, 5f, 2.5f),
+        EasyBonus = Range(EasyBonus, 1f, 5f, 1.3f),
+        HardMultiplier = Range(HardMultiplier, 0.5f, 1.3f, 1.2f),
+        IntervalModifier = Range(IntervalModifier, 0.5f, 2f, 1f),
+        MaximumInterval = Math.Clamp(MaximumInterval, 1, 36500),
     };
 
     public Study.StudyLimits Limits() => new(
-        Math.Clamp(SessionSize, 1, 500), Math.Max(NewPerDay, 0), Math.Max(ReviewsPerDay, 0), 0.5,
-        NewOrder switch { "recent" => Study.NewWordOrder.Recent, "random" => Study.NewWordOrder.Random, _ => Study.NewWordOrder.Lookups });
+        Math.Clamp(SessionSize, 1, 500), Math.Max(NewPerDay, 0), Math.Max(ReviewsPerDay, 0),
+        double.IsFinite(PinnedShare) ? Math.Clamp(PinnedShare, 0, 1) : 0.5,
+        NewOrder switch { "recent" => Study.NewWordOrder.Recent, "random" => Study.NewWordOrder.Random, _ => Study.NewWordOrder.Lookups },
+        Direction switch { "reverse" => Study.StudyDirection.Reverse, "both" => Study.StudyDirection.Both, _ => Study.StudyDirection.Forward },
+        BurySiblings);
+
+    /// <summary>When to remind: the times that read as "HH:mm", earliest first; none with reminders off.</summary>
+    public IReadOnlyList<TimeOnly> ReminderSchedule() => !Reminders ? [] : (ReminderTimes ?? [])
+        .Select(t => TimeOnly.TryParseExact(t?.Trim(), "H:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : (TimeOnly?)null)
+        .OfType<TimeOnly>()
+        .Distinct()
+        .Order()
+        .ToList();
+
+    // Anki allows no steps at all (every answer graduates), so an empty list stays empty; steps that are all unusable
+    // (zero, negative, not a number) are more likely a slip, and fall back to Anki's.
+    private static List<float> Steps(List<float>? minutes, float[] fallback)
+    {
+        if (minutes is null) return [.. fallback];
+        var usable = minutes.Where(m => float.IsFinite(m) && m > 0).ToList();
+        return usable.Count > 0 || minutes.Count == 0 ? usable : [.. fallback];
+    }
+
+    private static float Range(float value, float min, float max, float fallback) =>
+        float.IsFinite(value) ? Math.Clamp(value, min, max) : fallback;
 }
 
 public sealed class SpeechSettings

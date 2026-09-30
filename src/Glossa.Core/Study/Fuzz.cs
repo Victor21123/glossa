@@ -34,8 +34,10 @@ public static class Fuzz
 
 /// <summary>
 /// Anki's load balancer (states/load_balancer.rs): within the fuzz range, a day with fewer reviews due is likelier.
-/// Weight 1 for an empty day, else (1/n)^2.15 x (1/day)^3; "siblings" and "easy days" are neutral (one card per word,
-/// all weekdays at 100%). Intervals over 90 days are only fuzzed.
+/// Weight 1 for an empty day, else (1/n)^2.15 x (1/day)^3; "easy days" are neutral (all weekdays at 100%). Anki's
+/// sibling modifier (days near the due day of the word's other card are less likely) is not ported yet: with both
+/// directions on, the two cards of a word may land on one day, and burying then leaves one of them for a later session.
+/// Intervals over 90 days are only fuzzed.
 /// </summary>
 public static class LoadBalancer
 {
@@ -68,6 +70,13 @@ public static class LoadBalancer
 /// <summary>Anki seeds the fuzz with the card's id plus its answer count, so the buttons and the answer agree.</summary>
 public static class StudySeed
 {
+    /// <summary>
+    /// A forward card keeps the word's own seed, so schedules made before directions existed stay as they were; the
+    /// reverse card gets a seed of its own, so the two cards of a word part ways.
+    /// </summary>
+    public static ulong Of(CardKey card, int reps) =>
+        Of(card.Direction == CardDirection.Reverse ? card.WordId + "#r" : card.WordId, reps);
+
     public static ulong Of(string wordId, int reps)
     {
         // FNV-1a: string.GetHashCode changes between runs.

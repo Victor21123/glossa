@@ -122,7 +122,7 @@ public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, s
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 7;
+    private const int SchemaVersion = 8;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -265,6 +265,37 @@ public sealed partial class LibraryStore : IDisposable
                                        'HSK 7' || char(92) || 'u20139', 'HSK 7-9')
                   WHERE filter IS NOT NULL;
                 """);
+        }
+        if (version < 8)
+        {
+            // Card directions: a word may have a forward and a reverse card, each with its own state; the log says which.
+            // SQLite cannot change a primary key in place, so review_state is rebuilt; every state so far is forward.
+            // One transaction with the version, as for v6: a second run would fail on the log's new column.
+            using var tx = _db.BeginTransaction();
+            Exec("""
+                CREATE TABLE review_state_v8(
+                  word_id TEXT NOT NULL,
+                  direction TEXT NOT NULL DEFAULT 'forward',
+                  queue TEXT NOT NULL,
+                  remaining_steps INTEGER NOT NULL DEFAULT 0,
+                  due_at TEXT, due_day TEXT,
+                  interval_days INTEGER NOT NULL DEFAULT 0,
+                  ease INTEGER NOT NULL DEFAULT 0,
+                  reps INTEGER NOT NULL DEFAULT 0,
+                  lapses INTEGER NOT NULL DEFAULT 0,
+                  leech INTEGER NOT NULL DEFAULT 0,
+                  answered_utc TEXT,
+                  PRIMARY KEY(word_id, direction));
+                INSERT INTO review_state_v8(word_id, direction, queue, remaining_steps, due_at, due_day, interval_days, ease, reps,
+                                            lapses, leech, answered_utc)
+                  SELECT word_id, 'forward', queue, remaining_steps, due_at, due_day, interval_days, ease, reps, lapses, leech, answered_utc
+                  FROM review_state;
+                DROP TABLE review_state;
+                ALTER TABLE review_state_v8 RENAME TO review_state;
+                ALTER TABLE review_log ADD COLUMN direction TEXT NOT NULL DEFAULT 'forward';
+                PRAGMA user_version = 8;
+                """);
+            tx.Commit();
         }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }

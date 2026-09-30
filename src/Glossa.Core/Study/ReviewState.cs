@@ -1,18 +1,30 @@
 namespace Glossa.Core.Study;
 
-/// <summary>Anki's card queues, as far as Glossa needs them (one card per word).</summary>
+/// <summary>Anki's card queues, as far as Glossa needs them (a card per word and direction).</summary>
 public enum CardQueue { New, Learning, Review, Relearning }
 
 /// <summary>The four answer buttons, 1-4 on the keyboard.</summary>
 public enum Rating { Again = 1, Hard = 2, Good = 3, Easy = 4 }
 
+/// <summary>What a card asks: the word for its translation (слово -> перевод) or the translation for the word.</summary>
+public enum CardDirection { Forward, Reverse }
+
+/// <summary>A card: a word asked one way. With both directions on, a word has two cards, each on its own schedule.</summary>
+public readonly record struct CardKey(string WordId, CardDirection Direction);
+
 /// <summary>
-/// Where a word stands in study: Anki's scheduling fields of a card. A word that was never answered has no stored
-/// state and is <see cref="CardQueue.New"/>.
+/// Where a card stands in study: Anki's scheduling fields. A card that was never answered has no stored state and is
+/// <see cref="CardQueue.New"/>.
 /// </summary>
 public sealed record ReviewState
 {
     public required string WordId { get; init; }
+
+    /// <summary>Which of the word's cards this is; everything before directions existed is forward.</summary>
+    public CardDirection Direction { get; init; }
+
+    public CardKey Key => new(WordId, Direction);
+
     public CardQueue Queue { get; init; } = CardQueue.New;
 
     /// <summary>Learning or relearning steps still ahead, the current one included (Anki's "left").</summary>
@@ -38,7 +50,8 @@ public sealed record ReviewState
 
     public DateTime? AnsweredUtc { get; init; }
 
-    public static ReviewState New(string wordId) => new() { WordId = wordId };
+    public static ReviewState New(string wordId, CardDirection direction = CardDirection.Forward) =>
+        new() { WordId = wordId, Direction = direction };
 }
 
 /// <summary>One answer, as Anki's review log keeps it.</summary>
@@ -46,6 +59,8 @@ public sealed record ReviewAnswer
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public required string WordId { get; init; }
+    public CardDirection Direction { get; init; }
+    public CardKey Key => new(WordId, Direction);
     public required DateTime AnsweredUtc { get; init; }
     public required Rating Rating { get; init; }
     public required CardQueue QueueBefore { get; init; }
@@ -69,6 +84,7 @@ public sealed record ReviewAnswer
         return new ReviewAnswer
         {
             WordId = before.WordId,
+            Direction = before.Direction,
             AnsweredUtc = after.State.AnsweredUtc ?? DateTime.UtcNow,
             Rating = rating,
             QueueBefore = before.Queue,

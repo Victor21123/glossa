@@ -40,7 +40,7 @@ public sealed class ReviewStoreTests : IDisposable
         }
 
         using var reopened = new LibraryStore(_path);
-        Assert.Equal(review, reopened.ReviewStates()[id]);
+        Assert.Equal(review, reopened.ReviewStates()[new CardKey(id, CardDirection.Forward)]);
         Assert.Equal(2.35f, review.Ease);
 
         var log = reopened.Answers(Noon.AddHours(-1));
@@ -91,5 +91,90 @@ public sealed class ReviewStoreTests : IDisposable
         Assert.True(File.Exists(_path + ".v5.bak"));
         Assert.Empty(migrated.ReviewStates());
         Assert.NotNull(migrated.List().Single().PinnedUtc); // a word pinned before v6 counts from its last change
+    }
+
+    [Fact]
+    public void Both_directions_of_a_word_keep_their_own_state_and_log()
+    {
+        string id;
+        ReviewState forward, reverse;
+        using (var store = new LibraryStore(_path))
+        {
+            id = store.Record(Word("stained"), newLookup: true);
+            (forward, var f) = Answer(ReviewState.New(id), Rating.Easy, Noon);
+            store.SaveAnswer(forward, f);
+            var (learning, r1) = Answer(ReviewState.New(id, CardDirection.Reverse), Rating.Good, Noon.AddMinutes(1));
+            store.SaveAnswer(learning, r1);
+            (reverse, var r2) = Answer(learning, Rating.Good, Noon.AddMinutes(11)); // the second answer updates only its own card
+            store.SaveAnswer(reverse, r2);
+        }
+
+        using var reopened = new LibraryStore(_path);
+        var states = reopened.ReviewStates();
+        Assert.Equal(2, states.Count);
+        Assert.Equal(forward, states[new CardKey(id, CardDirection.Forward)]);
+        Assert.Equal(reverse, states[new CardKey(id, CardDirection.Reverse)]);
+        Assert.Equal((4, 1), (forward.IntervalDays, reverse.IntervalDays));
+        Assert.Equal(new[] { CardDirection.Forward, CardDirection.Reverse, CardDirection.Reverse },
+            reopened.Answers(Noon.AddHours(-1)).Select(a => a.Direction));
+    }
+
+    [Fact]
+    public void Taking_back_a_new_word_removes_both_of_its_cards()
+    {
+        using var store = new LibraryStore(_path);
+        var id = store.Record(Word("misread"), newLookup: true, out var added);
+        foreach (var direction in new[] { CardDirection.Forward, CardDirection.Reverse })
+        {
+            var (state, answer) = Answer(ReviewState.New(id, direction), Rating.Good, Noon);
+            store.SaveAnswer(state, answer);
+        }
+        Assert.Equal(2, store.ReviewStates().Count);
+
+        store.Retract(added!);
+
+        Assert.Empty(store.ReviewStates());
+        Assert.Empty(store.Answers(Noon.AddDays(-1)));
+    }
+
+    [Fact]
+    public void A_version_seven_library_keeps_its_study_as_forward_cards_and_a_backup()
+    {
+        string id;
+        ReviewState state;
+        using (var store = new LibraryStore(_path))
+        {
+            id = store.Record(Word("sus"), newLookup: true);
+            (state, var answer) = Answer(ReviewState.New(id), Rating.Easy, Noon);
+            store.SaveAnswer(state, answer);
+        }
+        // Back to v7: a state per word, a log without directions.
+        using (var db = new SqliteConnection($"Data Source={_path};Pooling=False"))
+        {
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE review_state_v7(
+                  word_id TEXT PRIMARY KEY, queue TEXT NOT NULL, remaining_steps INTEGER NOT NULL DEFAULT 0, due_at TEXT, due_day TEXT,
+                  interval_days INTEGER NOT NULL DEFAULT 0, ease INTEGER NOT NULL DEFAULT 0, reps INTEGER NOT NULL DEFAULT 0,
+                  lapses INTEGER NOT NULL DEFAULT 0, leech INTEGER NOT NULL DEFAULT 0, answered_utc TEXT);
+                INSERT INTO review_state_v7
+                  SELECT word_id, queue, remaining_steps, due_at, due_day, interval_days, ease, reps, lapses, leech, answered_utc FROM review_state;
+                DROP TABLE review_state;
+                ALTER TABLE review_state_v7 RENAME TO review_state;
+                ALTER TABLE review_log DROP COLUMN direction;
+                PRAGMA user_version = 7;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+
+        using var migrated = new LibraryStore(_path);
+        Assert.True(File.Exists(_path + ".v7.bak"));
+        Assert.Equal(state, migrated.ReviewStates()[new CardKey(id, CardDirection.Forward)]);
+        Assert.Equal(CardDirection.Forward, migrated.Answers(Noon.AddHours(-1)).Single().Direction);
+
+        var (reverse, first) = Answer(ReviewState.New(id, CardDirection.Reverse), Rating.Good, Noon);
+        migrated.SaveAnswer(reverse, first);
+        Assert.Equal(2, migrated.ReviewStates().Count); // the word now has room for its second card
     }
 }

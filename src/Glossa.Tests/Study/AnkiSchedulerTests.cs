@@ -202,6 +202,25 @@ public class AnkiSchedulerTests
     }
 
     [Fact]
+    public void A_reverse_card_is_fuzzed_apart_from_its_forward_card_which_keeps_the_old_seed()
+    {
+        Assert.Equal(StudySeed.Of("abc", 5), StudySeed.Of(new CardKey("abc", CardDirection.Forward), 5));
+        Assert.NotEqual(StudySeed.Of("abc", 5), StudySeed.Of(new CardKey("abc", CardDirection.Reverse), 5));
+
+        var apart = 0;
+        foreach (var n in Enumerable.Range(0, 40))
+        {
+            var forward = Review(7, Today) with { WordId = $"w{n}" };
+            var f = AnkiScheduler.Next(forward, At(Noon, fuzz: true)).Good.State;
+            var r = AnkiScheduler.Next(forward with { Direction = CardDirection.Reverse }, At(Noon, fuzz: true)).Good.State;
+            Assert.Equal(CardDirection.Reverse, r.Direction);
+            Assert.InRange(r.IntervalDays, 15, 20);
+            if (r.IntervalDays != f.IntervalDays) apart++;
+        }
+        Assert.True(apart >= 25, $"only {apart} of 40 words got different days"); // one in six would match by chance
+    }
+
+    [Fact]
     public void Load_balancing_prefers_an_empty_day_and_skips_far_intervals()
     {
         static int Due(int offset) => offset == 3 ? 0 : 5;

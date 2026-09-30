@@ -84,7 +84,16 @@ public sealed class CollectionTests : IDisposable
         {
             db.Open();
             using var cmd = db.CreateCommand();
-            cmd.CommandText = "PRAGMA user_version = 6";
+            // Study tables as v6 and v7 had them (a state per word, a log without directions), so v8 finds what it expects.
+            cmd.CommandText = """
+                DROP TABLE review_state;
+                CREATE TABLE review_state(
+                  word_id TEXT PRIMARY KEY, queue TEXT NOT NULL, remaining_steps INTEGER NOT NULL DEFAULT 0, due_at TEXT, due_day TEXT,
+                  interval_days INTEGER NOT NULL DEFAULT 0, ease INTEGER NOT NULL DEFAULT 0, reps INTEGER NOT NULL DEFAULT 0,
+                  lapses INTEGER NOT NULL DEFAULT 0, leech INTEGER NOT NULL DEFAULT 0, answered_utc TEXT);
+                ALTER TABLE review_log DROP COLUMN direction;
+                PRAGMA user_version = 6;
+                """;
             cmd.ExecuteNonQuery();
         }
 

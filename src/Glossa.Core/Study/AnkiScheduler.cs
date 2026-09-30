@@ -42,7 +42,7 @@ public static class AnkiScheduler
     {
         private readonly StudyConfig _c = ctx.Config;
         private readonly DateOnly _today = ctx.Clock.Day(ctx.NowUtc);
-        private readonly ulong? _seed = ctx.Fuzz ? StudySeed.Of(card.WordId, card.Reps) : null;
+        private readonly ulong? _seed = ctx.Fuzz ? StudySeed.Of(card.Key, card.Reps) : null;
 
         public Choices Choices() => card.Queue switch
         {

@@ -23,7 +23,7 @@ public partial class StudyPage : UserControl
 
     private AppServices? _services;
     private IReadOnlyList<SavedWord> _words = [];
-    private IReadOnlyDictionary<string, ReviewState> _states = new Dictionary<string, ReviewState>();
+    private IReadOnlyDictionary<CardKey, ReviewState> _states = new Dictionary<CardKey, ReviewState>();
     private IReadOnlyList<ReviewAnswer> _answers = [];
     private StudyStats _stats = StudyStats.Empty;
     private StudyPlan? _plan;

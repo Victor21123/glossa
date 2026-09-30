@@ -15,14 +15,29 @@ public class SessionTests
         PinnedUtc = pinned ? Noon.AddDays(-30) : null,
     };
 
-    private static ReviewState Due(string id, int daysAgo) => new()
+    private static ReviewState Due(string id, int daysAgo, CardDirection direction = CardDirection.Forward) => new()
     {
-        WordId = id, Queue = CardQueue.Review, IntervalDays = 5, DueDay = Today.AddDays(-daysAgo), Ease = 2.5f, Reps = 3,
+        WordId = id, Direction = direction, Queue = CardQueue.Review, IntervalDays = 5, DueDay = Today.AddDays(-daysAgo), Ease = 2.5f, Reps = 3,
     };
 
     private static StudyPlan Plan(IReadOnlyList<SavedWord> words, IReadOnlyList<ReviewState> states, IReadOnlyList<ReviewAnswer>? today = null,
         StudyLimits? limits = null, Func<SavedWord, bool>? include = null) =>
-        SessionBuilder.Build(words, states.ToDictionary(s => s.WordId), today ?? [], limits ?? new StudyLimits(), new StudyConfig(), Utc, Noon, include);
+        SessionBuilder.Build(words, states.ToDictionary(s => s.Key), today ?? [], limits ?? new StudyLimits(), new StudyConfig(), Utc, Noon, include);
+
+    private static StudyLimits Both(bool bury = true) => new(Size: 100, Direction: StudyDirection.Both, BurySiblings: bury);
+
+    /// <summary>"w>" for the forward card of w, "w&lt;" for its reverse one.</summary>
+    private static string Name(SessionCard card) => card.Word.Id + (card.Direction == CardDirection.Reverse ? "<" : ">");
+
+    private static ReviewState Stepping(string id, DateTime due) => new()
+    {
+        WordId = id, Queue = CardQueue.Learning, RemainingSteps = 1, DueAt = due, Reps = 1, AnsweredUtc = Noon.AddHours(-1),
+    };
+
+    private static ReviewAnswer StartedToday(string id) => new()
+    {
+        WordId = id, AnsweredUtc = Noon.AddHours(-1), Rating = Rating.Good, QueueBefore = CardQueue.New,
+    };
 
     [Fact]
     public void A_session_takes_pinned_words_up_to_half_then_due_ones_then_new_ones()
@@ -75,7 +90,135 @@ public class SessionTests
         Assert.Equal(new[] { 1f, 10f }, config.LearnSteps);
         Assert.Equal(new[] { 10f }, config.RelearnSteps);
         Assert.Equal((1, 4, 2.5f), (config.GraduatingInterval, config.EasyInterval, config.StartingEase));
+        Assert.Equal((1.3f, 1.2f, 1f, 36500), (config.EasyBonus, config.HardMultiplier, config.IntervalModifier, config.MaximumInterval));
         Assert.Equal(new StudyLimits(), settings.Limits());
+        Assert.Equal((0.5, StudyDirection.Forward, true), (settings.Limits().PinnedShare, settings.Limits().Direction, settings.Limits().BurySiblings));
+    }
+
+    [Fact]
+    public void Study_settings_are_held_to_ankis_ranges()
+    {
+        var high = new Glossa.Core.Config.StudySettings
+        {
+            StartingEase = 9f, EasyBonus = 9f, HardMultiplier = 2f, IntervalModifier = 3f, MaximumInterval = 99_999, PinnedShare = 1.7,
+            Direction = "both", BurySiblings = false, LearnSteps = [5, -1, 30, float.PositiveInfinity],
+        };
+        var low = new Glossa.Core.Config.StudySettings
+        {
+            StartingEase = 1f, EasyBonus = 0.5f, HardMultiplier = 0.1f, IntervalModifier = 0.1f, MaximumInterval = 0, PinnedShare = -1,
+            Direction = "sideways", LearnSteps = [-1, float.NaN, 0], RelearnSteps = [], SessionSize = 0, NewPerDay = -5,
+        };
+
+        var (h, l) = (high.Config(), low.Config());
+        Assert.Equal((5f, 5f, 1.3f, 2f, 36500), (h.StartingEase, h.EasyBonus, h.HardMultiplier, h.IntervalModifier, h.MaximumInterval));
+        Assert.Equal((1.31f, 1f, 0.5f, 0.5f, 1), (l.StartingEase, l.EasyBonus, l.HardMultiplier, l.IntervalModifier, l.MaximumInterval));
+        Assert.Equal(new[] { 5f, 30f }, h.LearnSteps);   // the usable steps stay
+        Assert.Equal(new[] { 1f, 10f }, l.LearnSteps);   // nothing usable: Anki's steps
+        Assert.Empty(l.RelearnSteps);                    // no steps on purpose: Anki allows it
+
+        Assert.Equal((1.0, StudyDirection.Both, false), (high.Limits().PinnedShare, high.Limits().Direction, high.Limits().BurySiblings));
+        Assert.Equal((0.0, StudyDirection.Forward), (low.Limits().PinnedShare, low.Limits().Direction));
+        Assert.Equal((1, 0), (low.Limits().Size, low.Limits().NewPerDay));
+        Assert.Equal(StudyDirection.Reverse, new Glossa.Core.Config.StudySettings { Direction = "reverse" }.Limits().Direction);
+    }
+
+    [Fact]
+    public void Reminder_times_that_are_not_a_time_of_day_are_skipped()
+    {
+        var settings = new Glossa.Core.Config.StudySettings { ReminderTimes = ["20:00", "7:30", "25:00", "evening", " 18:00 ", "18:00", ""] };
+
+        Assert.Equal(new[] { new TimeOnly(7, 30), new TimeOnly(18, 0), new TimeOnly(20, 0) }, settings.ReminderSchedule());
+        Assert.Empty(new Glossa.Core.Config.StudySettings { Reminders = false }.ReminderSchedule());
+        Assert.Equal(new[] { new TimeOnly(18, 0), new TimeOnly(20, 0) }, new Glossa.Core.Config.StudySettings().ReminderSchedule());
+    }
+
+    [Fact]
+    public void Both_directions_give_a_word_two_cards_and_one_direction_one()
+    {
+        var words = new[] { Word("a"), Word("b", lookups: 2) };
+
+        Assert.Equal(new[] { "b>", "b<", "a>", "a<" }, Plan(words, [], limits: Both(bury: false)).New.Select(Name));
+        Assert.Equal(new[] { "b>", "a>" }, Plan(words, []).New.Select(Name));
+        Assert.Equal(new[] { "b<", "a<" }, Plan(words, [], limits: new StudyLimits(Direction: StudyDirection.Reverse)).New.Select(Name));
+    }
+
+    [Fact]
+    public void Siblings_are_buried_one_card_a_word_pinned_then_due_then_new_forward_on_a_tie()
+    {
+        var words = new[] { Word("p", pinned: true), Word("a"), Word("b"), Word("c"), Word("d"), Word("l") };
+        var states = new[]
+        {
+            Due("a", 1),                                        // a: due forward, new reverse
+            Due("b", 0, CardDirection.Reverse),                 // b: new forward, due reverse
+            Due("d", 2), Due("d", 2, CardDirection.Reverse),    // d: both due on the same day
+            Stepping("l", Noon.AddMinutes(-1)), Due("l", 3, CardDirection.Reverse), // l: a step due beats an older review
+        };
+
+        var plan = Plan(words, states, limits: Both());
+
+        Assert.Equal(new[] { "p>" }, plan.Pinned.Select(Name));
+        Assert.Equal(new[] { "l>", "d>", "a>", "b<" }, plan.Due.Select(Name));
+        Assert.Equal(new[] { "c>" }, plan.New.Select(Name));
+        Assert.Equal(words.Length, plan.Cards.Count);
+        Assert.Equal(12, Plan(words, states, limits: Both(bury: false)).Cards.Count);
+    }
+
+    [Fact]
+    public void Burying_is_per_session_so_a_word_waiting_on_a_step_may_give_its_other_card()
+    {
+        var words = new[] { Word("x"), Word("y"), Word("p", pinned: true) };
+        var states = new[] { Stepping("x", Noon.AddMinutes(5)), Stepping("y", Noon.AddMinutes(-1)), Stepping("p", Noon.AddMinutes(5)) };
+
+        var plan = Plan(words, states, [StartedToday("x"), StartedToday("y"), StartedToday("p")], Both());
+
+        Assert.Equal(new[] { "y>" }, plan.Due.Select(Name));     // y's step is due: its reverse card waits
+        Assert.Equal(new[] { "x<" }, plan.New.Select(Name));     // x's step is not: its reverse card comes as a new one
+        Assert.Equal(new[] { "p<" }, plan.Pinned.Select(Name));  // a pinned word: the card studied longest ago
+    }
+
+    [Fact]
+    public void The_new_card_limit_counts_cards_in_both_directions()
+    {
+        var words = Enumerable.Range(0, 20).Select(i => Word($"n{i:00}")).ToList();
+        var fresh = Plan(words, [], limits: Both(bury: false)).New;
+        Assert.Equal((20, 10), (fresh.Count, fresh.Select(c => c.Word.Id).Distinct().Count())); // 20 new cards: 10 words
+        Assert.Equal(20, Plan(words, [], limits: Both()).New.Select(c => c.Word.Id).Distinct().Count()); // buried: 20 words
+
+        // Ten cards started today: ten more new cards, whichever words they come from.
+        var started = Enumerable.Range(0, 10).Select(i => $"n{i:00}").ToList();
+        var plan = Plan(words, started.Select(id => Stepping(id, Noon.AddMinutes(30))).ToList(), started.Select(StartedToday).ToList(), Both());
+
+        Assert.Equal((10, 10), (plan.NewToday, plan.New.Count));
+        Assert.Equal(10, plan.New.Select(c => c.Word.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public void Switching_direction_picks_up_that_directions_own_schedule()
+    {
+        var words = new[] { Word("w") };
+        var states = new[] { Due("w", 1), Due("w", 3, CardDirection.Reverse) with { IntervalDays = 9 } };
+
+        var forward = Plan(words, states).Cards.Single();
+        var reverse = Plan(words, states, limits: new StudyLimits(Direction: StudyDirection.Reverse)).Cards.Single();
+
+        Assert.Equal((CardDirection.Forward, 5), (forward.Direction, forward.State.IntervalDays));
+        Assert.Equal((CardDirection.Reverse, 9), (reverse.Direction, reverse.State.IntervalDays));
+        Assert.Equal(new CardKey("w", CardDirection.Reverse), reverse.Key);
+    }
+
+    [Fact]
+    public void A_reverse_card_is_answered_and_saved_as_reverse()
+    {
+        var saved = new List<(ReviewState State, ReviewAnswer Answer)>();
+        var plan = Plan([Word("r")], [], limits: new StudyLimits(Direction: StudyDirection.Reverse));
+        var session = new StudySession(plan, new Dictionary<CardKey, ReviewState>(), new StudyConfig(), Utc, (s, a) => saved.Add((s, a)), new Random(1));
+
+        Assert.Equal(CardDirection.Reverse, session.Next(Noon)!.Direction);
+        session.Answer(Rating.Easy, Noon, 1000);
+
+        var (state, answer) = saved.Single();
+        Assert.Equal((new CardKey("r", CardDirection.Reverse), CardQueue.Review), (state.Key, state.Queue));
+        Assert.Equal(new CardKey("r", CardDirection.Reverse), answer.Key);
     }
 
     [Fact]
@@ -102,7 +245,7 @@ public class SessionTests
     {
         var saved = new List<(ReviewState State, ReviewAnswer Answer)>();
         var plan = Plan([Word("n0"), Word("n1")], []);
-        var session = new StudySession(plan, new Dictionary<string, ReviewState>(), new StudyConfig(), Utc,
+        var session = new StudySession(plan, new Dictionary<CardKey, ReviewState>(), new StudyConfig(), Utc,
             (s, a) => saved.Add((s, a)), new Random(1));
 
         Assert.Equal("n0", session.Next(Noon)!.Word.Id);
@@ -129,7 +272,7 @@ public class SessionTests
     public void With_nothing_else_left_the_word_just_answered_waits_behind_the_next_step()
     {
         var plan = Plan([Word("b", lookups: 2), Word("a")], []);
-        var session = new StudySession(plan, new Dictionary<string, ReviewState>(), new StudyConfig(), Utc, (_, _) => { }, new NoJitter());
+        var session = new StudySession(plan, new Dictionary<CardKey, ReviewState>(), new StudyConfig(), Utc, (_, _) => { }, new NoJitter());
 
         Assert.Equal("b", session.Next(Noon)!.Word.Id);
         session.Answer(Rating.Hard, Noon, 1000);             // b: 5.5 minutes
