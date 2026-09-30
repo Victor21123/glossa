@@ -69,6 +69,8 @@ public sealed class AppSettings
 
     public AnkiSettings Anki { get; set; } = new();
 
+    public QuoteSettings Quotes { get; set; } = new();
+
     public DictionarySettings Dictionaries { get; set; } = new();
 
     public bool StartWithWindows { get; set; }
@@ -257,6 +259,19 @@ public sealed class AnkiSettings
 
     /// <summary>«Картинка значения» on the back of the note, with its author and license.</summary>
     public bool IncludeMeaningPictures { get; set; } = true;
+}
+
+/// <summary>«Цитаты»: lines translated in «Только перевод» kept in «Словарь» (decided 2026-09-30).</summary>
+public sealed class QuoteSettings
+{
+    /// <summary>«Реплика», «Зона» and «Весь экран» keep what they translated; live subtitles only by <see cref="LiveHotkey"/>.</summary>
+    public bool Save { get; set; } = true;
+
+    /// <summary>The frame with each quote, downscaled to 1280 px (~90 KB); on unless switched off.</summary>
+    public bool SaveFrames { get; set; } = true;
+
+    /// <summary>While live translation is on: the subtitle on screen goes to the quotes. Registered only then.</summary>
+    public string LiveHotkey { get; set; } = "Alt+S";
 }
 
 public sealed class DictionarySettings
@@ -518,6 +533,9 @@ public static class DataPaths
     public static string Work => System.IO.Path.Combine(Root, "tmp");
     public static string Library => System.IO.Path.Combine(Root, "library.db");
     public static string Shots => System.IO.Path.Combine(Root, "shots");
+
+    /// <summary>Frames of the quotes (downscaled), apart from the words' so they can be measured and cleared.</summary>
+    public static string QuoteShots => System.IO.Path.Combine(Root, Glossa.Core.Library.ShotStore.QuotesFolder);
     public static string Audio => System.IO.Path.Combine(Root, "audio");
     public static string Keys => System.IO.Path.Combine(Root, "keys.json");
 

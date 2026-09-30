@@ -130,7 +130,7 @@ public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, s
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 9;
+    private const int SchemaVersion = 10;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -316,6 +316,26 @@ public sealed partial class LibraryStore : IDisposable
                 PRAGMA user_version = 9;
                 """);
             tx.Commit();
+        }
+        if (version < 10)
+        {
+            // Quotes: lines translated in «Только перевод» (LibraryStore.Quotes.cs); text_key finds the same line again.
+            Exec("""
+                CREATE TABLE IF NOT EXISTS quotes(
+                  id TEXT PRIMARY KEY,
+                  created_utc TEXT NOT NULL,
+                  seen_utc TEXT NOT NULL,
+                  seen INTEGER NOT NULL DEFAULT 1,
+                  language TEXT NOT NULL,
+                  text TEXT NOT NULL,
+                  text_key TEXT NOT NULL,
+                  translation TEXT,
+                  app_exe TEXT, window_title TEXT,
+                  shot_file TEXT, box TEXT,
+                  source TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS quotes_key ON quotes(text_key, app_exe);
+                CREATE INDEX IF NOT EXISTS quotes_seen ON quotes(seen_utc);
+                """);
         }
         Exec($"PRAGMA user_version = {SchemaVersion}");
     }
@@ -889,17 +909,36 @@ public sealed partial class LibraryStore : IDisposable
 /// <summary>Saves screenshots as JPEG, named by content hash so one frame used by several words is stored once.</summary>
 public static class ShotStore
 {
-    public static string SaveJpeg(string dataRoot, byte[] bgra, int width, int height, int stride, int quality = 85)
+    /// <summary>Quote frames: their own folder, so their size can be shown and they can be cleared apart from the words'.</summary>
+    public const string QuotesFolder = "quotes";
+
+    /// <summary>
+    /// Width of a quote's frame: the whole scene still readable at ~90 KB (decided 2026-09-30; the user's 27 frames
+    /// averaged 292 KB at full size).
+    /// </summary>
+    public const int QuoteWidth = 1280;
+
+    /// <summary>
+    /// A quote's frame, downscaled to <see cref="QuoteWidth"/> under quotes\; returns the file relative to the data
+    /// folder and the scale from screen pixels to its pixels (for the text's box).
+    /// </summary>
+    public static (string File, double Scale) SaveQuoteFrame(string dataRoot, byte[] bgra, int width, int height, int stride) =>
+        (SaveJpeg(dataRoot, bgra, width, height, stride, quality: 80, folder: QuotesFolder, maxWidth: QuoteWidth),
+            Math.Min(1.0, QuoteWidth / (double)width));
+
+    public static string SaveJpeg(string dataRoot, byte[] bgra, int width, int height, int stride, int quality = 85,
+        string folder = "shots", int maxWidth = 0)
     {
         var hash = Convert.ToHexString(SHA256.HashData(bgra))[..24].ToLowerInvariant();
         var now = DateTime.Now;
-        var rel = Path.Combine("shots", now.ToString("yyyy", CultureInfo.InvariantCulture),
+        var rel = Path.Combine(folder, now.ToString("yyyy", CultureInfo.InvariantCulture),
             now.ToString("MM", CultureInfo.InvariantCulture), hash + ".jpg");
         var full = Path.Combine(dataRoot, rel);
         if (File.Exists(full)) return rel;
 
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
+        var scale = maxWidth > 0 && width > maxWidth ? maxWidth / (double)width : 1.0;
         using var bitmap = new SKBitmap(info);
         var handle = System.Runtime.InteropServices.GCHandle.Alloc(bgra, System.Runtime.InteropServices.GCHandleType.Pinned);
         try
@@ -913,8 +952,18 @@ public static class ShotStore
             handle.Free();
         }
         using var image = SKImage.FromBitmap(bitmap);
-        using var data = image.Encode(SKEncodedImageFormat.Jpeg, quality);
+        using var scaled = scale < 1 ? Scaled(image, scale) : null;
+        using var data = (scaled ?? image).Encode(SKEncodedImageFormat.Jpeg, quality);
         using (var fs = File.Create(full)) data.SaveTo(fs);
         return rel;
+    }
+
+    /// <summary>The frame made smaller; Mitchell keeps the game's text readable at half size and below.</summary>
+    private static SKImage Scaled(SKImage image, double scale)
+    {
+        var info = new SKImageInfo(Math.Max(1, (int)Math.Round(image.Width * scale)), Math.Max(1, (int)Math.Round(image.Height * scale)));
+        using var surface = SKSurface.Create(info);
+        surface.Canvas.DrawImage(image, new SKRect(0, 0, info.Width, info.Height), new SKSamplingOptions(SKCubicResampler.Mitchell));
+        return surface.Snapshot();
     }
 }

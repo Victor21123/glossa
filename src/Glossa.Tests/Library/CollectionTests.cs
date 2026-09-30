@@ -92,7 +92,7 @@ public sealed class CollectionTests : IDisposable
                   interval_days INTEGER NOT NULL DEFAULT 0, ease INTEGER NOT NULL DEFAULT 0, reps INTEGER NOT NULL DEFAULT 0,
                   lapses INTEGER NOT NULL DEFAULT 0, leech INTEGER NOT NULL DEFAULT 0, answered_utc TEXT);
                 ALTER TABLE review_log DROP COLUMN direction;
-                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture;
+                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture; DROP TABLE quotes;
                 PRAGMA user_version = 6;
                 """;
             cmd.ExecuteNonQuery();

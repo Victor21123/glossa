@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Glossa.Core.Library;
 
@@ -33,6 +34,24 @@ public static class TextExport
             sb.AppendLine();
         }
         // BOM so Excel opens Cyrillic and CJK correctly.
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
+    }
+
+    /// <summary>Quotes as a table: the line, its translation, language, game, when, how many times it came.</summary>
+    public static void WriteQuotesCsv(string path, IEnumerable<Quote> quotes)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("language,text,translation,app,seen,first,last");
+        foreach (var q in quotes)
+        {
+            sb.AppendJoin(',', new[]
+            {
+                q.Language, q.Text, q.Translation, q.WindowTitle ?? q.AppExe, q.Seen.ToString(CultureInfo.InvariantCulture),
+                q.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+                q.SeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+            }.Select(Csv));
+            sb.AppendLine();
+        }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
     }
 

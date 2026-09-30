@@ -82,7 +82,7 @@ public sealed class ReviewStoreTests : IDisposable
             using var cmd = db.CreateCommand();
             cmd.CommandText = """
                 DROP TABLE review_state; DROP TABLE review_log; ALTER TABLE words DROP COLUMN pinned_utc;
-                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture;
+                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture; DROP TABLE quotes;
                 PRAGMA user_version = 5;
                 """;
             cmd.ExecuteNonQuery();
@@ -164,7 +164,7 @@ public sealed class ReviewStoreTests : IDisposable
                 DROP TABLE review_state;
                 ALTER TABLE review_state_v7 RENAME TO review_state;
                 ALTER TABLE review_log DROP COLUMN direction;
-                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture;
+                ALTER TABLE words DROP COLUMN picture_query; ALTER TABLE words DROP COLUMN picture; DROP TABLE quotes;
                 PRAGMA user_version = 7;
                 """;
             cmd.ExecuteNonQuery();
