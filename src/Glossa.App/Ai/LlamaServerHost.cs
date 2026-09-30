@@ -16,14 +16,19 @@ public sealed class LlamaServerHost : IDisposable
 
     private readonly ILog _log;
     private readonly HttpClient _http;
+    private readonly Func<int> _freeVramMb, _freeRamMb;
     private readonly IntPtr _job;
     private readonly Dictionary<string, Instance> _running = [];
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public LlamaServerHost(ILog log, HttpClient localHttp)
+    /// <param name="freeVramMb">Free video memory as the card reports it (NVML), -1 when unknown.</param>
+    /// <param name="freeRamMb">Free RAM, -1 when unknown.</param>
+    public LlamaServerHost(ILog log, HttpClient localHttp, Func<int> freeVramMb, Func<int> freeRamMb)
     {
         _log = log;
         _http = localHttp;
+        _freeVramMb = freeVramMb;
+        _freeRamMb = freeRamMb;
         _job = Native.CreateJobObject(IntPtr.Zero, null);
         var info = new Native.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
         {
@@ -79,6 +84,7 @@ public sealed class LlamaServerHost : IDisposable
 
             if (!File.Exists(serverExe)) throw new LlmException($"Не найден llama-server: {serverExe}");
             if (!File.Exists(modelPath)) throw new LlmException($"Не найдена модель: {modelPath}");
+            var (args, others) = await FitAsync(role, serverExe, modelPath, placement, ct).ConfigureAwait(false);
 
             var alias = Path.GetFileNameWithoutExtension(modelPath).ToLowerInvariant();
             var psi = new ProcessStartInfo(serverExe)
@@ -98,7 +104,7 @@ public sealed class LlamaServerHost : IDisposable
                 "--load-mode", "none", "--poll", "0",
                 "--host", "127.0.0.1", "--port", port.ToString(), "--no-webui",
             }) psi.ArgumentList.Add(a);
-            foreach (var a in placement) psi.ArgumentList.Add(a);
+            foreach (var a in args) psi.ArgumentList.Add(a);
             // For measurements (Glossa.exe --selftest): extra llama-server options without a rebuild; later ones win.
             if (Environment.GetEnvironmentVariable("GLOSSA_LLAMA_ARGS") is { Length: > 0 } extra)
                 foreach (var a in extra.Split(' ', StringSplitOptions.RemoveEmptyEntries)) psi.ArgumentList.Add(a);
@@ -110,13 +116,19 @@ public sealed class LlamaServerHost : IDisposable
             Native.AssignProcessToJobObject(_job, process.Handle);
             process.EnableRaisingEvents = true;
             process.Exited += (_, _) => OnExited(role, process);
-            process.OutputDataReceived += (_, e) => LogServer(role, e.Data);
-            process.ErrorDataReceived += (_, e) => LogServer(role, e.Data);
+            var outOfMemory = false;
+            void Line(string? line)
+            {
+                if (line is not null && VramFit.IsOutOfMemory(line)) outOfMemory = true;
+                LogServer(role, line);
+            }
+            process.OutputDataReceived += (_, e) => Line(e.Data);
+            process.ErrorDataReceived += (_, e) => Line(e.Data);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
             var endpoint = new LlmEndpoint($"local:{alias}", LlmProviderKind.LlamaServer, $"http://127.0.0.1:{port}/v1", alias);
-            _log.Info($"llama-server[{role}] starting {alias} on :{port} (pid {process.Id}) {string.Join(' ', placement)}");
+            _log.Info($"llama-server[{role}] starting {alias} on :{port} (pid {process.Id}) {string.Join(' ', args)}");
 
             var sw = Stopwatch.StartNew();
             try
@@ -125,7 +137,11 @@ public sealed class LlamaServerHost : IDisposable
                 {
                     ct.ThrowIfCancellationRequested();
                     if (process.HasExited)
-                        throw new LlmException($"llama-server завершился с кодом {process.ExitCode} - см. лог", new ServerExitedException(process.ExitCode));
+                    {
+                        process.WaitForExit(); // its last lines, the reason among them, are read first
+                        throw new LlmException(outOfMemory ? VramFit.Short(others) : $"llama-server завершился с кодом {process.ExitCode} - см. лог",
+                            new ServerExitedException(process.ExitCode));
+                    }
                     if (sw.Elapsed > StartLimit) throw new LlmException($"llama-server не ответил за {StartLimit.TotalSeconds:0} с - см. лог");
                     try
                     {
@@ -158,6 +174,69 @@ public sealed class LlamaServerHost : IDisposable
     /// <summary>A cold start from a hard disk reads the whole file: 13 GB take about two minutes.</summary>
     private static readonly TimeSpan StartLimit = TimeSpan.FromSeconds(300);
 
+    /// <summary>
+    /// The placement as started. "--fit" plans with the free memory CUDA reports, which under Windows leaves out what
+    /// other programs hold: its target is raised by that gap, so the model takes on the card what the card has free
+    /// (<see cref="VramFit"/>). A model whose part off the card RAM cannot hold either is refused with the card's
+    /// message rather than paging the PC. Unchanged without "--fit-target", NVML or a CUDA device. Also whether
+    /// another program holds the card (for the message).
+    /// </summary>
+    private async Task<(IReadOnlyList<string> Args, bool Others)> FitAsync(string role, string serverExe, string modelPath,
+        IReadOnlyList<string> placement, CancellationToken ct)
+    {
+        if (!placement.Contains("--fit-target")) return (placement, false);
+        var free = _freeVramMb();
+        if (free < 0) return (placement, false);
+        if (VramFit.CudaFreeMb(await ListDevicesAsync(serverExe, ct).ConfigureAwait(false)) is not { } counted) return (placement, false);
+        var others = counted - free >= VramFit.OthersMb;
+        var needed = VramFit.RamNeededMb(placement, new FileInfo(modelPath).Length, free, f => File.Exists(f) ? new FileInfo(f).Length : 0);
+        var ram = _freeRamMb();
+        _log.Info($"llama-server[{role}] fit: CUDA counts {counted} MB free, the card has {free} MB; the part off the card needs {needed} MB of RAM, {ram} MB free");
+        if (VramFit.RamShort(needed, ram)) throw new LlmException(VramFit.Short(others));
+        return (VramFit.Adjust(placement, counted, free), others);
+    }
+
+    /// <summary>What <c>llama-server --list-devices</c> prints (~0.3 s): the devices with CUDA's own free memory. Empty on failure.</summary>
+    private async Task<string> ListDevicesAsync(string serverExe, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo(serverExe, "--list-devices")
+        {
+            WorkingDirectory = Path.GetDirectoryName(serverExe)!,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.Environment["CUDA_CACHE_PATH"] = Glossa.Core.Config.DataPaths.CudaCache;
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null) return "";
+            Native.AssignProcessToJobObject(_job, process.Handle);
+            var output = process.StandardOutput.ReadToEndAsync(ct);
+            var errors = process.StandardError.ReadToEndAsync(ct);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(20));
+            try
+            {
+                await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try { process.Kill(); }
+                catch (InvalidOperationException) { }
+                _log.Warn("llama-server --list-devices did not answer in 20 s");
+                return "";
+            }
+            return await output.ConfigureAwait(false) + "\n" + await errors.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException)
+        {
+            _log.Warn($"llama-server --list-devices failed: {ex.Message}");
+            return "";
+        }
+    }
+
     public void Stop(string role)
     {
         _gate.Wait();
@@ -177,7 +256,12 @@ public sealed class LlamaServerHost : IDisposable
         Instance? inst;
         lock (_running)
             if (!_running.Remove(role, out inst)) return;
-        try { if (!inst.Process.HasExited) inst.Process.Kill(entireProcessTree: true); }
+        try
+        {
+            // Waited for: the card frees its memory with the process, and a start right after measures what is free.
+            if (!inst.Process.HasExited) inst.Process.Kill(entireProcessTree: true);
+            inst.Process.WaitForExit(2000);
+        }
         catch (InvalidOperationException) { }
         inst.Process.Dispose();
         _log.Info($"llama-server[{role}] stopped");

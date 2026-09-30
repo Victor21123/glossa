@@ -409,6 +409,13 @@ public sealed class LocalAiSettings
     public bool UsesEyes(EyesSettings eyes) =>
         eyes.Device != "off" && Llm.ModelCatalog.For(Profile)?.ReadsStylized != true && HasEyes();
 
+    /// <summary>
+    /// The eyes would read for the current profile but are not downloaded: the card that found no text says where to get
+    /// them (they are not offered anywhere else, and stylized text reads worse without them).
+    /// </summary>
+    public bool MissesEyes(EyesSettings eyes) =>
+        Mode != "off" && eyes.Device != "off" && Llm.ModelCatalog.For(Profile)?.ReadsStylized != true && !HasEyes();
+
     /// <summary>Settings from before 2026-09-29: the retired Qwen + Hy-MT2 pair and its tiers become the default model and modes.</summary>
     public void Normalize()
     {

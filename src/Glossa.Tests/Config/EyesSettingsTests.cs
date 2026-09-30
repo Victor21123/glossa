@@ -67,6 +67,32 @@ public class EyesSettingsTests
     }
 
     [Fact]
+    public void The_card_suggests_the_eyes_only_where_they_would_read_and_are_missing()
+    {
+        var dir = Directory.CreateTempSubdirectory("glossa-eyes-").FullName;
+        try
+        {
+            var ai = new LocalAiSettings { ModelsFolder = dir, Profile = "gemma12b" };
+            var on = new EyesSettings();
+            Assert.True(ai.MissesEyes(on));
+            Assert.False(ai.MissesEyes(new EyesSettings { Device = "off" })); // turned off on purpose
+            ai.Profile = "gemma26b";
+            Assert.False(ai.MissesEyes(on)); // reads stylized text itself
+            ai.Profile = "gemma12b";
+            ai.Mode = "off";
+            Assert.False(ai.MissesEyes(on)); // no AI at all
+            ai.Mode = "auto";
+            File.WriteAllText(ai.EyesModel(), "");
+            File.WriteAllText(ai.EyesVisionFile(), "");
+            Assert.False(ai.MissesEyes(on));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void The_eyes_are_pinned_to_a_revision_with_both_files_and_are_no_profile()
     {
         var eyes = ModelCatalog.Eyes;

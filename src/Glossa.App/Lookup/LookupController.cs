@@ -300,6 +300,9 @@ public sealed class LookupController(
     /// <param name="why">Why the picture was not read either (the model not downloaded, the AI off for lack of memory).</param>
     private void NoText(Run run, string? why = null)
     {
+        // A stylized font is the usual reason on the 12B and E4B, and without the eyes it reads worse.
+        why ??= run.Settings.LocalAi.MissesEyes(run.Settings.Eyes)
+            ? "стилизованный шрифт лучше читают Глаза: Настройки -> ИИ и модели -> Глаза -> Скачать" : null;
         vm.ShowMessage(why is null ? "Под курсором не найден текст" : $"Под курсором не найден текст ({why})");
         popup.ShowNear(new PixelRect(run.Cursor.X, run.Cursor.Y, run.Cursor.X + 1, run.Cursor.Y + 1));
         Report(run.Context.Trigger, "под курсором нет текста", ok: false, stages: run.Stages());

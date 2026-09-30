@@ -326,7 +326,15 @@ public sealed class LookupViewModel : ObservableObject
 
     public string? Footer => _status ?? _timing;
 
-    public string? Error { get => _error; set => SetProperty(ref _error, value); }
+    /// <summary>What stopped the card; it ends the passing note too ("Загружаю модель..." stayed under the error).</summary>
+    public string? Error
+    {
+        get => _error;
+        set
+        {
+            if (SetProperty(ref _error, value) && value is not null) Status = null;
+        }
+    }
     public bool IsSaved { get => _isSaved; set => SetProperty(ref _isSaved, value); }
     public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
 

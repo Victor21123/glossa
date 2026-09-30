@@ -184,7 +184,7 @@ internal static class CardSnapshots
         settings.Games.AddRange(SampleGames());
         var dictionaries = new Glossa.Core.Dictionaries.DictionaryService(@"D:\GlossaData\dict\packs");
         dictionaries.Reload(settings.Dictionaries.Order, settings.Dictionaries.Disabled);
-        var host = new Ai.LlamaServerHost(log, http);
+        var host = new Ai.LlamaServerHost(log, http, () => -1, () => -1);
         var keys = new Ai.KeyStore(Path.Combine(data, "keys.json"));
         var services = new AppServices(() => settings, _ => { }, library, keys,
             new Speech.SpeechService(Path.Combine(data, "audio"), () => settings.Speech),

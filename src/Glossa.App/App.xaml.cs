@@ -148,7 +148,7 @@ public partial class App : Application
         _ocr.Trimmed += () => log.Info("OCR idle — buffers released");
         ApplyPriority();
         _capture = new ScreenCapture(log);
-        _llama = new LlamaServerHost(log, _localHttp);
+        _llama = new LlamaServerHost(log, _localHttp, AiRouter.FreeVramMb, Interop.Native.FreeRamMb);
         _keys = new KeyStore(DataPaths.Keys);
         _speech = new Speech.SpeechService(DataPaths.Audio, () => _settings.Speech);
         _router = new AiRouter(() => _settings, _llama, _localHttp, _remoteHttp, name => _keys.Get(name), log);
