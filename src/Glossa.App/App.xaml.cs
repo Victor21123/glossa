@@ -42,6 +42,9 @@ public partial class App : Application
     private Mutex? _instance;
     private TrayMenu? _trayMenu;
     private bool _lookupOn = true;
+
+    /// <summary>Counts recordings, so a late resume of the mouse and pad triggers cannot cut a newer recording short.</summary>
+    private int _padSuspendGeneration;
     private string? _aiState;
     private EventWaitHandle? _activate;
     private EventWaitHandle? _exit;
@@ -282,6 +285,28 @@ public partial class App : Application
             return true;
         };
         _services.WindowHotkeyActive = () => _settings.WindowHotkey.Length == 0 || _hotkeys.IsRegistered(HotkeyWindow);
+        // While a key is being recorded RegisterHotKey would swallow the current combination before the recorder sees it.
+        _services.SuspendHotkeys = suspend =>
+        {
+            if (suspend)
+            {
+                _hotkeys.Unregister(HotkeyLookup);
+                _hotkeys.Unregister(HotkeyWindow);
+                _padSuspendGeneration++;
+                _pad.Suspended = true;
+                return;
+            }
+            if (_lookupOn && !_hotkeys.Register(HotkeyLookup, _settings.Hotkey))
+                log.Warn($"lookup hotkey {_settings.Hotkey} could not be registered again after recording");
+            if (_settings.WindowHotkey.Length > 0 && !_hotkeys.Register(HotkeyWindow, _settings.WindowHotkey))
+                log.Warn($"window hotkey {_settings.WindowHotkey} could not be registered again after recording");
+            // The mouse button that ended the recording reaches the Raw Input path a moment later: keep it silent a little longer.
+            var generation = _padSuspendGeneration;
+            _ = Task.Delay(400).ContinueWith(_ => Dispatcher.BeginInvoke(() =>
+            {
+                if (generation == _padSuspendGeneration) _pad.Suspended = false;
+            }), TaskScheduler.Default);
+        };
 
         _ = Task.Run(() => Warm(log));
 
@@ -483,12 +508,11 @@ public partial class App : Application
         if (_hotkeys is null) return;
         if (visible && _popup?.IsCorrecting != true)
         {
-            _hotkeys.Register(HotkeyClose, "Escape");
-            _hotkeys.Register(HotkeySave, "S");
-            _hotkeys.Register(HotkeySpeak, "P");
-            _hotkeys.Register(HotkeyDetails, "Tab");
-            _hotkeys.Register(HotkeyCorrect, "F2");
-            if (_settings.Popup.HideTranslation) _hotkeys.Register(HotkeyReveal, "Space");
+            foreach (var key in Glossa.Core.Input.KeySpec.CardKeys)
+            {
+                if (key == "Space" && !_settings.Popup.HideTranslation) continue;
+                _hotkeys.Register(CardKeyId(key), key);
+            }
         }
         else
         {
@@ -500,6 +524,18 @@ public partial class App : Application
             _hotkeys.Unregister(HotkeyReveal);
         }
     }
+
+    /// <summary>The hotkey id of one of <c>KeySpec.CardKeys</c>.</summary>
+    private static int CardKeyId(string key) => key switch
+    {
+        "Escape" => HotkeyClose,
+        "S" => HotkeySave,
+        "P" => HotkeySpeak,
+        "Tab" => HotkeyDetails,
+        "F2" => HotkeyCorrect,
+        "Space" => HotkeyReveal,
+        _ => throw new ArgumentOutOfRangeException(nameof(key), key, "not a card key"),
+    };
 
     /// <summary>The icon itself stays a Windows tray icon; its menu is Glossa's own window (mockup «Меню в трее»).</summary>
     private WinForms.NotifyIcon CreateTray()

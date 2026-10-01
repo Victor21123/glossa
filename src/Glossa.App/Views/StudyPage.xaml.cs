@@ -21,13 +21,15 @@ public partial class StudyPage : UserControl
     private static readonly StudyClock Clock = StudyClock.Local;
     private static readonly int[] Sizes = [10, 20, 30, 50];
     private const int RowsShown = 5;
+    private const string NoNewWords = "Новых слов нет: все слова словаря уже в учёбе.";
 
     private AppServices? _services;
     private IReadOnlyList<SavedWord> _words = [];
     private IReadOnlyDictionary<CardKey, ReviewState> _states = new Dictionary<CardKey, ReviewState>();
     private IReadOnlyList<ReviewAnswer> _answers = [];
     private StudyStats _stats = StudyStats.Empty;
-    private StudyPlan? _plan;
+    private StudyPlan? _plan, _more;
+    private StudyOffer _offer = new(false, StudyStart.None);
     private StudySession? _session;
     private bool _filling, _flipped, _pinned, _reverse;
     private DateTime _shownUtc, _startedUtc;
@@ -69,6 +71,7 @@ public partial class StudyPage : UserControl
     public void Attach(AppServices services)
     {
         _services = services;
+        services.SettingsChanged += OnSettingsChanged;
         _filling = true;
         foreach (var n in Sizes)
             SizeFilter.Items.Add(new ComboBoxItem { Content = $"{n} {Russian.Plural(n, "карточка", "карточки", "карточек")}", Tag = n });
@@ -77,6 +80,17 @@ public partial class StudyPage : UserControl
         _filling = false;
         Refresh();
     }
+
+    public void Detach()
+    {
+        if (_services is { } services) services.SettingsChanged -= OnSettingsChanged;
+    }
+
+    /// <summary>«Картинки значения» switched in Настройки while a card is open: its back shows the new state at once.</summary>
+    private void OnSettingsChanged() => Dispatcher.BeginInvoke(() =>
+    {
+        if (_session is not null) PreviewMeaning();
+    });
 
     /// <summary>Everything from the library as it is now; a running review is left alone.</summary>
     public void Refresh()
@@ -100,8 +114,12 @@ public partial class StudyPage : UserControl
     {
         if (_session is null)
         {
-            if (key is not (Key.Space or Key.Enter) || !StartButton.IsEnabled || GameFilter.IsDropDownOpen || SizeFilter.IsDropDownOpen) return false;
-            Start();
+            if (key is not (Key.Space or Key.Enter) || GameFilter.IsDropDownOpen || SizeFilter.IsDropDownOpen) return false;
+            if (Keyboard.FocusedElement is Button focused && IsAncestorOf(focused)) return false; // a focused button handles its own Enter/Space
+            // Space starts the regular plan; only with nothing scheduled does it start the "Ещё" portion.
+            var plan = _offer.Space switch { StudyStart.Regular => _plan, StudyStart.More => _more, _ => null };
+            if (plan is null) return false;
+            Start(plan);
             return true;
         }
         switch (key)
@@ -169,8 +187,11 @@ public partial class StudyPage : UserControl
     {
         var study = _services!.Settings.Study;
         var (language, game) = (ChosenLanguage, ChosenGame);
-        _plan = SessionBuilder.Build(_words, _states, Today(now), study.Limits() with { Size = ChosenSize }, study.Config(), Clock, now,
-            w => (language is null || w.Language == language) && (game is null || GamesOf(w).Contains(game)));
+        Func<SavedWord, bool> include = w => (language is null || w.Language == language) && (game is null || GamesOf(w).Contains(game));
+        var limits = study.Limits() with { Size = ChosenSize };
+        _plan = SessionBuilder.Build(_words, _states, Today(now), limits, study.Config(), Clock, now, include);
+        _more = SessionBuilder.Build(_words, _states, Today(now), limits.More(), study.Config(), Clock, now, include);
+        _offer = StudyOffer.Of(_plan, _more);
 
         var n = _plan.Cards.Count;
         var minutes = Math.Max(1, (int)Math.Ceiling(n * _stats.SecondsPerCard / 60.0));
@@ -185,6 +206,7 @@ public partial class StudyPage : UserControl
             : NothingDue(now);
         StartButton.IsEnabled = n > 0;
         StartHint.Visibility = n > 0 ? Visibility.Visible : Visibility.Hidden;
+        ShowMore();
         Queues.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         PinnedTitle.Text = $"НЕ МОГУ ЗАПОМНИТЬ ({_plan.Pinned.Count})";
@@ -210,6 +232,22 @@ public partial class StudyPage : UserControl
             : "Расписание как в Anki";
     }
 
+    /// <summary>"Ещё N слов": the main button when nothing is scheduled, a quiet one under "Начать" when something is.</summary>
+    private void ShowMore()
+    {
+        var more = _more!;
+        var main = _offer.Space == StudyStart.More;
+        MoreButton.Visibility = MoreHint.Visibility = _offer.ShowMore ? Visibility.Visible : Visibility.Collapsed;
+        if (main)
+            StartButton.Visibility = StartHint.Visibility = Visibility.Collapsed;
+        else StartButton.Visibility = Visibility.Visible;
+        if (!_offer.ShowMore) return;
+        var n = more.Cards.Select(c => c.Word.Id).Distinct().Count(); // words, not cards: with both directions a word has two
+        MoreButton.Content = $"Ещё {n} {Russian.Plural(n, "слово", "слова", "слов")}";
+        MoreButton.Style = (Style)FindResource(main ? "BigPrimaryButton" : "QuietButton");
+        MoreHint.Text = (main ? "или Пробел. " : "") + "Сначала то, что подошло по сроку, потом новые слова сверх нормы на сегодня.";
+    }
+
     /// <summary>Why there is nothing to study and when there will be.</summary>
     private string NothingDue(DateTime now)
     {
@@ -218,10 +256,13 @@ public partial class StudyPage : UserControl
         if (_states.Values.Where(s => s.DueAt > now).Min(s => s.DueAt) is { } soon)
             return $"Слова на учебных шагах вернутся через {Math.Max(1, (int)Math.Ceiling((soon - now).TotalMinutes))} мин.";
         var next = _states.Values.Where(s => s.DueDay > today).GroupBy(s => s.DueDay!.Value).MinBy(g => g.Key);
-        if (next is null) return "Новые слова на сегодня кончились.";
+        // No card was never answered (pinned ones count too): the whole dictionary is already in study.
+        var allStudied = _plan is { Unstudied: 0 };
+        if (next is null) return allStudied ? NoNewWords : "Новые слова на сегодня кончились.";
         var days = next.Key.DayNumber - today.DayNumber;
-        return $"Следующее повторение {(days == 1 ? "завтра" : $"через {StudyLabels.Days(days)}")}: " +
-               $"{next.Count()} {Russian.Plural(next.Count(), "слово", "слова", "слов")}.";
+        var text = $"Следующее повторение {(days == 1 ? "завтра" : $"через {StudyLabels.Days(days)}")}: " +
+                   $"{next.Count()} {Russian.Plural(next.Count(), "слово", "слова", "слов")}.";
+        return allStudied ? $"{text} {NoNewWords}" : text;
     }
 
     private void Rows(Panel target, IReadOnlyList<SessionCard> cards, DateTime now)
@@ -287,13 +328,15 @@ public partial class StudyPage : UserControl
         var d => $"{StudyLabels.Days(d)} назад",
     };
 
-    private void OnStart(object sender, RoutedEventArgs e) => Start();
+    private void OnStart(object sender, RoutedEventArgs e) => Start(_plan);
+
+    private void OnMore(object sender, RoutedEventArgs e) => Start(_more);
 
     // ---- the review ----
 
-    private void Start()
+    private void Start(StudyPlan? chosen)
     {
-        if (_services is not { } services || _plan is not { Cards.Count: > 0 } plan) return;
+        if (_services is not { } services || chosen is not { Cards.Count: > 0 } plan) return;
         _session = new StudySession(plan, _states, services.Settings.Study.Config(), Clock, services.Library.SaveAnswer);
         _answered = 0;
         _chosenPictures.Clear();
@@ -380,18 +423,16 @@ public partial class StudyPage : UserControl
         Line.Inlines.Clear();
         if (w.Context is not { } text) return;
         var length = (w.Contexts.FirstOrDefault()?.Surface ?? w.Word).Length;
-        var at = w.ContextOffset;
-        if (at < 0 || at + length > text.Length)
+        foreach (var part in Glossa.Core.Text.Highlight.Split(text, w.ContextOffset, length))
         {
-            Line.Inlines.Add(new Run(text));
-            return;
+            var run = new Run(part.Text);
+            if (part.IsWord)
+            {
+                run.SetResourceReference(TextElement.BackgroundProperty, "MarkBg");
+                run.SetResourceReference(TextElement.ForegroundProperty, "MarkInk");
+            }
+            Line.Inlines.Add(run);
         }
-        Line.Inlines.Add(new Run(text[..at]));
-        var word = new Run(text.Substring(at, length));
-        word.SetResourceReference(TextElement.BackgroundProperty, "MarkBg");
-        word.SetResourceReference(TextElement.ForegroundProperty, "MarkInk");
-        Line.Inlines.Add(word);
-        Line.Inlines.Add(new Run(text[(at + length)..]));
     }
 
     private void FillMeta(SavedWord w)
@@ -425,12 +466,18 @@ public partial class StudyPage : UserControl
         MeaningImage.Visibility = MeaningCredit.Visibility = image is null ? Visibility.Collapsed : Visibility.Visible;
         MeaningCredit.Text = picture?.Credit;
         NoMeaning.Visibility = image is null ? Visibility.Visible : Visibility.Collapsed;
-        MeaningPanel.Visibility = _services!.Settings.Study.BackPicture ? Visibility.Visible : Visibility.Collapsed;
+        MeaningPanel.Visibility = _services!.Settings.StudyBackPicture() ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>The back of the card on screen read again after a setting changed (also --render-main).</summary>
+    internal void PreviewMeaning()
+    {
+        if (_word is { } w) ShowMeaning(w);
     }
 
     private void OnPickPicture(object sender, RoutedEventArgs e)
     {
-        if (_word is not { } w) return;
+        if (_word is not { } w || !_services!.Settings.StudyBackPicture()) return;
         PickPicture?.Invoke(Latest(w), (picture, query) =>
         {
             _chosenPictures[w.Id] = (picture, query ?? Latest(w).PictureQuery);

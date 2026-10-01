@@ -95,6 +95,21 @@
         </Setter>
     </Style>
 
+    <!-- The main action of a start screen: the inverse button, large. -->
+    <Style x:Key="BigPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Height" Value="58" />
+        <Setter Property="Padding" Value="40,0" />
+    </Style>
+
+    <!-- A second action under a main one: the plain outlined button, a little smaller. -->
+    <Style x:Key="QuietButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="24,8,24,9" />
+        <Setter Property="Margin" Value="0,14,0,0" />
+    </Style>
+
     <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Muted}" />
@@ -226,6 +241,74 @@
                             <Setter TargetName="Dash" Property="Visibility" Value="Hidden" />
                         </Trigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ================= Selectable text (read-only, copied with Ctrl+C) ================= -->
+    <!-- The menu a TextBox gives itself is English; this one is ours. The commands act on the field the menu opened on. -->
+    <ContextMenu x:Key="SelectableMenu">
+        <MenuItem Header="Копировать" Command="ApplicationCommands.Copy"
+                  CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        <MenuItem Header="Выделить всё" Command="ApplicationCommands.SelectAll"
+                  CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
+
+    <!-- Reads as a TextBlock (no frame, no inner padding, wraps, wheel goes to the pane), yet the mouse selects text in it. -->
+    <Style x:Key="SelectableText" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="IsReadOnlyCaretVisible" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+        <Setter Property="SelectionTextBrush" Value="{DynamicResource Ink}" />
+        <Setter Property="SelectionOpacity" Value="0.35" />
+        <Setter Property="ContextMenu" Value="{StaticResource SelectableMenu}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <!-- The transparent Border makes the whole box hit-testable (a drag from beside a short line or from between
+                         lines selects). A TextBox draws its text 2 px in from where a TextBlock does; the negative margin takes that back. -->
+                    <Border Background="Transparent">
+                        <Decorator x:Name="PART_ContentHost" Focusable="False" Margin="-2,0" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- An empty optional field leaves no blank row. -->
+                        <Trigger Property="Text" Value="">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The same for text built from runs (the replica with its marked word, a dictionary article). -->
+    <Style x:Key="SelectableDocument" TargetType="RichTextBox">
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="IsDocumentEnabled" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+        <Setter Property="SelectionTextBrush" Value="{DynamicResource Ink}" />
+        <Setter Property="SelectionOpacity" Value="0.35" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="ContextMenu" Value="{StaticResource SelectableMenu}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RichTextBox">
+                    <Border Background="Transparent">
+                        <Decorator x:Name="PART_ContentHost" Focusable="False" Margin="-5,0" />
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

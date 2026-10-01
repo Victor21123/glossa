@@ -35,11 +35,43 @@ public static class StudyDirections
 /// Glossa's session around Anki's scheduler: at most <see cref="Size"/> cards, pinned words up to <see cref="PinnedShare"/>
 /// of them. Limits count cards, as Anki's do: with both directions 20 new cards a day are about 10 words.
 /// <see cref="BurySiblings"/>: one card of a word per session (Anki's "bury siblings", but per session).
+/// <see cref="ExtraNew"/>: new cards allowed on top of the day's limit (Anki's "increase today's new card limit").
 /// </summary>
 public sealed record StudyLimits(int Size = 20, int NewPerDay = 20, int ReviewsPerDay = 200, double PinnedShare = 0.5,
-    NewWordOrder NewOrder = NewWordOrder.Lookups, StudyDirection Direction = StudyDirection.Forward, bool BurySiblings = true);
+    NewWordOrder NewOrder = NewWordOrder.Lookups, StudyDirection Direction = StudyDirection.Forward, bool BurySiblings = true,
+    int ExtraNew = 0)
+{
+    /// <summary>
+    /// "Ещё N слов": a portion of <see cref="Size"/> cards, what is due first, then new words past the day's limit. Nothing is
+    /// stored, so it works after a restart and any number of times a day. Pinned words stay with the regular session.
+    /// </summary>
+    public StudyLimits More() => this with { ExtraNew = Size, PinnedShare = 0 };
+}
 
-/// <summary>A session to start: the cards in order, each bucket for the start screen, and the directions it drew from.</summary>
+/// <summary>What the start screen of a regular plan and a "more" portion offers: the button, and what Space starts.</summary>
+public enum StudyStart { None, Regular, More }
+
+/// <summary>
+/// "Ещё N слов" appears once the day's new limit is used up (<see cref="StudyPlan.NewLeft"/> is 0, not merely no new cards in
+/// a session filled by pinned and due ones) and the portion would bring some, so it is never beside new words still free.
+/// Not at all with NewPerDay 0: that is "reviews only" by choice. Space starts the regular plan; only when that is empty does
+/// it start the portion.
+/// </summary>
+public sealed record StudyOffer(bool ShowMore, StudyStart Space)
+{
+    public static StudyOffer Of(StudyPlan regular, StudyPlan more)
+    {
+        // NewPerDay 0 is a choice (reviews only): no offer to break it.
+        var show = regular.NewPerDay > 0 && regular.NewLeft == 0 && more.New.Count > 0;
+        return new StudyOffer(show, regular.Cards.Count > 0 ? StudyStart.Regular : show ? StudyStart.More : StudyStart.None);
+    }
+}
+
+/// <summary>
+/// A session to start: the cards in order, each bucket for the start screen, and the directions it drew from.
+/// <see cref="NewLeft"/>: new cards the day's limits still allow, before <see cref="StudyLimits.ExtraNew"/> (0: the limit is used up,
+/// whatever the session size cut off). <see cref="Unstudied"/>: cards never answered among the words included, pinned ones too.
+/// </summary>
 public sealed record StudyPlan(
     IReadOnlyList<SessionCard> Cards,
     IReadOnlyList<SessionCard> Pinned,
@@ -47,7 +79,9 @@ public sealed record StudyPlan(
     IReadOnlyList<SessionCard> New,
     int NewToday,
     int NewPerDay,
-    StudyDirection Direction);
+    StudyDirection Direction,
+    int NewLeft = 0,
+    int Unstudied = 0);
 
 /// <summary>
 /// Picks a session: pinned words (up to <see cref="StudyLimits.PinnedShare"/>, the longest unstudied first), then what is
@@ -95,7 +129,9 @@ public static class SessionBuilder
 
         // The new-card limit counts cards started in earlier sessions today; as in Anki, the review limit caps it too.
         var newToday = today.Count(a => a.QueueBefore == CardQueue.New);
-        var newLeft = Math.Min(limits.NewPerDay - newToday, reviewsLeft - dueCards.Count(c => c.State.DueAt is null));
+        var allowed = Math.Max(Math.Min(limits.NewPerDay - newToday, reviewsLeft - dueCards.Count(c => c.State.DueAt is null)), 0);
+        // Deliberate deviation from Anki v3: the extra new cards ignore the review limit (the user asked for more words explicitly).
+        var newLeft = allowed + limits.ExtraNew;
         var candidates = rest.Where(c => c.State.Queue == CardQueue.New);
         var fresh = OnePerWord(limits.NewOrder switch
             {
@@ -109,7 +145,7 @@ public static class SessionBuilder
         // Steps due now first, then reviews with new words mixed in, pinned words spread through the whole.
         var main = Interleave.Mix(Interleave.Mix(dueCards.Where(c => c.State.DueAt is null).ToList(), fresh), pinned);
         return new StudyPlan([.. dueCards.Where(c => c.State.DueAt is not null), .. main], pinned, dueCards, fresh, newToday,
-            limits.NewPerDay, limits.Direction);
+            limits.NewPerDay, limits.Direction, allowed, cards.Count(c => c.State.Queue == CardQueue.New));
     }
 
     // The first card of each word, in order; with burying off (no set) every card. Lazy on purpose: a word counts as

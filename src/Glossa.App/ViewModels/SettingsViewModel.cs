@@ -303,8 +303,22 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool AutoSaveWords { get => S.AutoSaveWords; set => Set(() => S.AutoSaveWords = value); }
 
+    /// <summary>«Картинки значения»: the master switch (<see cref="AppSettings.MeaningPictures"/>).</summary>
+    public bool MeaningPictures
+    {
+        get => S.MeaningPictures;
+        set => Set(() => S.MeaningPictures = value, also: nameof(AnkiPictureShown));
+    }
+
+    /// <summary>Whether the Anki note preview shows the picture: the switch and the Anki checkbox together.</summary>
+    public bool AnkiPictureShown => S.AnkiMeaningPictures();
+
     public bool AnkiImages { get => S.Anki.IncludeImages; set => Set(() => S.Anki.IncludeImages = value); }
-    public bool AnkiMeaningPictures { get => S.Anki.IncludeMeaningPictures; set => Set(() => S.Anki.IncludeMeaningPictures = value); }
+    public bool AnkiMeaningPictures
+    {
+        get => S.Anki.IncludeMeaningPictures;
+        set => Set(() => S.Anki.IncludeMeaningPictures = value, also: nameof(AnkiPictureShown));
+    }
     public bool QuotesSave { get => S.Quotes.Save; set => Set(() => S.Quotes.Save = value); }
     public bool QuotesFrames { get => S.Quotes.SaveFrames; set => Set(() => S.Quotes.SaveFrames = value); }
     public string QuotesLiveHotkey => S.Quotes.LiveHotkey;

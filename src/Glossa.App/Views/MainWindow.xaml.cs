@@ -98,10 +98,12 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             services.LibraryChanged -= reload;
+            _library.Detach();
             if (services.Games is { } g) g.Changed -= reload;
             SettingsPage.Model!.PropertyChanged -= purpose;
             SettingsPage.Detach();
             HomePage.Detach();
+            StudyPage.Detach();
         };
         StateChanged += (_, _) => Frame.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
         SizeChanged += (_, _) => FrameBorder.Height = Math.Clamp(ActualHeight * 0.45, 240, 560);
@@ -287,21 +289,99 @@ public partial class MainWindow : Window
     /// <summary>The sentence with the word highlighted (inverse, like the card).</summary>
     private void RenderContext(WordEntry? entry)
     {
-        DetailContext.Inlines.Clear();
-        if (entry?.ContextText is not { } text) return;
-        var off = entry.ContextOffset;
-        var len = entry.SurfaceLength;
-        if (off < 0 || off + len > text.Length)
+        // One paragraph in a read-only RichTextBox, so the replica can be selected and copied (a new document drops any selection).
+        var paragraph = new Paragraph { Margin = new Thickness(0), LineHeight = 21 };
+        if (entry?.ContextText is { } text)
+            foreach (var part in Glossa.Core.Text.Highlight.Split(text, entry.ContextOffset, entry.SurfaceLength))
+            {
+                var run = new Run(part.Text);
+                if (part.IsWord)
+                {
+                    run.SetResourceReference(TextElement.BackgroundProperty, "MarkBg");
+                    run.SetResourceReference(TextElement.ForegroundProperty, "MarkInk");
+                }
+                paragraph.Inlines.Add(run);
+            }
+        DetailContext.Document = new FlowDocument(paragraph) { PagePadding = new Thickness(0) };
+        ClearSelections(DetailPane, null);
+    }
+
+    /// <summary>--render-main: part of the translation or of the replica selected, as the mouse would, and focused.</summary>
+    internal void PreviewSelection(bool replica)
+    {
+        ClearSelections(DetailPane, null);
+        if (replica)
         {
-            DetailContext.Inlines.Add(new Run(text));
+            var start = DetailContext.Document.ContentStart.GetPositionAtOffset(25);
+            var end = DetailContext.Document.ContentStart.GetPositionAtOffset(33);
+            if (start is not null && end is not null) DetailContext.Selection.Select(start, end);
+            DetailContext.Focus();
+        }
+        else
+        {
+            DetailTranslation.Select(2, 5);
+            DetailTranslation.Focus();
+        }
+    }
+
+    /// <summary>--render-main: what the fields hold selected, translation then replica.</summary>
+    internal string SelectionPreviewText() => DetailTranslation.SelectedText + "|" + DetailContext.Selection.Text;
+
+    /// <summary>Drops the selection of every read-only field under <paramref name="root"/> except <paramref name="keep"/>.</summary>
+    private static void ClearSelections(DependencyObject root, DependencyObject? keep)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (!ReferenceEquals(child, keep))
+            {
+                if (child is TextBox { IsReadOnly: true } box) box.Select(0, 0);
+                else if (child is RichTextBox { IsReadOnly: true } rich) rich.Selection.Select(rich.Document.ContentStart, rich.Document.ContentStart);
+            }
+            ClearSelections(child, keep);
+        }
+    }
+
+    /// <summary>A field of the detail got the keyboard: the selection of any other one goes, so Ctrl+C copies what is shown selected.</summary>
+    private void OnDetailFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is System.Windows.Controls.Primitives.TextBoxBase { IsReadOnly: true } field) ClearSelections(DetailPane, field);
+    }
+
+    /// <summary>
+    /// A click in a read-only field of the detail moves the keyboard from the list to it. Selecting and copying keys
+    /// (Ctrl+C, Ctrl+Insert, Ctrl+A, Shift with arrows, Home, End, Page keys) stay with the field - Ctrl+A therefore selects
+    /// the field's text, not all words, while the field holds the keyboard. Esc clears the selection; every other key
+    /// (Up, Down, Delete...) goes back to the list and is handled there as before.
+    /// </summary>
+    private void OnDetailKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.OriginalSource is not System.Windows.Controls.Primitives.TextBoxBase { IsReadOnly: true }) return;
+        var key = e.Key;
+        if (key is Key.System or Key.Tab or Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt
+            or Key.RightAlt or Key.LWin or Key.RWin or Key.CapsLock or Key.None or Key.ImeProcessed or Key.DeadCharProcessed) return;
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+        if (ctrl && key is Key.C or Key.Insert or Key.A) return;
+        if (shift && key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown) return;
+        e.Handled = true;
+        if (key == Key.Escape)
+        {
+            ClearSelections(DetailPane, null);
+            FocusList();
             return;
         }
-        DetailContext.Inlines.Add(new Run(text[..off]));
-        var word = new Run(text.Substring(off, len));
-        word.SetResourceReference(TextElement.BackgroundProperty, "MarkBg");
-        word.SetResourceReference(TextElement.ForegroundProperty, "MarkInk");
-        DetailContext.Inlines.Add(word);
-        DetailContext.Inlines.Add(new Run(text[(off + len)..]));
+        FocusList();
+        if (PresentationSource.FromVisual(WordsList) is not { } source) return;
+        var forwarded = new KeyEventArgs(Keyboard.PrimaryDevice, source, e.Timestamp, key) { RoutedEvent = Keyboard.KeyDownEvent };
+        (Keyboard.FocusedElement as UIElement ?? WordsList).RaiseEvent(forwarded);
+    }
+
+    /// <summary>The keyboard back on the chosen word of the list (its row, so Up and Down go on from it).</summary>
+    private void FocusList()
+    {
+        if (WordsList.SelectedItem is { } item && WordsList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row) row.Focus();
+        else WordsList.Focus();
     }
 
     private void UpdateEmpty() =>
@@ -434,7 +514,10 @@ public partial class MainWindow : Window
     /// <summary>The scene in the default viewer, with the word outlined as it is here.</summary>
     private void OnOpenShot(object sender, RoutedEventArgs e)
     {
-        if (_library.Selected is not { ShotPath: { } path } entry || !File.Exists(path)) return;
+        // The path comes from a library row: only a real JPEG in the shots folder is opened (never library.db or a link).
+        if (_library.Selected is not { ShotPath: { } shot } entry
+            || Glossa.Core.Export.FrameFiles.Resolve(Glossa.Core.Config.DataPaths.Root, shot) is not { } path
+            || !Glossa.Core.Export.FrameFiles.IsUsable(path)) return;
         var open = path;
         if (entry.WordBox is { } box)
         {
@@ -458,6 +541,16 @@ public partial class MainWindow : Window
         ExportButton.ContextMenu.IsOpen = true;
     }
 
+    /// <summary>Item states are set as the menu opens, by a click or a right-click alike.</summary>
+    private void OnExportMenuOpened(object sender, RoutedEventArgs e)
+    {
+        // While frames are saved only "stop" is live: the rest would be dropped by the busy library.
+        var frames = _library.FramesRunning;
+        foreach (var item in new[] { ExportApkgItem, ExportQuizletItem, ExportCsvItem }) item.IsEnabled = !_library.Busy;
+        ExportFramesItem.Header = frames ? "Остановить сохранение кадров" : "Кадры в папку...";
+        ExportFramesItem.IsEnabled = frames || !_library.Busy;
+    }
+
     private async void OnExportApkg(object sender, RoutedEventArgs e)
     {
         if (AskPath("Колода Anki|*.apkg", "Glossa.apkg") is { } p) await _library.ExportApkg(p);
@@ -471,6 +564,20 @@ public partial class MainWindow : Window
     private async void OnExportCsv(object sender, RoutedEventArgs e)
     {
         if (AskPath("Таблица CSV|*.csv", "Glossa.csv") is { } p) await _library.ExportCsv(p);
+    }
+
+    private async void OnExportFrames(object sender, RoutedEventArgs e) => await ExportFramesAsync(null);
+
+    /// <summary>Frames of the words (null: the visible list) into a folder; the same item stops a run in progress.</summary>
+    private async Task ExportFramesAsync(IReadOnlyList<WordEntry>? words)
+    {
+        if (_library.FramesRunning)
+        {
+            _library.CancelFrames();
+            return;
+        }
+        var jobs = await _library.CollectFrames(words); // before the dialog: no frames, no question
+        if (jobs.Count > 0 && AskFolder() is { } folder) await _library.ExportFrames(jobs, folder);
     }
 
     // ---- dialogs over the window ----
@@ -501,6 +608,7 @@ public partial class MainWindow : Window
 
     private void OpenPicturePicker(SavedWord word, Action<MeaningPicture?, string?>? changed)
     {
+        if (!_services.Settings.MeaningPictures) return; // «Картинки значения» is off in Настройки -> Словарь
         _picturing = (word.Id, changed);
         var title = string.IsNullOrWhiteSpace(word.Translation) ? word.Headword : $"{word.Headword} - {word.Translation}";
         PicturePicker.Open(_services.Pictures, title, LibraryViewModel.PictureQuery(word), word.Picture is not null);
@@ -725,6 +833,14 @@ public partial class MainWindow : Window
         var delete = new MenuItem { Header = words.Count == 1 ? "Удалить" : $"Удалить ({words.Count})" };
         delete.Click += (_, _) => DeleteSelected();
         menu.Items.Add(delete);
+        var running = _library.FramesRunning;
+        var frames = new MenuItem
+        {
+            Header = running ? "Остановить сохранение кадров" : words.Count == 1 ? "Кадры в папку..." : $"Кадры в папку ({words.Count})...",
+            IsEnabled = running || !_library.Busy,
+        };
+        frames.Click += async (_, _) => await ExportFramesAsync(words);
+        menu.Items.Add(frames);
     }
 
     /// <summary>«+ добавить» under the word: the manual collections it is not in yet, or a new one.</summary>
@@ -750,6 +866,17 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.DataContext is Glossa.Core.Library.WordCollection c && _library.Selected is { } word)
             _library.RemoveFromCollection(c.Id, word);
+    }
+
+    /// <summary>A folder to put the frames in; opens in Pictures, where a tester looks for screenshots.</summary>
+    private string? AskFolder()
+    {
+        var dlg = new OpenFolderDialog
+        {
+            Title = "Папка для кадров",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+        };
+        return dlg.ShowDialog(this) == true ? dlg.FolderName : null;
     }
 
     private string? AskPath(string filter, string name)

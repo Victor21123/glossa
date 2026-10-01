@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Glossa.App.Lookup;
 using Glossa.App.ViewModels;
+using Glossa.Core.Input;
 
 namespace Glossa.App.Views.Settings;
 
@@ -21,6 +23,15 @@ public partial class KeysSection : UserControl
     /// <summary>Which combination the pressed keys are for: the lookup or «Открыть Glossa».</summary>
     private bool _forWindow;
 
+    /// <summary>Takes the key events while recording; a fresh one per recording.</summary>
+    private KeyRecorder _recorder = new();
+
+    /// <summary>The lookup and window hotkeys are let go while recording (RegisterHotKey would swallow them).</summary>
+    private bool _suspended;
+
+    /// <summary>Design snapshots only: skips the check that the recorder got the keyboard.</summary>
+    private bool _designPreview;
+
     public KeysSection(AppServices services, SettingsViewModel model)
     {
         InitializeComponent();
@@ -30,7 +41,14 @@ public partial class KeysSection : UserControl
         // With one monitor there is nowhere else to put the card: only what works is shown.
         OtherMonitorRow.Visibility = Glossa.App.Interop.Native.MonitorBounds().Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         Focusable = true;
-        PreviewKeyDown += OnCaptureKey;
+        Recorder.PreviewKeyDown += OnCaptureDown;
+        Recorder.PreviewKeyUp += OnCaptureUp;
+        Recorder.RequestBringIntoView += (_, e) => e.Handled = true; // the 1px recorder sits at the top: do not scroll the page there
+        Recorder.LostKeyboardFocus += (_, _) =>
+        {
+            if (Capturing) StopCapture(); // the keyboard went elsewhere (Alt+Tab, a click)
+        };
+        PreviewMouseDown += OnCaptureMouse;
         foreach (var (name, key) in CardKeyList)
         {
             var row = new DockPanel { Height = 44, Margin = new Thickness(0, 0, 32, 0) };
@@ -107,19 +125,37 @@ public partial class KeysSection : UserControl
     {
         StopCapture();
         _forWindow = forWindow;
+        _recorder = new KeyRecorder();
         Capturing = true;
         var (change, cancel, result) = forWindow ? (WindowChangeButton, WindowCancelButton, WindowResult) : (ChangeButton, CancelButton, HotkeyResult);
-        change.Content = "Нажми новое сочетание...";
+        change.Content = "Жду нажатия...";
         change.IsEnabled = false;
         cancel.Visibility = Visibility.Visible;
         result.Visibility = Visibility.Collapsed;
-        Keyboard.Focus(this);
+        ShowHeld();
+        if (_services.SuspendHotkeys is { } suspend)
+        {
+            suspend(true);
+            _suspended = true;
+        }
+        // The clicked button is disabled now: the keyboard moves once the click is through.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (!Capturing || _designPreview) return;
+            Keyboard.Focus(Recorder);
+            if (Recorder.IsKeyboardFocused) return;
+            // The keyboard did not move: nothing would be heard, so do not leave hotkeys let go.
+            var target = _forWindow ? WindowResult : HotkeyResult;
+            StopCapture();
+            Result(target, ok: false, "Не удалось начать запись: нажми \"Изменить\" ещё раз.");
+        });
     }
 
     private void OnCancel(object sender, RoutedEventArgs e) => StopCapture();
 
     private void StopCapture()
     {
+        var was = Capturing;
         Capturing = false;
         foreach (var (change, cancel) in new[] { (ChangeButton, CancelButton), (WindowChangeButton, WindowCancelButton) })
         {
@@ -127,6 +163,27 @@ public partial class KeysSection : UserControl
             change.IsEnabled = true;
             cancel.Visibility = Visibility.Collapsed;
         }
+        if (_suspended)
+        {
+            _suspended = false;
+            _services.SuspendHotkeys?.Invoke(false);
+        }
+        if (was) ShowHotkey();
+    }
+
+    /// <summary>While recording the key caps show what is held right now.</summary>
+    private void ShowHeld()
+    {
+        var held = _recorder.Held;
+        ContentControl slot = _forWindow ? WindowCaps : HotkeyCaps;
+        if (held.Length > 0)
+        {
+            slot.Content = KeyCaps.Build(held, big: true);
+            return;
+        }
+        var hint = new TextBlock { Text = "Нажми клавишу или сочетание", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        slot.Content = hint;
     }
 
     private void OnWindowOff(object sender, RoutedEventArgs e)
@@ -167,61 +224,123 @@ public partial class KeysSection : UserControl
         Result(PadResult, ok: true, "Геймпад больше не вызывает Glossa.");
     }
 
-    /// <summary>Takes the pressed combination ("Ctrl+Shift+D"); Esc alone cancels.</summary>
-    private void OnCaptureKey(object sender, KeyEventArgs e)
+    /// <summary>The WPF key behind a key event: Alt and IME or dead keys arrive wrapped.</summary>
+    private static string? KeyName(KeyEventArgs e)
+    {
+        var key = e.Key switch
+        {
+            Key.System => e.SystemKey,
+            Key.ImeProcessed => e.ImeProcessedKey,
+            Key.DeadCharProcessed => e.DeadCharProcessedKey,
+            _ => e.Key,
+        };
+        return key == Key.None ? null : key.ToString();
+    }
+
+    private void OnCaptureDown(object sender, KeyEventArgs e)
     {
         if (!Capturing) return;
         e.Handled = true;
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
-            or Key.LWin or Key.RWin or Key.ImeProcessed or Key.None) return;
-        var mods = Keyboard.Modifiers;
-        if (key == Key.Escape && mods == ModifierKeys.None)
-        {
-            StopCapture();
-            return;
-        }
+        // A repeat can be the Enter that clicked "Изменить", still held: only a real press counts.
+        if (e.IsRepeat || KeyName(e) is not { } key) return;
+        _recorder.Down(key);
+        ShowHeld();
+    }
 
-        var parts = new List<string>();
-        if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
-        if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
-        if (mods.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
-        if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
-        parts.Add(key is >= Key.D0 and <= Key.D9 ? ((int)(key - Key.D0)).ToString() : key.ToString());
-        var spec = string.Join("+", parts);
+    /// <summary>
+    /// The key-up ends the recording once everything is released. It is handled too: an Alt release nobody handled puts
+    /// the window into the menu mode of Windows and knocks the recording off.
+    /// </summary>
+    private void OnCaptureUp(object sender, KeyEventArgs e)
+    {
+        if (!Capturing) return;
+        e.Handled = true;
+        if (KeyName(e) is not { } key) return;
+        if (_recorder.Up(key) is { } record) Take(record);
+        else ShowHeld();
+    }
+
+    /// <summary>A side mouse button while recording binds the mouse button; the keyboard key stays as it was.</summary>
+    private void OnCaptureMouse(object sender, MouseButtonEventArgs e)
+    {
+        if (!Capturing) return;
+        var button = e.ChangedButton switch { MouseButton.XButton1 => "x1", MouseButton.XButton2 => "x2", _ => "" };
+        if (_recorder.Mouse(button) is not { } record) return;
+        e.Handled = true;
+        Take(record);
+    }
+
+    /// <summary>What the recording ended with: save the key, bind the mouse button, or say why not.</summary>
+    private void Take(KeyRecord record)
+    {
         var forWindow = _forWindow;
         var target = forWindow ? WindowResult : HotkeyResult;
         StopCapture();
-
-        // A plain letter as a system-wide hotkey would stop that letter from typing anywhere.
-        var function = key is >= Key.F1 and <= Key.F24 or Key.Pause or Key.Scroll;
-        if (!function && (mods & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0)
+        switch (record.Kind)
         {
-            Result(target, ok: false, $"{KeyCaps.Display(spec)} не подходит: нужна Ctrl, Alt или Win, иначе клавиша перестанет работать везде.");
+            case KeyRecordKind.Cancelled:
+                return;
+            case KeyRecordKind.Mouse:
+                if (forWindow)
+                {
+                    Result(target, ok: false, "Кнопка мыши открывает только поиск слова: здесь нужна клавиша.");
+                    return;
+                }
+                _model.MouseButton = record.MouseButton!;
+                Result(target, ok: true, $"Готово: кнопка мыши {(record.MouseButton == "x1" ? "4" : "5")} тоже ищет слово. Клавиша осталась {KeyCaps.Display(_model.Hotkey)}.");
+                return;
+            case KeyRecordKind.Refused:
+                Result(target, ok: false, record.Refusal == RecordRefusal.ModifiersOnly
+                    ? "Одной Ctrl, Alt, Shift или Win мало: нажми клавишу, одну или вместе с ними."
+                    : "Две обычные клавиши сразу пока нельзя: нажми одну клавишу, одну или вместе с Ctrl, Alt, Shift или Win.");
+                return;
+        }
+
+        var spec = record.Spec!.Format();
+        var shown = KeyCaps.Display(spec);
+        if (record.Verdict == KeyVerdict.CardKey)
+        {
+            Result(target, ok: false, $"{shown} занята карточкой слова: добавь Ctrl или Alt, либо выбери другую клавишу.");
             return;
         }
         var other = forWindow ? _model.Hotkey : _model.WindowHotkey;
-        if (string.Equals(spec, other, StringComparison.OrdinalIgnoreCase))
+        if (KeySpec.Parse(other) == record.Spec) // parsed: a hand-edited "alt+q" or "Control+G" matches too
         {
-            Result(target, ok: false, $"{KeyCaps.Display(spec)} уже занято другим действием Glossa.");
+            Result(target, ok: false, $"{shown} уже занято другим действием Glossa.");
             return;
         }
-        if (forWindow)
+        var saved = forWindow ? _model.ChangeWindowHotkey(spec) : _model.ChangeHotkey(spec);
+        ShowHotkey();
+        if (!saved)
         {
-            var ok = _model.ChangeWindowHotkey(spec);
-            ShowHotkey();
-            Result(target, ok, ok
-                ? $"Готово: {KeyCaps.Display(spec)} открывает Glossa."
-                : $"{KeyCaps.Display(spec)} занято другой программой.");
+            Result(target, ok: false, forWindow
+                ? $"{shown} занято другой программой."
+                : $"{shown} занято другой программой - осталось {KeyCaps.Display(_model.Hotkey)}.");
+            return;
         }
-        else
-        {
-            var ok = _model.ChangeHotkey(spec);
-            ShowHotkey();
-            Result(target, ok, ok
-                ? $"Готово: теперь поиск по {KeyCaps.Display(spec)}."
-                : $"{KeyCaps.Display(spec)} занято другой программой - осталось {KeyCaps.Display(_model.Hotkey)}.");
-        }
+        var done = forWindow ? $"Готово: {shown} открывает Glossa." : $"Готово: теперь поиск по {shown}.";
+        // A bare typing key is saved and works, but nowhere else: said in the warning style, with what avoids it.
+        if (record.Verdict == KeyVerdict.Typing) Result(target, ok: false, TypingNote(done, shown));
+        else Result(target, ok: true, done);
+    }
+
+    private static string TypingNote(string done, string shown)
+        => $"{done} Пока Glossa работает, {shown} не печатается ни в одной программе. Если это мешает, запиши с Ctrl или Alt.";
+
+    /// <summary>Design snapshots: the section as it looks while the given keys are held.</summary>
+    internal void PreviewRecording(params string[] held)
+    {
+        _designPreview = true; // an off-screen window never gets the keyboard: do not read that as a failed start
+        StartCapture(forWindow: false);
+        foreach (var key in held) _recorder.Down(key);
+        ShowHeld();
+    }
+
+    /// <summary>Design snapshots: the warning after a typing key was taken.</summary>
+    internal void PreviewTypingWarning()
+    {
+        StopCapture();
+        Result(HotkeyResult, ok: false, TypingNote("Готово: теперь поиск по Q.", "Q"));
     }
 
     private void Result(ContentControl target, bool ok, string text)

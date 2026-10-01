@@ -38,6 +38,11 @@
                                     Height="58" Padding="40,0" Click="OnStart" />
                             <TextBlock x:Name="StartHint" Text="или Пробел" FontSize="12.5" Foreground="{DynamicResource Muted}"
                                        HorizontalAlignment="Center" Margin="0,8,0,0" />
+                            <!-- «Ещё N слов»: a portion past the day's new limit. With nothing scheduled it is the main button (inverse fill,
+                                 Space starts it); beside "Начать" it is the quiet one below. -->
+                            <Button x:Name="MoreButton" Style="{StaticResource BigPrimaryButton}" Click="OnMore" Visibility="Collapsed" />
+                            <TextBlock x:Name="MoreHint" FontSize="12.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextAlignment="Center"
+                                       MaxWidth="260" Margin="0,8,0,0" Visibility="Collapsed" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="СЕССИЯ НА СЕГОДНЯ" Style="{StaticResource SectionCaption}" />

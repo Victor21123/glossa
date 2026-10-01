@@ -50,6 +50,9 @@ public sealed class GamepadHub
         }
     }
 
+    /// <summary>True while a key is recorded in the settings: the lookup triggers (mouse button, combination) stay silent.</summary>
+    public bool Suspended { get; set; }
+
     public bool Recording => _recorder is not null;
 
     /// <summary>Settings changed: takes the combination and mouse button, and switches the sources to match.</summary>
@@ -97,13 +100,13 @@ public sealed class GamepadHub
             else if (error is not null) Finish(null, error);
             return;
         }
-        if (_combo.Update(state)) ComboPressed?.Invoke(Pad.Format(_combo.Combo));
+        if (_combo.Update(state) && !Suspended) ComboPressed?.Invoke(Pad.Format(_combo.Combo));
         if (_steering) Changed?.Invoke(state);
     }
 
     private void OnMouse(int button)
     {
         var chosen = _settings().MouseButton switch { "x1" => 4, "x2" => 5, _ => 0 };
-        if (button == chosen) MousePressed?.Invoke($"Кнопка {button}");
+        if (button == chosen && !Suspended) MousePressed?.Invoke($"Кнопка {button}");
     }
 }

@@ -509,7 +509,7 @@ public sealed class LookupController(
         }
 
         // The same word in the same line again (a re-read dialogue, a menu): the card is already known.
-        string CacheKey() => $"{lang}|{target}|{s.DictionaryEngine}|{s.LocalAi.Profile}|{hit.Word}|{hit.Context}";
+        string CacheKey() => $"{lang}|{target}|{s.DictionaryEngine}|{s.LocalAi.Profile}|{s.MeaningPictures}|{hit.Word}|{hit.Context}";
         var cacheKey = CacheKey();
         bool Cached()
         {
@@ -651,7 +651,8 @@ public sealed class LookupController(
             ? TranslateAsync(clients.Translator!, hit.Context, lang, target, ct)
             : Task.CompletedTask;
 
-        var request = new CardRequest(hit, lang, target, title, seed, plan.Hint, WithContextTranslation: !dedicatedTranslator);
+        var request = new CardRequest(hit, lang, target, title, seed, plan.Hint, WithContextTranslation: !dedicatedTranslator,
+            WithPicture: s.MeaningPictures);
         long? tFirst = null;
         // The card is repainted at most every 60 ms while the model streams; the first translation shows at once.
         long lastPaint = -1000;
@@ -1169,7 +1170,8 @@ public sealed class LookupController(
 
         var clients = await ai.GetAsync(ct);
         if (clients.Dictionary is null) return id;
-        var request = new CardRequest(hit, plan.Language, plan.Target, input.Game, plan.Seed, plan.Hint, WithContextTranslation: sentence is not null);
+        var request = new CardRequest(hit, plan.Language, plan.Target, input.Game, plan.Seed, plan.Hint, WithContextTranslation: sentence is not null,
+            WithPicture: s.MeaningPictures);
         var card = plan.Seed;
         await foreach (var c in _cards.StreamAsync(clients.Dictionary, request, ct)) card = c;
         if (card.Error is not null) log.Warn($"add '{word}': {card.Error}");

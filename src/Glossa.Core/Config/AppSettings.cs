@@ -102,6 +102,18 @@ public sealed class AppSettings
 
     public StudySettings Study { get; set; } = new();
 
+    /// <summary>
+    /// «Картинки значения» (decided 2026-10-01): the master switch. Off: no picture row in «Словарь», none on the back of
+    /// a study card or in Anki, and the AI card no longer asks for a photo query. Chosen pictures stay on disk.
+    /// </summary>
+    public bool MeaningPictures { get; set; } = true;
+
+    /// <summary>The picture field of the Anki note: the master switch and its own checkbox. A method: a property would be written to settings.json.</summary>
+    public bool AnkiMeaningPictures() => MeaningPictures && Anki.IncludeMeaningPictures;
+
+    /// <summary>The picture on the back of a study card: the master switch and its own checkbox.</summary>
+    public bool StudyBackPicture() => MeaningPictures && Study.BackPicture;
+
     /// <summary>Настройки -> ИИ и модели -> Глаза: the small model that reads stylized text for the models that cannot.</summary>
     public EyesSettings Eyes { get; set; } = new();
 

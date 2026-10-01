@@ -56,6 +56,12 @@ public sealed class AnkiConnectSync(HttpClient http, string url = "http://127.0.
             var existing = await FindAsync(w.Id, ct).ConfigureAwait(false);
             if (existing.Count > 0)
             {
+                // With the pictures off for good, what Anki holds stays: only a note's own fields are rewritten.
+                if (options.LeavePictureFields)
+                {
+                    fields.Remove("MeaningImage");
+                    fields.Remove("MeaningCredit");
+                }
                 await InvokeAsync("updateNoteFields", new JsonObject
                 {
                     ["note"] = new JsonObject { ["id"] = existing[0], ["fields"] = fields },

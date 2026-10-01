@@ -151,7 +151,7 @@
                                     <TextBlock Text="{Binding Reading}" Foreground="{DynamicResource Muted}" VerticalAlignment="Bottom"
                                                FontFamily="{Binding DataContext.Selected.WordFont, RelativeSource={RelativeSource AncestorType=Window}}" />
                                 </WrapPanel>
-                                <v:MarkupView Markup="{Binding Body}" MaxLines="12" Margin="0,2,0,0" TextElement.FontSize="13.5" />
+                                <v:MarkupView Markup="{Binding Body}" MaxLines="12" Margin="0,2,0,0" TextElement.FontSize="13.5" Selectable="True" />
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -234,7 +234,7 @@
                                             </StackPanel>
                                         </Button>
                                         <Button x:Name="ExportButton" Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Click="OnExport"
-                                                IsEnabled="{Binding Busy, Converter={x:Static v:InverseBool.Instance}}">
+                                                IsEnabled="{Binding ExportEnabled}">
                                             <StackPanel Orientation="Horizontal">
                                                 <Viewbox Width="15" Height="15" Margin="0,0,10,0">
                                                     <Canvas Width="24" Height="24">
@@ -245,10 +245,11 @@
                                                 <TextBlock Text="Экспорт..." Foreground="{DynamicResource InkSoft}" />
                                             </StackPanel>
                                             <Button.ContextMenu>
-                                                <ContextMenu>
-                                                    <MenuItem Header="Колода Anki (.apkg)" Click="OnExportApkg" />
-                                                    <MenuItem Header="Набор Quizlet (.txt)" Click="OnExportQuizlet" />
-                                                    <MenuItem Header="Таблица (.csv)" Click="OnExportCsv" />
+                                                <ContextMenu Opened="OnExportMenuOpened">
+                                                    <MenuItem x:Name="ExportApkgItem" Header="Колода Anki (.apkg)" Click="OnExportApkg" />
+                                                    <MenuItem x:Name="ExportQuizletItem" Header="Набор Quizlet (.txt)" Click="OnExportQuizlet" />
+                                                    <MenuItem x:Name="ExportCsvItem" Header="Таблица (.csv)" Click="OnExportCsv" />
+                                                    <MenuItem x:Name="ExportFramesItem" Header="Кадры в папку..." Click="OnExportFrames" />
                                                 </ContextMenu>
                                             </Button.ContextMenu>
                                         </Button>
@@ -378,7 +379,8 @@
                     </Border>
 
                     <!-- The word -->
-                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" DataContext="{Binding Selected}"
+                    <ScrollViewer x:Name="DetailPane" Grid.Column="2" VerticalScrollBarVisibility="Auto" DataContext="{Binding Selected}"
+                                  PreviewKeyDown="OnDetailKeyDown" GotKeyboardFocus="OnDetailFocus"
                                   Visibility="{Binding Converter={StaticResource NullToCollapsed}}">
                         <StackPanel Margin="28,22,28,24">
                             <Border x:Name="FrameBorder" Height="520" CornerRadius="10" Background="#FF1C1A18" ClipToBounds="True">
@@ -442,67 +444,73 @@
                                 <StackPanel>
                                     <!-- Word, meta, pin, voice -->
                                     <DockPanel Margin="0,0,0,16">
-                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                                            <Button Click="OnTogglePin" Padding="12,0" Height="34" MinHeight="34" Margin="0,0,6,0" ToolTip="Слово пойдёт в каждую сессию учёбы">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                                        <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Pinned}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource Well}" />
-                                                                <Setter Property="Foreground" Value="{DynamicResource Ink}" />
-                                                                <Setter Property="BorderBrush" Value="{DynamicResource Ink}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Viewbox Width="14" Height="14" Margin="0,0,7,0">
-                                                        <Canvas Width="24" Height="24">
-                                                            <Path Data="{StaticResource IconPin}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                                                        </Canvas>
-                                                    </Viewbox>
-                                                    <TextBlock Text="Не могу запомнить" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" Click="OnSpeak" ToolTip="Произнести" />
-                                        </StackPanel>
                                         <!-- A pin the study says can go (three right days), as on the back of a study card. -->
                                         <TextBlock DockPanel.Dock="Bottom" Text="{Binding DataContext.UnpinHint, RelativeSource={RelativeSource AncestorType=Window}}"
                                                    FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"
                                                    Visibility="{Binding DataContext.UnpinHint, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NullToCollapsed}}" />
-                                        <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
-                                            <WrapPanel>
-                                                <TextBlock Text="{Binding Headword}" FontFamily="{Binding WordFont}" FontSize="30" FontWeight="Bold" Margin="0,0,14,0" />
-                                                <TextBlock Text="{Binding Reading}" FontFamily="{Binding WordFont}" FontSize="16" Foreground="{DynamicResource InkSoft}"
-                                                           VerticalAlignment="Center" Margin="0,4,14,0" Visibility="{Binding Reading, Converter={StaticResource NullToCollapsed}}" />
-                                                <TextBlock Text="{Binding Meta}" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,4,14,0" />
-                                                <Border Style="{StaticResource RegisterChip}" Background="{DynamicResource DangerWash}" Margin="0,4,0,0"
-                                                        Visibility="{Binding Register, Converter={StaticResource NullToCollapsed}}">
-                                                    <TextBlock Text="{Binding Register}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
-                                                </Border>
-                                            </WrapPanel>
-                                        </StackPanel>
-                                        <WrapPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
-                                            <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditHeadword}" FontFamily="{Binding WordFont}" FontSize="26"
-                                                     FontWeight="Bold" MinWidth="160" Margin="0,0,16,0" theme:Hint.Text="слово" />
-                                            <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditReading}" FontFamily="{Binding WordFont}" MinWidth="110"
-                                                     Margin="0,8,12,0" theme:Hint.Text="чтение" />
-                                            <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditPartOfSpeech}" MinWidth="80" Margin="0,8,12,0"
-                                                     FontSize="13.5" theme:Hint.Text="часть речи" />
-                                            <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditLevel}" MinWidth="50" Margin="0,8,12,0" FontSize="13.5"
-                                                     theme:Hint.Text="уровень" />
-                                            <ComboBox ItemsSource="{Binding Source={x:Static vm:LibraryViewModel.Registers}}" SelectedValuePath="Code"
-                                                      DisplayMemberPath="Name" SelectedValue="{Binding EditRegister}" Width="130" MinHeight="32" Margin="0,6,0,0"
-                                                      FontSize="13" />
-                                        </WrapPanel>
+                                        <v:SideFlowPanel FlexFirst="{Binding IsEditing}">
+                                            <Grid>
+                                                <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                                                    <WrapPanel>
+                                                        <TextBox Style="{StaticResource SelectableText}" Text="{Binding Headword, Mode=OneWay}" AutomationProperties.Name="Слово" FontFamily="{Binding WordFont}" FontSize="30" FontWeight="Bold" Margin="0,0,14,0" />
+                                                        <TextBox Style="{StaticResource SelectableText}" Text="{Binding Reading, Mode=OneWay}" AutomationProperties.Name="Чтение" FontFamily="{Binding WordFont}" FontSize="16" Foreground="{DynamicResource InkSoft}"
+                                                                   VerticalAlignment="Center" Margin="0,4,14,0" Visibility="{Binding Reading, Converter={StaticResource NullToCollapsed}}" />
+                                                        <TextBox Style="{StaticResource SelectableText}" Text="{Binding Meta, Mode=OneWay}" AutomationProperties.Name="Часть речи и уровень" FontSize="13.5" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,4,14,0" />
+                                                        <Border Style="{StaticResource RegisterChip}" Background="{DynamicResource DangerWash}" Margin="0,4,0,0"
+                                                                Visibility="{Binding Register, Converter={StaticResource NullToCollapsed}}">
+                                                            <TextBox Style="{StaticResource SelectableText}" Text="{Binding Register, Mode=OneWay}" AutomationProperties.Name="Помета" TextWrapping="NoWrap" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
+                                                        </Border>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                                <WrapPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                                                    <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditHeadword}" FontFamily="{Binding WordFont}" FontSize="26"
+                                                             FontWeight="Bold" MinWidth="160" Margin="0,0,16,0" theme:Hint.Text="слово" />
+                                                    <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditReading}" FontFamily="{Binding WordFont}" MinWidth="110"
+                                                             Margin="0,8,12,0" theme:Hint.Text="чтение" />
+                                                    <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditPartOfSpeech}" MinWidth="80" Margin="0,8,12,0"
+                                                             FontSize="13.5" theme:Hint.Text="часть речи" />
+                                                    <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditLevel}" MinWidth="50" Margin="0,8,12,0" FontSize="13.5"
+                                                             theme:Hint.Text="уровень" />
+                                                    <ComboBox ItemsSource="{Binding Source={x:Static vm:LibraryViewModel.Registers}}" SelectedValuePath="Code"
+                                                              DisplayMemberPath="Name" SelectedValue="{Binding EditRegister}" Width="130" MinHeight="32" Margin="0,6,0,0"
+                                                              FontSize="13" />
+                                                </WrapPanel>
+                                            </Grid>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+                                                <Button Click="OnTogglePin" Padding="12,0" Height="34" MinHeight="34" Margin="0,0,6,0" ToolTip="Слово пойдёт в каждую сессию учёбы">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                            <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Pinned}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource Well}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Ink}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Viewbox Width="14" Height="14" Margin="0,0,7,0">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Data="{StaticResource IconPin}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                      StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                        <TextBlock Text="Не могу запомнить" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource IconButton}" Tag="{StaticResource IconSpeaker}" Click="OnSpeak" ToolTip="Произнести" />
+                                            </StackPanel>
+                                        </v:SideFlowPanel>
                                     </DockPanel>
 
                                     <HeaderedContentControl Header="ПЕРЕВОД" Style="{StaticResource DetailRow}">
                                         <Grid>
-                                            <TextBlock Text="{Binding Translation}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
-                                                       Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}" />
+                                            <Border Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                                                <TextBox x:Name="DetailTranslation" Style="{StaticResource SelectableText}" Text="{Binding Translation, Mode=OneWay}"
+                                                         AutomationProperties.Name="Перевод" FontSize="20" FontWeight="SemiBold" />
+                                            </Border>
                                             <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditTranslation}" FontSize="18" FontWeight="SemiBold"
                                                      Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="перевод" />
                                         </Grid>
@@ -510,9 +518,9 @@
                                     <HeaderedContentControl Header="КОНТЕКСТ СЦЕНЫ" Style="{StaticResource DetailRow}">
                                         <Grid>
                                             <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="{Binding HereTranslation}" FontSize="15.5" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,3"
+                                                <TextBox Style="{StaticResource SelectableText}" Text="{Binding HereTranslation, Mode=OneWay}" AutomationProperties.Name="Перевод в этой сцене" FontSize="15.5" FontWeight="SemiBold" Margin="0,0,0,3"
                                                            Visibility="{Binding HereTranslation, Converter={StaticResource NullToCollapsed}}" />
-                                                <TextBlock Text="{Binding UsageNote, TargetNullValue=-}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                                <TextBox Style="{StaticResource SelectableText}" Text="{Binding UsageNote, Mode=OneWay, TargetNullValue=-}" AutomationProperties.Name="Контекст сцены" FontSize="14.5" TextBlock.LineHeight="21"
                                                            Foreground="{DynamicResource InkSoft}" />
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
@@ -526,9 +534,9 @@
                                     <HeaderedContentControl Header="ЗНАЧЕНИЕ" Style="{StaticResource DetailRow}">
                                         <Grid>
                                             <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="{Binding Definition, TargetNullValue=-}" FontSize="14.5" LineHeight="21" TextWrapping="Wrap"
+                                                <TextBox Style="{StaticResource SelectableText}" Text="{Binding Definition, Mode=OneWay, TargetNullValue=-}" AutomationProperties.Name="Значение" FontSize="14.5" TextBlock.LineHeight="21"
                                                            Foreground="{DynamicResource InkSoft}" />
-                                                <TextBlock Text="{Binding DefinitionTranslation}" FontSize="14" LineHeight="20" TextWrapping="Wrap" Margin="0,4,0,0"
+                                                <TextBox Style="{StaticResource SelectableText}" Text="{Binding DefinitionTranslation, Mode=OneWay}" AutomationProperties.Name="Значение по-русски" FontSize="14" TextBlock.LineHeight="20" Margin="0,4,0,0"
                                                            Foreground="{DynamicResource Muted}" Visibility="{Binding DefinitionTranslation, Converter={StaticResource NullToCollapsed}}" />
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
@@ -540,7 +548,8 @@
                                         </Grid>
                                     </HeaderedContentControl>
                                     <!-- «Картинка значения»: works at once, in view and in edit alike (not part of Сохранить). -->
-                                    <HeaderedContentControl Header="КАРТИНКА" Style="{StaticResource DetailRow}">
+                                    <HeaderedContentControl Header="КАРТИНКА" Style="{StaticResource DetailRow}"
+                                                            Visibility="{Binding DataContext.MeaningPicturesOn, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                                         <StackPanel HorizontalAlignment="Left">
                                             <StackPanel Visibility="{Binding HasPicture, Converter={StaticResource BoolToVis}}">
                                                 <Image Source="{Binding PictureImage}" MaxWidth="320" MaxHeight="220" Stretch="Uniform" HorizontalAlignment="Left" />
@@ -558,11 +567,13 @@
                                     <HeaderedContentControl Header="РЕПЛИКА" Style="{StaticResource DetailRow}"
                                                             Visibility="{Binding ContextText, Converter={StaticResource NullToCollapsed}}">
                                         <StackPanel>
-                                            <TextBlock x:Name="DetailContext" FontSize="14" LineHeight="21" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                                            <RichTextBox x:Name="DetailContext" Style="{StaticResource SelectableDocument}" AutomationProperties.Name="Реплика" FontSize="14" Foreground="{DynamicResource Muted}"
                                                        FontFamily="{Binding WordFont}" />
                                             <Grid Margin="0,5,0,0">
-                                                <TextBlock Text="{Binding ContextTranslation}" FontSize="15" LineHeight="22" TextWrapping="Wrap"
-                                                           Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}" />
+                                                <Border Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                                                    <TextBox Style="{StaticResource SelectableText}" Text="{Binding ContextTranslation, Mode=OneWay}"
+                                                             AutomationProperties.Name="Перевод реплики" FontSize="15" TextBlock.LineHeight="22" />
+                                                </Border>
                                                 <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditContextTranslation}" AcceptsReturn="True"
                                                          Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="перевод реплики" />
                                             </Grid>
@@ -570,15 +581,18 @@
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="СИНОНИМЫ" Style="{StaticResource DetailRow}">
                                         <Grid>
-                                            <TextBlock Text="{Binding Synonyms, TargetNullValue=-}" FontSize="14" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}"
-                                                       FontFamily="{Binding WordFont}" Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}" />
+                                            <Border Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                                                <TextBox Style="{StaticResource SelectableText}" Text="{Binding Synonyms, Mode=OneWay, TargetNullValue=-}"
+                                                         AutomationProperties.Name="Синонимы" FontSize="14" Foreground="{DynamicResource InkSoft}"
+                                                         FontFamily="{Binding WordFont}" />
+                                            </Border>
                                             <TextBox Style="{StaticResource InlineEdit}" Text="{Binding EditSynonyms}" FontFamily="{Binding WordFont}"
                                                      Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" theme:Hint.Text="через запятую" />
                                         </Grid>
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="ОБЪЯСНЕНИЕ" Style="{StaticResource DetailRow}"
                                                             Visibility="{Binding Explanation, Converter={StaticResource NullToCollapsed}}">
-                                        <TextBlock Text="{Binding Explanation}" FontSize="14" LineHeight="21" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                                        <TextBox Style="{StaticResource SelectableText}" Text="{Binding Explanation, Mode=OneWay}" AutomationProperties.Name="Объяснение" FontSize="14" TextBlock.LineHeight="21" Foreground="{DynamicResource InkSoft}" />
                                     </HeaderedContentControl>
 
                                     <!-- View: actions. Edit: the save bar. -->
@@ -626,7 +640,7 @@
                                     <TextBlock Text="В словарях статьи нет, перевод по контексту" Style="{StaticResource Note}" FontSize="13.5"
                                                Visibility="{Binding DataContext.HasArticles, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource FalseToVis}}" />
                                     <TextBlock Text="ИСТОЧНИК" Style="{StaticResource SectionCaption}" Margin="0,22,0,6" />
-                                    <TextBlock Text="{Binding SourceText}" FontSize="13.5" TextWrapping="Wrap" Foreground="{DynamicResource InkSoft}" />
+                                    <TextBox Style="{StaticResource SelectableText}" Text="{Binding SourceText, Mode=OneWay}" AutomationProperties.Name="Источник" FontSize="13.5" Foreground="{DynamicResource InkSoft}" />
                                     <TextBlock Text="КОЛЛЕКЦИИ" Style="{StaticResource SectionCaption}" Margin="0,22,0,8" />
                                     <WrapPanel>
                                         <ItemsControl ItemsSource="{Binding DataContext.SelectedCollections, RelativeSource={RelativeSource AncestorType=Window}}">

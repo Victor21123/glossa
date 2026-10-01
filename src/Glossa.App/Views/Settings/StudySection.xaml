@@ -1,10 +1,12 @@
 <UserControl x:Class="Glossa.App.Views.Settings.StudySection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib">
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:v="clr-namespace:Glossa.App.Views">
     <!-- Настройки → Учёба (canvas «Настройки — учёба»). Only what works: no FSRS switch (Anki's own default, off);
          Anki's finer knobs fold under «Дополнительно». -->
     <UserControl.Resources>
+        <v:FalseToVisibleConverter x:Key="FalseToVis" />
         <Style x:Key="MoreLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{DynamicResource InkSoft}" />
@@ -143,11 +145,16 @@
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Оборот" Style="{StaticResource SettingRow}">
-                        <WrapPanel>
-                            <CheckBox Content="Картинка значения" IsChecked="{Binding StudyBackPicture}" Margin="0,4,28,4" />
-                            <CheckBox Content="Перевод реплики" IsChecked="{Binding StudyBackLineTranslation}" Margin="0,4,28,4" />
-                            <CheckBox Content="Произносить сразу" IsChecked="{Binding StudySpeakOnFlip}" Margin="0,4,0,4" />
-                        </WrapPanel>
+                        <StackPanel>
+                            <WrapPanel>
+                                <CheckBox Content="Картинка значения" IsChecked="{Binding StudyBackPicture}" IsEnabled="{Binding MeaningPictures}" Margin="0,4,28,4" />
+                                <CheckBox Content="Перевод реплики" IsChecked="{Binding StudyBackLineTranslation}" Margin="0,4,28,4" />
+                                <CheckBox Content="Произносить сразу" IsChecked="{Binding StudySpeakOnFlip}" Margin="0,4,0,4" />
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,4,0,0"
+                                       Visibility="{Binding MeaningPictures, Converter={StaticResource FalseToVis}}"
+                                       Text='"Картинка значения" выключена совсем: Настройки -> Словарь -> "Картинки значения".' />
+                        </StackPanel>
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Напоминания" Tag="по часам компьютера" Style="{StaticResource SettingRowTop}">

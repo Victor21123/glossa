@@ -178,6 +178,13 @@ internal static class CardSnapshots
             File.Copy(FrameExport.Outlined(Path.Combine(data, framed.ShotFile!), framed.WordBox!.Value, Path.Combine(data, "tmp", "frames")),
                 Path.Combine(folder, "frame-outlined.jpg"), overwrite: true);
 
+        // «Кадры в папку»: every sample word's frames, with the names the tester gets (frames.txt).
+        var frameJobs = Glossa.Core.Export.FrameJobs.Collect(library.List(), data, (_, title) => title, File.Exists);
+        var framesFolder = Path.Combine(folder, "export-frames"); // its own name: never a folder of the user
+        if (Directory.Exists(framesFolder)) Directory.Delete(framesFolder, recursive: true);
+        Glossa.Core.Export.FrameOutline.WriteAll(frameJobs, framesFolder, null, CancellationToken.None);
+        File.WriteAllLines(Path.Combine(folder, "frames.txt"), frameJobs.Select(j => j.Name));
+
         var log = new Glossa.Core.Logging.FileLogger(Path.Combine(data, "logs"));
         var http = new HttpClient();
         var settings = new AppSettings { GamepadCombo = "LB+RB" };
@@ -209,6 +216,13 @@ internal static class CardSnapshots
             vm.BeginEdit();
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}-edit.png"));
             vm.CancelEdit();
+            RenderSelection(services, theme, themeName, folder);
+            if (themeName == "dark")
+            {
+                theme.Apply("disco"); // the selection colour must follow this theme too
+                RenderSelection(services, theme, "disco", folder);
+                theme.Apply(themeName);
+            }
             window.OpenAddWord("合体する");
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}-add.png"));
             window.OpenCollection(null);
@@ -243,6 +257,11 @@ internal static class CardSnapshots
             window.StudyPage.HandleKey(System.Windows.Input.Key.D3);
             window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back-picture.png"));
+            // The same back with «Картинки значения» switched off: the picture and the "подобрать" link are gone.
+            settings.MeaningPictures = false;
+            window.StudyPage.PreviewMeaning();
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-back-picture-off.png"));
+            settings.MeaningPictures = true;
             window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
             // «Перевод -> слово»: a card asked by its meaning, then answered with the word, its line and frame.
             settings.Study.Direction = "reverse";
@@ -256,11 +275,52 @@ internal static class CardSnapshots
             SaveWindow(window, Path.Combine(folder, $"study-{themeName}-reverse-back.png"));
             window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
             settings.Study.Direction = "forward";
+            // «Ещё N слов»: the day's new limit used up. First beside "Начать" (two reviews are due), then one answer and the
+            // end-of-session banner, then with no review allowed either, so the portion is the main button.
+            // The day's quota spent: one new word answered today, the limit 1.
+            if (library.ReviewStates() is var started && library.List().FirstOrDefault(w => !w.Pinned && !started.ContainsKey(new Glossa.Core.Study.CardKey(w.Id, Glossa.Core.Study.CardDirection.Forward))) is { } spent)
+            {
+                var at = DateTime.UtcNow.AddMinutes(-5);
+                library.SaveAnswer(
+                    new Glossa.Core.Study.ReviewState
+                    {
+                        WordId = spent.Id, Queue = Glossa.Core.Study.CardQueue.Learning, RemainingSteps = 1, DueAt = at.AddMinutes(60), Reps = 1, AnsweredUtc = at,
+                    },
+                    new Glossa.Core.Study.ReviewAnswer
+                    {
+                        WordId = spent.Id, AnsweredUtc = at, Rating = Glossa.Core.Study.Rating.Good, QueueBefore = Glossa.Core.Study.CardQueue.New, TakenMs = 6000,
+                    });
+            }
+            settings.Study.NewPerDay = 1;
+            window.StudyPage.LanguageFilter.SelectedIndex = 0; // all languages: the dark pass leaves nothing new in English
+            window.ShowTab(MainTab.Home);
+            window.ShowTab(MainTab.Study);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-more.png"));
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Space);
+            window.StudyPage.HandleKey(System.Windows.Input.Key.D3);
+            window.StudyPage.HandleKey(System.Windows.Input.Key.Escape);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-more-done.png"));
+            settings.Study.ReviewsPerDay = 0;
+            window.ShowTab(MainTab.Home);
+            window.ShowTab(MainTab.Study);
+            SaveWindow(window, Path.Combine(folder, $"study-{themeName}-more-main.png"));
+            settings.Study.NewPerDay = 20;
+            settings.Study.ReviewsPerDay = 200;
             foreach (var section in new[] { "card", "keys", "languages", "ai", "sources", "library", "study", "speech", "games", "load", "app" })
             {
                 window.ShowTab(MainTab.Settings);
                 window.SettingsPage.Show(section);
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-{section}.png"));
+            }
+            // Вызов и клавиши while a key is recorded (the keys held show as caps), then after a typing key was taken.
+            window.SettingsPage.Show("keys");
+            if (window.SettingsPage.Section("keys") is Settings.KeysSection keysSection)
+            {
+                keysSection.PreviewRecording("LeftCtrl", "G");
+                SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-keys-recording.png"));
+                keysSection.PreviewTypingWarning();
+                SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-keys-typing.png"));
             }
             // ИИ и модели scrolled to the eyes.
             window.SettingsPage.Show("ai");
@@ -277,6 +337,21 @@ internal static class CardSnapshots
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-study-more.png"));
             }
             window.Close();
+
+            // «Картинки значения» switched off: no «Картинка» row, the Anki and study checkboxes greyed.
+            settings.MeaningPictures = false;
+            var noPictures = new MainWindow(services);
+            noPictures.ShowTab(MainTab.Words);
+            var offVm = (ViewModels.LibraryViewModel)noPictures.WordsPage.DataContext;
+            offVm.Selected = offVm.Items.First(i => i.Headword == "tsundere");
+            SaveWindow(noPictures, Path.Combine(folder, $"main-{themeName}-picture-off.png"), 2048, 1900);
+            noPictures.ShowTab(MainTab.Settings);
+            noPictures.SettingsPage.Show("library");
+            SaveWindow(noPictures, Path.Combine(folder, $"settings-{themeName}-library-pictures-off.png"));
+            noPictures.SettingsPage.Show("study");
+            SaveWindow(noPictures, Path.Combine(folder, $"settings-{themeName}-study-pictures-off.png"));
+            noPictures.Close();
+            settings.MeaningPictures = true;
 
             // Карточка слова with «Свой» chosen: its rows open, own accent and tint on.
             settings.Popup = new PopupSettings
@@ -571,6 +646,42 @@ internal static class CardSnapshots
         yield return new() { Name = "Hades II", FirstTitle = "Hades II", Programs = [@"D:\Games\Hades II\Ship\Hades2.exe"], CreatedUtc = now.AddDays(-3) };
         yield return new() { Name = "Genshin Impact", FirstTitle = "Genshin Impact", Programs = [@"D:\Games\Genshin Impact\GenshinImpact.exe"],
             AntiCheat = "HoYoProtect", DuringLookup = "pause", CreatedUtc = now.AddDays(-1) };
+    }
+
+    /// <summary>
+    /// A selection paints only in a window that has a screen: a window of its own, shown far off screen and not activated
+    /// (no focus taken), so the other snapshots keep their layout. The translation selected, then the replica, then a
+    /// switch to another word (the selection must be gone).
+    /// </summary>
+    private static void RenderSelection(AppServices services, ThemeManager theme, string themeName, string folder)
+    {
+        var picking = new MainWindow(services);
+        try
+        {
+            picking.ShowTab(MainTab.Words);
+            var vm = (ViewModels.LibraryViewModel)picking.WordsPage.DataContext;
+            vm.Selected = vm.Items.First(i => i.Headword == "reconsider");
+            picking.WindowStartupLocation = WindowStartupLocation.Manual;
+            picking.Left = picking.Top = -32000;
+            picking.ShowActivated = false;
+            picking.Show();
+            picking.Width = 2048 / VisualTreeHelper.GetDpi(picking).DpiScaleX;
+            picking.Height = 1152 / VisualTreeHelper.GetDpi(picking).DpiScaleY;
+            picking.PreviewSelection(replica: false);
+            var held = picking.SelectionPreviewText();
+            SaveWindow(picking, Path.Combine(folder, $"main-{themeName}-select.png"));
+            picking.PreviewSelection(replica: true);
+            held += " / " + picking.SelectionPreviewText();
+            SaveWindow(picking, Path.Combine(folder, $"main-{themeName}-select-replica.png"));
+            vm.Selected = vm.Items.First(i => i.Headword == "tsundere");
+            vm.Selected = vm.Items.First(i => i.Headword == "reconsider");
+            File.WriteAllText(Path.Combine(folder, $"main-{themeName}-select.txt"),
+                $"selected: {held}\nafter switching words: {picking.SelectionPreviewText()}\n");
+        }
+        finally
+        {
+            picking.Close();
+        }
     }
 
     internal static void SaveWindow(Window window, string file, int width = 2048, int height = 1152)

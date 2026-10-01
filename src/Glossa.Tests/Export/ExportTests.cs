@@ -167,6 +167,41 @@ public sealed class ExportTests : IDisposable
         Assert.Contains("обновите", e.Message);
     }
 
+    private static JsonObject FieldsOf(FakeAnki fake, string action) =>
+        Assert.Single(fake.Requests, r => r["action"]!.GetValue<string>() == action)["params"]!["note"]!["fields"]!.AsObject();
+
+    [Fact]
+    public async Task With_the_master_switch_off_an_update_leaves_the_picture_fields_of_the_note_alone()
+    {
+        var (root, words) = Sample();
+        var fake = new FakeAnki(existingGlossaId: words[1].Id);
+
+        await new AnkiConnectSync(new HttpClient(fake)).SyncAsync(
+            root, words, [], new AnkiExportOptions(IncludeMeaningPictures: false, LeavePictureFields: true), null, CancellationToken.None);
+
+        var update = FieldsOf(fake, "updateNoteFields");
+        Assert.False(update.ContainsKey("MeaningImage"));
+        Assert.False(update.ContainsKey("MeaningCredit"));
+        Assert.True(update.ContainsKey("Headword")); // everything else is still written
+        // A new note has the fields, just empty.
+        var added = FieldsOf(fake, "addNote");
+        Assert.Equal(("", ""), (added["MeaningImage"]!.GetValue<string>(), added["MeaningCredit"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task With_the_master_switch_on_an_update_writes_every_field_as_before()
+    {
+        var (root, words) = Sample();
+        // The Anki checkbox alone (master switch on) still empties the field: unchanged.
+        foreach (var options in new[] { new AnkiExportOptions(), new AnkiExportOptions(IncludeMeaningPictures: false) })
+        {
+            var fake = new FakeAnki(existingGlossaId: words[1].Id);
+            await new AnkiConnectSync(new HttpClient(fake)).SyncAsync(root, words, [], options, null, CancellationToken.None);
+            var update = FieldsOf(fake, "updateNoteFields");
+            Assert.Equal(AnkiNoteType.Fields, update.Select(f => f.Key));
+        }
+    }
+
     [Fact]
     public void The_meaning_picture_register_and_scene_go_into_the_note()
     {

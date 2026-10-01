@@ -320,4 +320,255 @@ public class SessionTests
         Assert.Equal(12, stats.SecondsPerCard);
         Assert.Equal(18, StudyStats.Empty.SecondsPerCard);         // no history yet: 18 s per card
     }
+
+    // ---- "Ещё N слов": a portion past the daily new limit ----
+
+    private static IReadOnlyList<ReviewAnswer> StartedMany(int n) => Enumerable.Range(0, n).Select(i => StartedToday($"old{i}")).ToList();
+
+    private static StudyPlan More(IReadOnlyList<SavedWord> words, IReadOnlyList<ReviewState> states, IReadOnlyList<ReviewAnswer>? today = null) =>
+        Plan(words, states, today, new StudyLimits().More());
+
+    [Fact]
+    public void An_extra_portion_takes_new_words_past_the_daily_limit()
+    {
+        var words = Enumerable.Range(0, 50).Select(i => Word($"n{i}")).ToList();
+        var today = StartedMany(20);
+
+        Assert.Empty(Plan(words, [], today).New);                  // the regular plan is spent
+        var more = More(words, [], today);
+
+        Assert.Equal(20, more.New.Count);
+        Assert.Equal(20, more.Cards.Count);
+        Assert.Equal(20, more.NewToday);                           // the counter itself is not touched
+    }
+
+    [Fact]
+    public void An_extra_portion_shows_due_reviews_before_new_words()
+    {
+        var words = Enumerable.Range(0, 5).Select(i => Word($"d{i}")).Concat(Enumerable.Range(0, 30).Select(i => Word($"n{i}"))).ToList();
+        var states = Enumerable.Range(0, 5).Select(i => Due($"d{i}", i + 1)).ToList();
+
+        var more = More(words, states, StartedMany(20));
+
+        Assert.Equal(5, more.Due.Count);
+        Assert.Equal(15, more.New.Count);                          // the portion is 20 cards in all
+        Assert.Equal(20, more.Cards.Count);
+        Assert.Equal("d4", more.Due[0].Word.Id);                   // due longest ago first
+    }
+
+    [Fact]
+    public void Extra_portions_work_again_and_again_in_one_day()
+    {
+        var words = Enumerable.Range(0, 100).Select(i => Word($"n{i}")).ToList();
+
+        var more = More(words, [], StartedMany(40));               // two portions already taken, the limit is 20
+
+        Assert.Equal(20, more.New.Count);
+        Assert.Equal(20, More(words, [], StartedMany(60)).New.Count);
+    }
+
+    [Fact]
+    public void An_extra_portion_leaves_pinned_words_to_the_regular_session()
+    {
+        var words = Enumerable.Range(0, 5).Select(i => Word($"p{i}", pinned: true)).Concat(Enumerable.Range(0, 30).Select(i => Word($"n{i}"))).ToList();
+
+        var more = More(words, [], StartedMany(20));
+
+        Assert.Empty(more.Pinned);
+        Assert.DoesNotContain(more.Cards, c => c.Word.Pinned);
+        Assert.Equal(20, more.New.Count);
+    }
+
+    [Fact]
+    public void An_extra_portion_with_nothing_new_has_only_what_is_due()
+    {
+        var words = new[] { Word("a"), Word("b") };
+        var states = new[] { Due("a", 1), Due("b", 0) };
+
+        var more = More(words, states, StartedMany(20));
+
+        Assert.Empty(more.New);
+        Assert.Equal(2, more.Due.Count);
+    }
+
+    [Fact]
+    public void An_extra_portion_caps_due_reviews_but_not_the_extra_new_cards()
+    {
+        var words = Enumerable.Range(0, 10).Select(i => Word($"d{i}")).Concat(Enumerable.Range(0, 30).Select(i => Word($"n{i}"))).ToList();
+        var states = Enumerable.Range(0, 10).Select(i => Due($"d{i}", 1)).ToList();
+        var limits = new StudyLimits(ReviewsPerDay: 4).More();
+
+        var plan = Plan(words, states, StartedMany(20), limits);
+
+        Assert.Equal(4, plan.Due.Count);
+        Assert.Equal(16, plan.New.Count);
+    }
+
+    [Fact]
+    public void More_keeps_the_filters_of_the_regular_limits_and_only_changes_the_portion()
+    {
+        var limits = new StudyLimits(Size: 30, NewPerDay: 5, PinnedShare: 0.5, NewOrder: NewWordOrder.Recent, Direction: StudyDirection.Both);
+
+        var more = limits.More();
+
+        Assert.Equal((30, 30, 0.0), (more.Size, more.ExtraNew, more.PinnedShare));
+        Assert.Equal((5, NewWordOrder.Recent, StudyDirection.Both), (more.NewPerDay, more.NewOrder, more.Direction));
+        Assert.Equal(0, limits.ExtraNew);
+    }
+
+    [Fact]
+    public void More_is_offered_once_the_new_limit_is_used_and_new_words_remain()
+    {
+        var words = Enumerable.Range(0, 50).Select(i => Word($"n{i}")).ToList();
+        var fresh = StudyOffer.Of(Plan(words, []), More(words, []));
+        var spent = StudyOffer.Of(Plan(words, [], StartedMany(20)), More(words, [], StartedMany(20)));
+        var few = words.Take(3).ToList();
+        var allStarted = StudyOffer.Of(Plan(few, [], StartedMany(20)), More(few, [], StartedMany(20)));
+        var rest = Enumerable.Range(0, 3).Select(i => new ReviewState { WordId = $"n{i}", Queue = CardQueue.Review, IntervalDays = 3, DueDay = Today.AddDays(2), Reps = 2 }).ToList();
+        var nothingLeft = StudyOffer.Of(Plan(few, rest, StartedMany(20)), More(few, rest, StartedMany(20)));
+
+        Assert.False(fresh.ShowMore);                              // new words are still in the regular plan
+        Assert.True(spent.ShowMore);
+        Assert.True(allStarted.ShowMore);                          // 3 unstudied words remain
+        Assert.False(nothingLeft.ShowMore);                        // all in study: nothing to offer
+    }
+
+    [Fact]
+    public void Space_starts_more_only_when_nothing_is_scheduled()
+    {
+        var words = Enumerable.Range(0, 50).Select(i => Word($"n{i}")).Concat([Word("d")]).ToList();
+        var today = StartedMany(20);
+
+        var empty = StudyOffer.Of(Plan(words.Take(50).ToList(), [], today), More(words.Take(50).ToList(), [], today));
+        var due = StudyOffer.Of(Plan(words, [Due("d", 1)], today), More(words, [Due("d", 1)], today));
+        var none = StudyOffer.Of(Plan([], []), More([], []));
+
+        Assert.Equal(StudyStart.More, empty.Space);
+        Assert.True(due.ShowMore);                                 // offered beside "Начать"...
+        Assert.Equal(StudyStart.Regular, due.Space);               // ...but Space keeps starting the regular session
+        Assert.Equal(StudyStart.None, none.Space);
+        Assert.False(none.ShowMore);
+    }
+
+    [Fact]
+    public void Pinned_and_due_cards_filling_the_session_do_not_offer_more_while_new_words_are_still_free()
+    {
+        var words = Enumerable.Range(0, 10).Select(i => Word($"p{i}", pinned: true)).Concat(Enumerable.Range(0, 10).Select(i => Word($"d{i}")))
+            .Concat(Enumerable.Range(0, 40).Select(i => Word($"n{i}"))).ToList();
+        var states = Enumerable.Range(0, 10).Select(i => Due($"d{i}", 1)).ToList();
+
+        var regular = Plan(words, states);
+        var offer = StudyOffer.Of(regular, More(words, states));
+
+        Assert.Equal((20, 0, 20), (regular.Cards.Count, regular.New.Count, regular.NewLeft)); // the limit is untouched
+        Assert.False(offer.ShowMore);
+        Assert.Equal(StudyStart.Regular, offer.Space);
+    }
+
+    [Fact]
+    public void More_is_offered_when_the_review_limit_closed_the_regular_new_words()
+    {
+        var words = Enumerable.Range(0, 30).Select(i => Word($"n{i}")).ToList();
+        var regular = Plan(words, [], limits: new StudyLimits(ReviewsPerDay: 0));
+
+        Assert.Equal(0, regular.NewLeft);
+        Assert.True(StudyOffer.Of(regular, SessionBuilder.Build(words, new Dictionary<CardKey, ReviewState>(), [], new StudyLimits(ReviewsPerDay: 0).More(),
+            new StudyConfig(), Utc, Noon)).ShowMore);
+    }
+
+    [Fact]
+    public void An_extra_portion_gives_a_full_size_when_the_day_is_already_over_the_limit()
+    {
+        var words = Enumerable.Range(0, 50).Select(i => Word($"n{i}")).ToList();
+
+        Assert.Equal(20, More(words, [], StartedMany(25)).New.Count);
+    }
+
+    [Fact]
+    public void An_extra_portion_keeps_the_new_word_order()
+    {
+        var words = new[] { Word("old", lookups: 5, seenDaysAgo: 9), Word("fresh", seenDaysAgo: 0), Word("mid", seenDaysAgo: 4) };
+
+        var recent = Plan(words, [], StartedMany(20), new StudyLimits(NewOrder: NewWordOrder.Recent).More());
+        var random = Plan(words, [], StartedMany(20), new StudyLimits(NewOrder: NewWordOrder.Random).More());
+        var regularRandom = Plan(words, [], limits: new StudyLimits(NewOrder: NewWordOrder.Random));
+
+        Assert.Equal(new[] { "fresh", "mid", "old" }, recent.New.Select(c => c.Word.Id));
+        Assert.Equal(regularRandom.New.Select(c => c.Word.Id), random.New.Select(c => c.Word.Id));
+    }
+
+    [Fact]
+    public void An_extra_portion_with_both_directions_gives_one_card_per_word_unless_burying_is_off()
+    {
+        var words = Enumerable.Range(0, 6).Select(i => Word($"n{i}")).ToList();
+
+        var buried = Plan(words, [], StartedMany(20), Both().More());
+        var open = Plan(words, [], StartedMany(20), Both(bury: false).More());
+
+        Assert.Equal(6, buried.New.Select(c => c.Word.Id).Distinct().Count());
+        Assert.Equal(6, buried.Cards.Count);
+        Assert.Equal(12, open.Cards.Count);
+    }
+
+    [Fact]
+    public void A_learning_card_takes_room_in_an_extra_portion()
+    {
+        var words = new[] { Word("l") }.Concat(Enumerable.Range(0, 10).Select(i => Word($"n{i}"))).ToList();
+
+        var more = Plan(words, [Stepping("l", Noon.AddMinutes(-1))], StartedMany(20), new StudyLimits(Size: 3).More());
+
+        Assert.Equal(3, more.Cards.Count);
+        Assert.Equal(("l", 2), (more.Cards[0].Word.Id, more.New.Count));   // the step first, then 2 new cards
+    }
+
+    [Fact]
+    public void A_portion_card_answered_Again_returns_in_the_session_and_in_the_next_plan_while_the_new_counter_stays_spent()
+    {
+        var words = Enumerable.Range(0, 5).Select(i => Word($"n{i}")).ToList();
+        var limits = new StudyLimits(Size: 3);
+        var plan = Plan(words, [], StartedMany(20), limits.More());
+        var saved = new List<(ReviewState State, ReviewAnswer Answer)>();
+        var session = new StudySession(plan, new Dictionary<CardKey, ReviewState>(), new StudyConfig(), Utc, (s, a) => saved.Add((s, a)), new NoJitter());
+
+        var first = session.Next(Noon)!.Word.Id;
+        session.Answer(Rating.Again, Noon, 1000);
+        session.Next(Noon);
+        session.Answer(Rating.Good, Noon, 1000);
+        session.Next(Noon);
+        session.Answer(Rating.Good, Noon, 1000);
+
+        Assert.Equal(first, session.Next(Noon.AddSeconds(5))!.Word.Id);      // main queue empty: the step comes back (learn-ahead)
+
+        var later = Noon.AddMinutes(2);
+        var states = saved.Select(x => x.State).GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.Last());
+        var spent = StartedMany(20).Concat(saved.Select(x => x.Answer)).ToList();
+        var next = SessionBuilder.Build(words, states, spent, limits, new StudyConfig(), Utc, later);
+
+        Assert.Equal(new[] { first }, next.Due.Select(c => c.Word.Id));      // listed as learning
+        Assert.Empty(next.New);                                              // the counter stays spent
+        Assert.Equal(0, next.NewLeft);
+    }
+
+    [Fact]
+    public void More_is_not_offered_to_someone_who_chose_no_new_words_a_day()
+    {
+        var words = Enumerable.Range(0, 30).Select(i => Word($"n{i}")).ToList();
+        var limits = new StudyLimits(NewPerDay: 0);
+
+        var offer = StudyOffer.Of(Plan(words, [], limits: limits), Plan(words, [], limits: limits.More()));
+
+        Assert.False(offer.ShowMore);
+        Assert.Equal(StudyStart.None, offer.Space);
+    }
+
+    [Fact]
+    public void Unstudied_cards_are_counted_with_pinned_ones_so_the_all_in_study_note_is_true()
+    {
+        var pinnedOnly = Plan([Word("p", pinned: true)], []);
+        var allStarted = Plan([Word("a"), Word("b")], [Due("a", 0), Due("b", 3)]);
+
+        Assert.Equal(1, pinnedOnly.Unstudied);
+        Assert.Empty(More([Word("p", pinned: true)], []).New);               // the portion alone would say "nothing new"
+        Assert.Equal(0, allStarted.Unstudied);
+    }
 }

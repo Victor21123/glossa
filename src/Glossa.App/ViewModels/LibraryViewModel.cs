@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -292,8 +293,18 @@ public sealed class LibraryViewModel : ObservableObject
         View = CollectionViewSource.GetDefaultView(Items);
         View.GroupDescriptions.Add(new PropertyGroupDescription(nameof(WordEntry.DayGroup)));
         View.Filter = o => o is WordEntry w && (_scope?.Matches(w) ?? true) && Matches(w, _search);
+        _onSettings = () => OnPropertyChanged(nameof(MeaningPicturesOn));
+        services.SettingsChanged += _onSettings;
         Reload();
     }
+
+    private readonly Action _onSettings;
+
+    /// <summary>Stops listening to the services: the window that owned this model is closed (a new one makes its own).</summary>
+    public void Detach() => _services.SettingsChanged -= _onSettings;
+
+    /// <summary>«Картинки значения» (Настройки -> Словарь): the «Картинка» row of the word is shown only while it is on.</summary>
+    public bool MeaningPicturesOn => _services.Settings.MeaningPictures;
 
     public ObservableCollection<WordEntry> Items { get; } = [];
     public ICollectionView View { get; }
@@ -366,7 +377,7 @@ public sealed class LibraryViewModel : ObservableObject
     public bool HasArticles => _articles.Count > 0;
 
     public string? Status { get => _status; set => SetProperty(ref _status, value); }
-    public bool Busy { get => _busy; set => SetProperty(ref _busy, value); }
+    public bool Busy { get => _busy; set { if (SetProperty(ref _busy, value)) OnPropertyChanged(nameof(ExportEnabled)); } }
     public string Summary => $"{View.Cast<object>().Count()} из {Items.Count}";
 
     public void Reload()
@@ -707,10 +718,11 @@ public sealed class LibraryViewModel : ObservableObject
     private AnkiExportOptions AnkiOptions()
     {
         var a = _services.Settings.Anki;
+        var pictures = _services.Settings.AnkiMeaningPictures();
         Func<SavedWord, byte[]?>? audio = a.IncludeAudio
             ? w => _services.Speech.WavAsync(w.Headword, w.Language).GetAwaiter().GetResult()
             : null;
-        return new AnkiExportOptions(a.ReverseCards, a.IncludeImages, audio, a.IncludeMeaningPictures);
+        return new AnkiExportOptions(a.ReverseCards, a.IncludeImages, audio, pictures, LeavePictureFields: !_services.Settings.MeaningPictures);
     }
 
     public async Task ExportApkg(string path)
@@ -735,6 +747,129 @@ public sealed class LibraryViewModel : ObservableObject
         TextExport.WriteCsv(path, Visible());
         return Task.FromResult($"CSV сохранён: {path}");
     });
+
+    private CancellationTokenSource? _framesCts;
+    private bool _preparing;
+
+    /// <summary>The frames are being saved: the export menu then offers to stop.</summary>
+    public bool FramesRunning => _framesCts is not null;
+
+    /// <summary>The export button works when nothing else runs, or while frames are saved (to stop them).</summary>
+    public bool ExportEnabled => !Busy || FramesRunning;
+
+    public void CancelFrames() => _framesCts?.Cancel();
+
+    private void NotifyFrames()
+    {
+        OnPropertyChanged(nameof(FramesRunning));
+        OnPropertyChanged(nameof(ExportEnabled));
+    }
+
+    /// <summary>
+    /// «Кадры в папку», step one: the frames of the given words (null: the whole visible list). When the list is filtered
+    /// by a game only that game's sentences count. Done before the folder is asked, so an empty result says so at once.
+    /// </summary>
+    public async Task<IReadOnlyList<FrameJob>> CollectFrames(IReadOnlyList<WordEntry>? entries)
+    {
+        if (Busy || FramesRunning || _preparing) return [];
+        _preparing = true;
+        try
+        {
+            return await CollectFramesCore(entries);
+        }
+        finally
+        {
+            _preparing = false;
+        }
+    }
+
+    private async Task<IReadOnlyList<FrameJob>> CollectFramesCore(IReadOnlyList<WordEntry>? entries)
+    {
+        var words = entries is null ? Visible() : entries.Select(e => e.Word).ToList();
+
+        // Plain data is gathered here (game names come from the registry, which belongs to the UI thread); the file
+        // checks then run off it.
+        var shown = new Dictionary<(string?, string?), string?>();
+        void Note(string? exe, string? title) => shown[(exe, title)] = GameName(exe, title);
+        foreach (var w in words)
+        {
+            Note(w.AppExe, w.WindowTitle);
+            foreach (var c in w.Contexts) Note(c.AppExe, c.WindowTitle);
+        }
+        string? Name(string? exe, string? title) => shown.GetValueOrDefault((exe, title));
+
+        // A list filtered by a game exports that game only: a word met in two games is in both lists otherwise.
+        var games = new List<string>();
+        var containing = _search.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => t.StartsWith("app:", StringComparison.OrdinalIgnoreCase) && t.Length > 4).Select(t => t[4..]).ToList();
+        if (_scopeKey.StartsWith("game:", StringComparison.Ordinal)) games.Add(_scopeKey[5..]);
+        else if (_scopeKey.StartsWith("col:", StringComparison.Ordinal)
+                 && _collections.FirstOrDefault(c => "col:" + c.Id == _scopeKey)?.Filter?.Game is { Length: > 0 } smartGame)
+            games.Add(smartGame);
+        var filter = FrameJobs.GameFilter(games, containing, Name);
+
+        var root = DataPaths.Root;
+        var jobs = await Task.Run(() => FrameJobs.Collect(words, root, Name, FrameFiles.IsUsable, filter));
+        if (jobs.Count == 0) Status = "Нет кадров для сохранения: у этих слов кадра нет или файл удалён.";
+        return jobs;
+    }
+
+    /// <summary>
+    /// Step two: writes the frames with the word outlined into the folder, one file per sentence, named
+    /// "game_word_date.jpg". Nothing already in the folder is overwritten; <see cref="CancelFrames"/> stops it.
+    /// </summary>
+    public async Task ExportFrames(IReadOnlyList<FrameJob> jobs, string folder)
+    {
+        if (Busy)
+        {
+            Status = "Подожди: идёт другая операция.";
+            return;
+        }
+        if (jobs.Count == 0) return;
+        using var cts = new CancellationTokenSource();
+        _framesCts = cts;
+        NotifyFrames();
+        try
+        {
+            await Run(async p =>
+            {
+                var progress = new Progress<(int Done, int Total)>(t => p.Report($"Кадры: {t.Done} из {t.Total}"));
+                FrameWriteResult result;
+                try
+                {
+                    result = await Task.Run(() => FrameOutline.WriteAll(jobs, folder, progress, cts.Token,
+                        (job, ex) => _services.Log.Warn($"Frame skipped: {job.Source}: {ex.GetType().Name}: {ex.Message}")));
+                }
+                catch (Exception ex)
+                {
+                    _services.Log.Error("Frame export failed", ex); // the details (paths, system text) stay in the log
+                    return "Не удалось сохранить кадры: проверьте место на диске и доступ к папке. Подробности в журнале.";
+                }
+                if (result.Written > 0) OpenFolder(folder);
+                var text = result.Cancelled ? $"Сохранено кадров: {result.Written}, остановлено" : $"Сохранено кадров: {result.Written} -> {folder}";
+                return result.Skipped > 0 ? $"{text}. Пропущено (файл не читается): {result.Skipped}" : text;
+            });
+        }
+        finally
+        {
+            _framesCts = null;
+            NotifyFrames();
+        }
+    }
+
+    /// <summary>The folder in Explorer; a failure here must not replace the "saved" result.</summary>
+    private void OpenFolder(string folder)
+    {
+        if (!Directory.Exists(folder)) return;
+        try
+        {
+            using var explorer = Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { folder } });
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Warn("Cannot open the frames folder: " + ex.Message);
+        }
+    }
 
     public Task SyncAnki() => Run(async p =>
     {

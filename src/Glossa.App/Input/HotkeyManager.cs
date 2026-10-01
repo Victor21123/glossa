@@ -1,6 +1,7 @@
 using System.Windows.Input;
 using System.Windows.Interop;
 using Glossa.App.Interop;
+using Glossa.Core.Input;
 
 namespace Glossa.App.Input;
 
@@ -43,19 +44,15 @@ public sealed class HotkeyManager : IDisposable
     {
         mods = 0;
         vk = 0;
-        foreach (var raw in spec.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            switch (raw.ToLowerInvariant())
-            {
-                case "alt": mods |= Native.MOD_ALT; continue;
-                case "ctrl" or "control": mods |= Native.MOD_CONTROL; continue;
-                case "shift": mods |= Native.MOD_SHIFT; continue;
-                case "win": mods |= Native.MOD_WIN; continue;
-            }
-            var name = raw.Length == 1 && char.IsDigit(raw[0]) ? "D" + raw : raw;
-            if (!Enum.TryParse<Key>(name, ignoreCase: true, out var key)) return false;
-            vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-        }
+        // Two plain keys or none: refused here, not "the last one wins".
+        if (KeySpec.Parse(spec) is not { } parsed) return false;
+        if (parsed.Mods.HasFlag(KeyMods.Alt)) mods |= Native.MOD_ALT;
+        if (parsed.Mods.HasFlag(KeyMods.Ctrl)) mods |= Native.MOD_CONTROL;
+        if (parsed.Mods.HasFlag(KeyMods.Shift)) mods |= Native.MOD_SHIFT;
+        if (parsed.Mods.HasFlag(KeyMods.Win)) mods |= Native.MOD_WIN;
+        var name = parsed.Key.Length == 1 && char.IsDigit(parsed.Key[0]) ? "D" + parsed.Key : parsed.Key;
+        if (!Enum.TryParse<Key>(name, ignoreCase: true, out var key)) return false;
+        vk = (uint)KeyInterop.VirtualKeyFromKey(key);
         return vk != 0;
     }
 

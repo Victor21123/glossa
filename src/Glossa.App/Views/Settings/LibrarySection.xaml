@@ -29,6 +29,13 @@
                                            Text="повторный поиск того же слова прибавляет счётчик и добавляет реплику, а не делает копию" />
                             </DockPanel>
                         </HeaderedContentControl>
+                        <HeaderedContentControl Header="Картинки значения" Tag="картинка к слову" Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Settings.MeaningPictures}" VerticalAlignment="Center" />
+                                <TextBlock Style="{StaticResource Note}" Margin="14,0,0,0" VerticalAlignment="Center"
+                                           Text='выключено: нет строки "Картинка" в "Словаре", картинки на обороте карточек учёбы и в Anki, ИИ не подбирает запрос для картинки; выбранные картинки остаются на диске, а картинки в уже отправленных в Anki заметках не стираются' />
+                            </DockPanel>
+                        </HeaderedContentControl>
                         <HeaderedContentControl Header="Кадры из игры" Tag="снимок сцены у каждого слова" Style="{StaticResource SettingRow}">
                             <StackPanel Orientation="Horizontal">
                                 <ContentControl x:Name="ShotsFolder" Style="{StaticResource PathBox}" MaxWidth="360" />
@@ -82,7 +89,9 @@
                             <UniformGrid Columns="2" HorizontalAlignment="Left" Width="480" Margin="0,7,0,0">
                                 <CheckBox Content="Кадр из игры" IsChecked="{Binding Settings.AnkiImages}" Margin="0,0,0,12" />
                                 <CheckBox Content="Звук слова" IsChecked="{Binding Settings.AnkiAudio}" Margin="0,0,0,12" />
-                                <CheckBox Content="Картинка значения" IsChecked="{Binding Settings.AnkiMeaningPictures}" />
+                                <CheckBox Content="Картинка значения" IsChecked="{Binding Settings.AnkiMeaningPictures}"
+                                          IsEnabled="{Binding Settings.MeaningPictures}"
+                                          ToolTip='Выключено общим переключателем "Картинки значения" выше' />
                                 <CheckBox Content="Обратная карточка" IsChecked="{Binding Settings.AnkiReverse}" />
                             </UniformGrid>
                         </HeaderedContentControl>
@@ -152,7 +161,7 @@
                             <TextBlock x:Name="BackContext" FontSize="13.5" LineHeight="19" Foreground="{DynamicResource InkSoft}" TextWrapping="Wrap"
                                        Margin="0,6,0,0" />
                             <TextBlock x:Name="BackMeta" FontSize="12.5" Foreground="{DynamicResource Muted}" Margin="0,8,0,0" />
-                            <Border Visibility="{Binding Settings.AnkiMeaningPictures, Converter={StaticResource BoolToVis}}">
+                            <Border Visibility="{Binding Settings.AnkiPictureShown, Converter={StaticResource BoolToVis}}">
                                 <StackPanel x:Name="BackPicture" Margin="0,10,0,0" Visibility="Collapsed">
                                     <Image x:Name="BackPictureImage" MaxHeight="130" Stretch="Uniform" HorizontalAlignment="Left" />
                                     <TextBlock x:Name="BackPictureCredit" FontSize="11.5" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"

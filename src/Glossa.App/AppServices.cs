@@ -66,6 +66,12 @@ public sealed class AppServices(
     /// <summary>«Открыть Glossa»: takes a new combination ("" — none); false when another program holds it.</summary>
     public Func<string, bool>? ChangeWindowHotkey { get; set; }
 
+    /// <summary>
+    /// True while a key is being recorded: lets go of the lookup and window hotkeys so the recorder sees them, false puts
+    /// them back (null only in design snapshots).
+    /// </summary>
+    public Action<bool>? SuspendHotkeys { get; set; }
+
     /// <summary>Whether «Открыть Glossa» is registered now (or switched off).</summary>
     public Func<bool>? WindowHotkeyActive { get; set; }
 

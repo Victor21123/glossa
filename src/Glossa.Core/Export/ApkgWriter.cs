@@ -8,8 +8,12 @@ namespace Glossa.Core.Export;
 
 /// <param name="IncludeImages">The game frame with the word ringed.</param>
 /// <param name="IncludeMeaningPictures">The picture of the meaning («Картинка значения»), with its credit.</param>
+/// <param name="LeavePictureFields">
+/// «Картинки значения» is off for the whole program: AnkiConnect does not touch the picture fields of notes already in
+/// Anki (new notes get them empty). Not the same as unchecking the Anki box, which empties them.
+/// </param>
 public sealed record AnkiExportOptions(bool ReverseCards = false, bool IncludeImages = true, Func<SavedWord, byte[]?>? Audio = null,
-    bool IncludeMeaningPictures = true);
+    bool IncludeMeaningPictures = true, bool LeavePictureFields = false);
 
 /// <summary>
 /// Writes an Anki package (.apkg): a legacy collection.anki2 SQLite database plus media, the format every
