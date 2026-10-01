@@ -497,6 +497,9 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool DebugOcrDumps { get => S.DebugOcrDumps; set => Set(() => S.DebugOcrDumps = value); }
 
+    /// <summary>The daily look at GitHub for a newer version (Настройки -> Приложение).</summary>
+    public bool CheckForUpdates { get => S.Updates.CheckForUpdates; set => Set(() => S.Updates.CheckForUpdates = value); }
+
     /// <summary>The window is closing: stop listening to the app (it outlives this model).</summary>
     public void Detach() => _services.ChangedElsewhere -= OnChangedElsewhere;
 

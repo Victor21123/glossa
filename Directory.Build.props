@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <!-- The one place for the version: assemblies, the About line, the update check and tools/release.ps1 all read it. -->
+    <Version>0.0.3</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

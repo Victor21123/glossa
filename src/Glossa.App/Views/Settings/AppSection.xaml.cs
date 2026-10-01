@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Glossa.App.ViewModels;
 using Glossa.Core.Config;
+using Glossa.Core.Updates;
 
 namespace Glossa.App.Views.Settings;
 
@@ -21,8 +22,24 @@ public partial class AppSection : UserControl
         DataContext = model;
         DataFolder.Content = DataPaths.Root;
         var exe = Environment.ProcessPath ?? "";
-        Build.Text = "Glossa, сборка " + File.GetLastWriteTime(exe).ToString("d MMMM yyyy", Russian);
+        Version.Text = "Версия " + AppVersion.Current;
+        // The commit comes from the "+sha" of the informational version; a build without one shows the date only.
+        Build.Text = "сборка " + File.GetLastWriteTime(exe).ToString("d MMMM yyyy", Russian)
+                     + (AppVersion.CurrentCommit.Length > 0 ? ", " + AppVersion.CurrentCommit : "");
         Location.Text = Path.GetDirectoryName(exe);
+        ShowUpdateState(); // here and not in Loaded: the snapshots draw without it
+        // The section lives as long as the settings page; the service outlives both, so it is listened to only while shown.
+        Loaded += (_, _) =>
+        {
+            if (_services.Updates is not { } updates) return;
+            updates.Changed -= ShowUpdateState;
+            updates.Changed += ShowUpdateState;
+            ShowUpdateState();
+        };
+        Unloaded += (_, _) =>
+        {
+            if (_services.Updates is { } updates) updates.Changed -= ShowUpdateState;
+        };
         Loaded += async (_, _) =>
         {
             if (_counted) return;
@@ -74,6 +91,43 @@ public partial class AppSection : UserControl
         DiskNote.Text = $"Модели ИИ лежат в {_services.Settings.LocalAi.ModelsFolderResolved()}, программа - в {Location.Text}, " +
                         $"остальное - в папке данных.";
     }
+
+    /// <summary>The line under «Новая версия»: the last answer of this run, else what the settings remember; «Открыть страницу» only while an update waits.</summary>
+    private void ShowUpdateState()
+    {
+        if (_services.Updates is not { } updates)
+        {
+            UpdateCheckRow.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var pending = updates.Pending is not null;
+        UpdateStatus.Text = updates.Status ?? UpdateTexts.Summary(_services.Settings.Updates, updates.Current);
+        UpdateStatus.FontWeight = pending ? FontWeights.SemiBold : FontWeights.Normal;
+        OpenRelease.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnCheckNow(object sender, RoutedEventArgs e)
+    {
+        if (_services.Updates is not { } updates) return;
+        CheckNow.IsEnabled = false;
+        UpdateStatus.Text = "Проверяю...";
+        UpdateStatus.FontWeight = FontWeights.Normal;
+        try
+        {
+            await updates.CheckNowAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _services.Log.Warn($"update check: {ex.Message}");
+        }
+        finally
+        {
+            CheckNow.IsEnabled = true;
+            ShowUpdateState();
+        }
+    }
+
+    private void OnOpenRelease(object sender, RoutedEventArgs e) => _services.OpenReleasePage(_services.Updates?.Pending?.Url);
 
     private void OnOpenData(object sender, RoutedEventArgs e) => Process.Start("explorer.exe", DataPaths.Root);
 

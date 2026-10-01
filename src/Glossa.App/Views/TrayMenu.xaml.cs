@@ -8,8 +8,11 @@ using Glossa.App.Interop;
 namespace Glossa.App.Views;
 
 /// <summary>What the tray menu shows when it opens.</summary>
-/// <remarks><paramref name="TranslateOnly"/>: «Только перевод», where the dictionary is hidden and the item opens «Главная».</remarks>
-public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn, bool TranslateOnly = false);
+/// <remarks>
+/// <paramref name="TranslateOnly"/>: «Только перевод», where the dictionary is hidden and the item opens «Главная».
+/// <paramref name="UpdateItem"/>: the text of the item that opens the release page while a newer version waits; null - no item.
+/// </remarks>
+public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn, bool TranslateOnly = false, string? UpdateItem = null);
 
 /// <summary>The tray icon's menu, drawn like the rest of Glossa; it closes as soon as it loses focus.</summary>
 public partial class TrayMenu : Window
@@ -22,6 +25,7 @@ public partial class TrayMenu : Window
     public event Action? OpenRequested;
     public event Action? StudyRequested;
     public event Action? SettingsRequested;
+    public event Action? UpdateRequested;
     public event Action? ExitRequested;
     public event Action<string>? ModeChanged;
     public event Action<bool>? LookupToggled;
@@ -61,6 +65,8 @@ public partial class TrayMenu : Window
     internal void Fill(TrayState state)
     {
         StateText.Text = state.Status;
+        UpdateItem.Content = state.UpdateItem;
+        UpdateItem.Visibility = state.UpdateItem is null ? Visibility.Collapsed : Visibility.Visible;
         OpenItem.Content = state.TranslateOnly ? "Открыть Glossa" : "Открыть словарь";
         StudyItem.Visibility = state.TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
         StateDot.SetResourceReference(Shape.FillProperty, state.AiLoaded ? "Good" : "Surface");
@@ -77,6 +83,12 @@ public partial class TrayMenu : Window
     {
         Hide();
         OpenRequested?.Invoke();
+    }
+
+    private void OnUpdate(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        UpdateRequested?.Invoke();
     }
 
     private void OnStudy(object sender, RoutedEventArgs e)

@@ -84,6 +84,8 @@
                 </StackPanel>
             </StackPanel>
             <Border Style="{StaticResource Sep}" />
+            <!-- While a newer version waits (the notice may have been missed or switched off by Windows). -->
+            <Button x:Name="UpdateItem" Style="{StaticResource TrayItem}" Click="OnUpdate" Visibility="Collapsed" FontWeight="SemiBold" />
             <Button x:Name="OpenItem" Style="{StaticResource TrayItem}" Content="Открыть словарь" Click="OnOpen" />
             <Button x:Name="StudyItem" Style="{StaticResource TrayItem}" Content="Учёба" Click="OnStudy" />
             <Border Style="{StaticResource Sep}" />

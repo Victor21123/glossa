@@ -11,6 +11,7 @@ using Glossa.Core.Dictionaries;
 //   glossa-cli level <lang> <term> [reading]
 //   glossa-cli runtime [cuda|vulkan]
 //   glossa-cli pictures <query…>   (meaning pictures: search, fetch, shrink; nothing written)
+//   glossa-cli update-check [--as <version>]   (one real request to GitHub through the app's code path; nothing written)
 Console.OutputEncoding = Encoding.UTF8;
 if (args.Length == 0)
 {
@@ -77,6 +78,34 @@ switch (args[0])
                 + $"{(sw.Elapsed - t0).TotalMilliseconds:F0} ms  {c.Keep("").Credit}");
             Console.WriteLine($"    {c.ThumbUrl}");
         }
+        break;
+    }
+    case "update-check":
+    {
+        // The update check as the app runs it (the system proxy first, then direct), without touching settings: what GitHub
+        // names as latest and what the check would say for this version (--as <version> pretends to be another one).
+        var asAt = Array.IndexOf(args, "--as");
+        Glossa.Core.Updates.AppVersion running;
+        if (asAt < 0) running = Glossa.Core.Updates.AppVersion.Current;
+        else if (asAt + 1 >= args.Length || Glossa.Core.Updates.AppVersion.Parse(args[asAt + 1]) is not { } pretended)
+        {
+            Console.WriteLine("--as needs a version, for example --as 0.0.2" + (asAt + 1 < args.Length ? $" (got: {Glossa.Core.Updates.UpdateCheck.Plain(args[asAt + 1], 40)})" : ""));
+            return 1;
+        }
+        else running = pretended;
+        using var proxied = Glossa.Core.Updates.UpdateChecker.CreateClient(useSystemProxy: true);
+        using var direct = Glossa.Core.Updates.UpdateChecker.CreateClient(useSystemProxy: false);
+        var outcome = await new Glossa.Core.Updates.UpdateChecker(proxied, direct).CheckAsync(running, CancellationToken.None);
+        Console.WriteLine($"running {running}: {Glossa.Core.Updates.UpdateTexts.For(outcome)} ({sw.Elapsed.TotalSeconds:F1} s)");
+        if (outcome.Release is { } release)
+        {
+            // Everything printed from the answer is cleaned of control and bidi characters first.
+            Console.WriteLine($"latest {release.Tag} \"{Glossa.Core.Updates.UpdateCheck.Plain(release.Name)}\", published {release.PublishedUtc:u}, draft {release.Draft}, prerelease {release.Prerelease}");
+            Console.WriteLine($"page {release.Url}");
+        }
+        else Console.WriteLine($"failure {outcome.Failure}: {outcome.Detail}");
+        var settings = new AppSettings();
+        Console.WriteLine($"would notify: {(outcome.Release is { } r && Glossa.Core.Updates.UpdateCheck.ShouldNotify(r, running, settings.Updates) ? "yes" : "no")}");
         break;
     }
     case "import":

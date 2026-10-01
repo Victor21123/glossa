@@ -6,13 +6,27 @@
   by itself yet: the OCR models, UniDic and CC-CEDICT. Glossa finds that folder and keeps all its data there.
   Dictionaries, level lists, the AI model and the llama.cpp engine are downloaded from inside the app.
   Needs the .NET 8 Desktop Runtime on the target PC.
+  The version lives in one place, <Version> in Directory.Build.props, and the archive is named after it. -Version is
+  optional: omitted, the props value is used; given and different, the script stops, so the archive name and the
+  version the app reports (and compares with GitHub's latest release) can never disagree.
 #>
 param(
-    [Parameter(Mandatory)][string]$Version,
+    [string]$Version,
     [string]$Data = 'D:\GlossaData'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
+
+$props = Join-Path $root 'Directory.Build.props'
+$node = Select-Xml -Path $props -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+if (-not $node -or -not $node.Node.InnerText.Trim()) { throw "No <Version> in $props" }
+$declared = $node.Node.InnerText.Trim()
+if (-not $Version) { $Version = $declared }
+if ($Version.StartsWith('v')) { $Version = $Version.Substring(1) }
+if ($Version -ne $declared) {
+    throw "Version mismatch: -Version is '$Version' but Directory.Build.props says '$declared'. Change <Version> in Directory.Build.props (the one place), commit it, then run this script again."
+}
+Write-Host "Version $Version"
 $out = Join-Path $root 'src\Glossa.App\bin\release'
 $app = Join-Path $out 'Glossa'
 $zip = Join-Path $out "Glossa-$Version-win-x64.zip"

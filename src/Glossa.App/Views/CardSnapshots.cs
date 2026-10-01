@@ -197,6 +197,12 @@ internal static class CardSnapshots
             new Speech.SpeechService(Path.Combine(data, "audio"), () => settings.Speech),
             new Ai.AiRouter(() => settings, host, http, http, _ => null, log), dictionaries, () => null, () => { }, http, http, http, theme, log);
         services.Games = new Games.GameRegistry(() => settings, _ => { }, log);
+        // «Обновления»: a newer version known from the last check. Snapshots never touch the network: the checker is a stub.
+        settings.Updates.LastCheckUtc = DateTime.UtcNow.AddHours(-3);
+        settings.Updates.LatestVersion = "0.1.0";
+        settings.Updates.LatestUrl = Glossa.Core.Updates.UpdateCheck.ReleasesPage + "/tag/v0.1.0";
+        var knownUpdate = (settings.Updates.LastCheckUtc, settings.Updates.LatestVersion, settings.Updates.LatestUrl);
+        services.Updates = StubUpdates(settings, log, "v0.1.0");
 
         // One lookup as the selftest measured it, and a load sample, so the settings panels show real shapes.
         services.SampleLoad = () => new Diagnostics.LoadSample(DateTime.Now, 520, 2700, 1, 1, 13100, 16311);
@@ -313,6 +319,20 @@ internal static class CardSnapshots
                 window.SettingsPage.Show(section);
                 SaveWindow(window, Path.Combine(folder, $"settings-{themeName}-{section}.png"));
             }
+            // Приложение with the other answers of a check: up to date, and no network (the stub answers like GitHub or like a dead line).
+            foreach (var (answer, tag) in new[] { ("latest", "v0.0.3"), ("offline", (string?)null) })
+            {
+                (settings.Updates.LastCheckUtc, settings.Updates.LatestVersion, settings.Updates.LatestUrl) = (null, "", "");
+                var shownUpdates = services.Updates = StubUpdates(settings, log, tag);
+                shownUpdates.CheckNowAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var appWindow = new MainWindow(services);
+                appWindow.ShowTab(MainTab.Settings);
+                appWindow.SettingsPage.Show("app");
+                SaveWindow(appWindow, Path.Combine(folder, $"settings-{themeName}-app-{answer}.png"));
+                appWindow.Close();
+            }
+            (settings.Updates.LastCheckUtc, settings.Updates.LatestVersion, settings.Updates.LatestUrl) = knownUpdate;
+            services.Updates = StubUpdates(settings, log, "v0.1.0");
             // Вызов и клавиши while a key is recorded (the keys held show as caps), then after a typing key was taken.
             window.SettingsPage.Show("keys");
             if (window.SettingsPage.Section("keys") is Settings.KeysSection keysSection)
@@ -423,6 +443,32 @@ internal static class CardSnapshots
             tray.Fill(new TrayState("ИИ выгружена, загрузится при поиске", false, "auto", "Alt+Q", true));
             Save(tray, Path.Combine(folder, $"tray-{themeName}.png"));
             tray.Close();
+            var trayUpdate = new TrayMenu();
+            trayUpdate.Fill(new TrayState("ИИ выгружена, загрузится при поиске", false, "auto", "Alt+Q", true,
+                UpdateItem: Glossa.Core.Updates.UpdateTexts.TrayItem("0.1.0")));
+            Save(trayUpdate, Path.Combine(folder, $"tray-{themeName}-update.png"));
+            trayUpdate.Close();
+        }
+    }
+
+    /// <summary>
+    /// The update service for the snapshots: the real service and checker over a fake line that answers as GitHub's "latest
+    /// release" does with <paramref name="latestTag"/>, or as a dead network when it is null.
+    /// </summary>
+    private static Glossa.Core.Updates.UpdateService StubUpdates(AppSettings settings, Glossa.Core.Logging.ILog log, string? latestTag)
+    {
+        var line = new HttpClient(new StubGithub(latestTag));
+        return new Glossa.Core.Updates.UpdateService(() => settings, () => { }, new Glossa.Core.Updates.UpdateChecker(line, line),
+            Glossa.Core.Updates.AppVersion.Current, log);
+    }
+
+    private sealed class StubGithub(string? latestTag) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            if (latestTag is null) throw new HttpRequestException("no network in the snapshots");
+            var json = $$"""{"tag_name": "{{latestTag}}", "name": "Glossa {{latestTag}}", "html_url": "https://github.com/Victor21123/glossa/releases/tag/{{latestTag}}"}""";
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json) });
         }
     }
 

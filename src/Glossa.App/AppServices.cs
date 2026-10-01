@@ -7,6 +7,7 @@ using Glossa.Core.Dictionaries;
 using Glossa.Core.Library;
 using Glossa.Core.Logging;
 using Glossa.Core.Pictures;
+using Glossa.Core.Updates;
 
 namespace Glossa.App;
 
@@ -85,6 +86,29 @@ public sealed class AppServices(
 
     /// <summary>The eyes' server (null only in design snapshots): where they read now, for Настройки -> ИИ и модели.</summary>
     public Ai.EyesService? Eyes { get; set; }
+
+    /// <summary>
+    /// The once-a-day look at GitHub for a newer version (null only in the selftest, which has no tray, and in design
+    /// snapshots that draw the settings without a network).
+    /// </summary>
+    public UpdateService? Updates { get; set; }
+
+    /// <summary>
+    /// Opens a release page in the browser. The address is checked here, whoever it came from (a notice, the settings
+    /// file): only a page of this repository's releases goes to the shell, anything else opens the releases page.
+    /// </summary>
+    public void OpenReleasePage(string? url)
+    {
+        var safe = UpdateCheck.SafeUrl(url);
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(safe) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Log.Warn($"could not open {safe}: {ex.Message}");
+        }
+    }
 
     private ModelDownloads? _models;
 

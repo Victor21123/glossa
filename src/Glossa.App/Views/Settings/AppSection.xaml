@@ -49,12 +49,17 @@
 
                     <!-- One series for every mode (decided 2026-09-30): any action keeps the day, a full one is darker. -->
                     <HeaderedContentControl Header="Полный день" Tag="для серии дней" Style="{StaticResource SettingRow}">
-                        <StackPanel Orientation="Horizontal">
+                        <!-- A grid, not a horizontal stack: the note takes the rest of the row and wraps instead of running off its edge. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <ComboBox ItemsSource="{Binding Source={x:Static vm:SettingsViewModel.DayGoals}}" SelectedItem="{Binding DayGoal}"
-                                      Width="90" MinHeight="34" />
-                            <TextBlock Style="{StaticResource Note}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                      Width="90" MinHeight="34" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Style="{StaticResource Note}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
                                        Text="действий: поиск слова, ответ в учёбе или перевод реплики. Меньше - день всё равно держит серию, но светлее в календаре" />
-                        </StackPanel>
+                        </Grid>
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Папка данных" Tag="словарь, кадры, справочники" Style="{StaticResource SettingRow}">
@@ -66,7 +71,26 @@
 
                     <HeaderedContentControl Header="Сеть" Style="{StaticResource SettingRow}">
                         <TextBlock Style="{StaticResource Note}" FontSize="13.5"
-                                   Text="Словари скачиваются через системный прокси, при ошибке - напрямую. Кроме загрузок словарей и своего API, если оно подключено, Glossa в интернет не ходит." />
+                                   Text="Словари скачиваются через системный прокси, при ошибке - напрямую. Кроме загрузок словарей, проверки обновлений на GitHub и своего API, если оно подключено, Glossa в интернет не ходит." />
+                    </HeaderedContentControl>
+
+                    <!-- Decided 2026-10-01: Glossa only tells that a newer version is out; nothing is downloaded or installed. -->
+                    <HeaderedContentControl x:Name="UpdateSwitchRow" Header="Проверять обновления" Tag="раз в сутки" Style="{StaticResource SettingRow}">
+                        <StackPanel>
+                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding CheckForUpdates}" HorizontalAlignment="Left" />
+                            <TextBlock Style="{StaticResource Note}" FontSize="13.5" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Text="Раз в сутки Glossa спрашивает у GitHub номер последней версии. GitHub при этом видит IP-адрес и версию Glossa, больше ничего не отправляется и не скачивается." />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl x:Name="UpdateCheckRow" Header="Новая версия" Style="{StaticResource SettingRow}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="CheckNow" Content="Проверить сейчас" Click="OnCheckNow" />
+                                <Button x:Name="OpenRelease" Content="Открыть страницу" Margin="10,0,0,0" Click="OnOpenRelease" Visibility="Collapsed" />
+                            </StackPanel>
+                            <TextBlock x:Name="UpdateStatus" Style="{StaticResource Note}" FontSize="13.5" Margin="0,10,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
                     </HeaderedContentControl>
 
                     <HeaderedContentControl Header="Журнал" Tag="для разбора ошибок" Style="{StaticResource SettingRow}">
@@ -98,8 +122,9 @@
                     <TextBlock x:Name="DiskNote" Style="{StaticResource Note}" Margin="0,8,0,0" />
                     <Border Height="1" Background="{DynamicResource Rule}" Margin="0,18" />
                     <TextBlock Text="О ПРОГРАММЕ" Style="{StaticResource SectionCaption}" />
-                    <TextBlock x:Name="Build" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
-                    <TextBlock Text="для личного использования" Style="{StaticResource Note}" />
+                    <TextBlock x:Name="Version" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
+                    <TextBlock x:Name="Build" Style="{StaticResource Note}" />
+                    <TextBlock Text="для личного использования" Style="{StaticResource Note}" Margin="0,4,0,0" />
                     <TextBlock x:Name="Location" Style="{StaticResource Note}" Margin="0,4,0,0" />
                 </StackPanel>
             </Border>

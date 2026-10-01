@@ -119,6 +119,31 @@ public sealed class AppSettings
 
     /// <summary>Saves each OCR input image to the logs folder and logs lookup geometry.</summary>
     public bool DebugOcrDumps { get; set; }
+
+    /// <summary>Настройки -> Приложение -> Обновления: the once-a-day look at GitHub for a newer version, and what it found.</summary>
+    public UpdateSettings Updates { get; set; } = new();
+}
+
+/// <summary>
+/// The update check (decided 2026-10-01): once a day Glossa asks GitHub for the latest release and tells when it is
+/// newer than the running one; nothing is downloaded or installed. Old settings files without the section load as defaults.
+/// </summary>
+public sealed class UpdateSettings
+{
+    /// <summary>The automatic check (about a minute after the start, then daily). Off: only «Проверить сейчас» asks.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>When GitHub last answered (UTC); null before the first answer. A failed check does not move it.</summary>
+    public DateTime? LastCheckUtc { get; set; }
+
+    /// <summary>The newest version the user has been told about ("0.1.0"), so that one release is announced once.</summary>
+    public string NotifiedVersion { get; set; } = "";
+
+    /// <summary>The latest stable version GitHub named at the last answer ("0.1.0"); empty when unknown. Drives the settings line and the tray item.</summary>
+    public string LatestVersion { get; set; } = "";
+
+    /// <summary>The release page of <see cref="LatestVersion"/>; checked again before it is opened.</summary>
+    public string LatestUrl { get; set; } = "";
 }
 
 /// <summary>
@@ -551,6 +576,9 @@ public sealed class SettingsStore(string path)
 
     public string Path { get; } = path;
 
+    /// <summary>One writer at a time: the settings window, the tray, the update check and the hotkeys all save, through one shared temp file.</summary>
+    private readonly object _writing = new();
+
     public AppSettings Load()
     {
         try
@@ -559,6 +587,7 @@ public sealed class SettingsStore(string path)
             {
                 loaded.LocalAi.Normalize();
                 loaded.Eyes.Normalize();
+                loaded.Updates ??= new UpdateSettings();
                 if (loaded.TranslateMode is not ("screen" or "live")) loaded.TranslateMode = "zone";
                 return loaded;
             }
@@ -573,10 +602,13 @@ public sealed class SettingsStore(string path)
 
     public void Save(AppSettings settings)
     {
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        var tmp = Path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(settings, Json));
-        File.Move(tmp, Path, overwrite: true);
+        lock (_writing)
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+            var tmp = Path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(settings, Json));
+            File.Move(tmp, Path, overwrite: true);
+        }
     }
 }
 

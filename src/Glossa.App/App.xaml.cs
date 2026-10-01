@@ -12,8 +12,10 @@ using Glossa.Core.Dictionaries;
 using Glossa.Core.Library;
 using Glossa.Core.Logging;
 using Glossa.Core.Lookup;
+using Glossa.Core.Notices;
 using Glossa.Core.Ocr;
 using Glossa.Core.Text;
+using Glossa.Core.Updates;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
@@ -74,6 +76,14 @@ public partial class App : Application
     private GamepadHub? _pad;
     private LookupSessions? _sessions;
     private WinForms.NotifyIcon? _tray;
+    private UpdateService? _updates;
+    private CancellationTokenSource? _updatesStop;
+    private HttpClient? _updateProxied;
+    private HttpClient? _updateDirect;
+    private bool _updatesWereOn;
+
+    /// <summary>What a click on the tray notice that is on screen opens; every notice goes through <see cref="ShowBalloon"/>.</summary>
+    private readonly NoticeTarget _notice = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -160,7 +170,7 @@ public partial class App : Application
         _eyes = new EyesService(() => _settings, _llama, _localHttp, Interop.Native.FreeRamMb, AiRouter.FreeVramMb, log);
         _router.Eyes = _eyes;
         _eyes.MovedOnCard += _router.Rebaseline;
-        _eyes.Notice += text => Dispatcher.BeginInvoke(() => _tray?.ShowBalloonTip(8000, "Glossa", text, WinForms.ToolTipIcon.Warning));
+        _eyes.Notice += text => ShowBalloon(NoticeKind.Nothing, null, 8000, "Glossa", text, WinForms.ToolTipIcon.Warning);
         _services = new AppServices(() => _settings, s => _store!.Save(s), _library, _keys, _speech, _router,
             _dictionaries, () => _levels, ReloadDictionaries, _localHttp, _remoteHttp, _directHttp, _theme, log);
         _games = _services.Games = new Games.GameRegistry(() => _settings, s => _store!.Save(s), log);
@@ -247,7 +257,7 @@ public partial class App : Application
         _sessions = new LookupSessions(() => _settings, _games, _capture, _ocr, words, _controller, _popup, _guard, _pad, log, () => _library!.List());
         _pad.ComboPressed += _sessions.PadCombo;
         _pad.MousePressed += _sessions.Pointer;
-        _sessions.Notice += text => _tray?.ShowBalloonTip(6000, "Glossa", text, WinForms.ToolTipIcon.Warning);
+        _sessions.Notice += text => ShowBalloon(NoticeKind.Nothing, null, 6000, "Glossa", text, WinForms.ToolTipIcon.Warning);
         _sessions.LiveChanged += ApplyQuoteKey;
         _services.SettingsChanged += () => ApplyQuoteKey(_sessions.LiveRunning); // «Сохранять цитаты» switched while live runs
         _services.RecordGamepad = _pad.Record;
@@ -258,15 +268,18 @@ public partial class App : Application
         _tray = CreateTray();
         _tray.BalloonTipClicked += (_, _) =>
         {
-            if (_reminderBalloon) ShowMain(MainTab.Study);
+            var (kind, target) = _notice.TakeClick();
+            if (kind == NoticeKind.Study) ShowMain(MainTab.Study);
+            else if (kind == NoticeKind.Update) _services!.OpenReleasePage(target);
         };
-        _tray.BalloonTipClosed += (_, _) => _reminderBalloon = false;
+        _tray.BalloonTipClosed += (_, _) => _notice.Closed();
         _reminders.Tick += (_, _) => CheckReminders();
         _reminders.Start();
+        StartUpdateCheck(log);
         if (!_hotkeys.Register(HotkeyLookup, _settings.Hotkey))
-            _tray.ShowBalloonTip(5000, "Glossa", $"Не удалось занять {_settings.Hotkey} - клавиша занята другой программой. Смените её в настройках.", WinForms.ToolTipIcon.Warning);
+            ShowBalloon(NoticeKind.Nothing, null, 5000, "Glossa", $"Не удалось занять {_settings.Hotkey} - клавиша занята другой программой. Смените её в настройках.", WinForms.ToolTipIcon.Warning);
         else
-            _tray.ShowBalloonTip(3000, "Glossa", $"Наведите курсор на слово и нажмите {_settings.Hotkey}.", WinForms.ToolTipIcon.Info);
+            ShowBalloon(NoticeKind.Nothing, null, 3000, "Glossa", $"Наведите курсор на слово и нажмите {_settings.Hotkey}.", WinForms.ToolTipIcon.Info);
         if (_settings.WindowHotkey.Length > 0 && !_hotkeys.Register(HotkeyWindow, _settings.WindowHotkey))
             log.Warn($"window hotkey {_settings.WindowHotkey} is taken by another program");
         _services.ChangeWindowHotkey = spec =>
@@ -435,7 +448,51 @@ public partial class App : Application
 
     private readonly System.Windows.Threading.DispatcherTimer _reminders = new() { Interval = TimeSpan.FromMinutes(1) };
     private DateTime? _reminderShown;
-    private bool _reminderBalloon;
+
+    /// <summary>What a click on the tray notice that is on screen does.</summary>
+    /// <summary>
+    /// The one way to show a tray notice: it says what a click on it opens (plain notices: nothing), so a click can never
+    /// open what an earlier notice meant. Safe from any thread.
+    /// </summary>
+    private void ShowBalloon(NoticeKind kind, string? target, int milliseconds, string title, string text, WinForms.ToolTipIcon icon)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => ShowBalloon(kind, target, milliseconds, title, text, icon));
+            return;
+        }
+        if (_tray is null) return;
+        _notice.Show(kind, target, TimeSpan.FromMilliseconds(milliseconds));
+        _tray.ShowBalloonTip(milliseconds, title, text, icon);
+    }
+
+    /// <summary>
+    /// The once-a-day look at GitHub for a newer version (Настройки -> Приложение -> Обновления). The first check waits a
+    /// minute so the start and the first lookup are not slowed; the answer is applied on the UI thread; a newer
+    /// version gives one tray notice, a click opens its release page. Nothing is downloaded or installed.
+    /// </summary>
+    private void StartUpdateCheck(ILog log)
+    {
+        _updatesStop = new CancellationTokenSource();
+        // Clients of their own (no cookies, no redirects, no compression): the shared ones carry the AI's and the downloads' settings.
+        // The order is the dictionaries': the system proxy first, then direct.
+        _updateProxied = UpdateChecker.CreateClient(useSystemProxy: true);
+        _updateDirect = UpdateChecker.CreateClient(useSystemProxy: false);
+        _updates = _services!.Updates = new UpdateService(() => _settings, () => _store!.Save(_settings),
+            new UpdateChecker(_updateProxied, _updateDirect), AppVersion.Current, log, post: work => Dispatcher.InvokeAsync(work).Task);
+        _updates.Announce += update =>
+            ShowBalloon(NoticeKind.Update, update.Url, 10000, UpdateTexts.BalloonTitle(update.Version), UpdateTexts.BalloonText, WinForms.ToolTipIcon.Info);
+        // The switch turned on: a due check runs now, not at the next hourly wake-up.
+        _updatesWereOn = _settings.Updates.CheckForUpdates;
+        _services.SettingsChanged += () =>
+        {
+            var on = _settings.Updates.CheckForUpdates;
+            if (on && !_updatesWereOn) _ = _updates.CheckSoon();
+            _updatesWereOn = on;
+        };
+        log.Info($"Glossa {AppVersion.Current}, update check {(_settings.Updates.CheckForUpdates ? "on" : "off")}");
+        _ = _updates.RunAsync(UpdateCheck.FirstCheckDelay, UpdateCheck.PollInterval, _updatesStop.Token);
+    }
 
     /// <summary>
     /// The evening reminders (Настройки → Учёба): a tray notice near 18:00 and 20:00 on a day with nothing studied and
@@ -459,8 +516,7 @@ public partial class App : Application
             var plan = Glossa.Core.Study.SessionBuilder.Build(_library.List(), _library.ReviewStates(), answered, study.Limits(), study.Config(), clock, now);
             if (Glossa.Core.Study.StudyReminders.Due(local, times, _reminderShown, answered.Count > 0, plan.Cards.Count) is null) return;
             _reminderShown = local;
-            _reminderBalloon = true;
-            _tray.ShowBalloonTip(8000, "Glossa", Glossa.Core.Study.StudyReminders.Text(plan.Cards.Count), WinForms.ToolTipIcon.Info);
+            ShowBalloon(NoticeKind.Study, null, 8000, "Glossa", Glossa.Core.Study.StudyReminders.Text(plan.Cards.Count), WinForms.ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
@@ -557,6 +613,7 @@ public partial class App : Application
             menu.OpenRequested += () => ShowMain(MainTab.Words); // «Открыть словарь» («Главная» in «Только перевод»)
             menu.StudyRequested += () => ShowMain(MainTab.Study);
             menu.SettingsRequested += () => ShowMain(MainTab.Settings);
+            menu.UpdateRequested += () => _services!.OpenReleasePage(_updates?.Pending?.Url);
             menu.ExitRequested += Shutdown;
             menu.LookupToggled += SetLookup;
             menu.ModeChanged += mode =>
@@ -583,7 +640,8 @@ public partial class App : Application
             : !s.LocalAi.HasRuntime() ? "ИИ: движок llama.cpp не скачан"
             : "ИИ выгружена, загрузится при поиске";
         var mode = s.LocalAi.Mode;
-        return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn, s.Purpose == "translate");
+        return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn, s.Purpose == "translate",
+            _updates?.Pending is { } pending ? UpdateTexts.TrayItem(pending.Version) : null);
     }
 
     /// <summary>«Поиск по Alt+Q» in the tray: hands the combination back to a game that needs it, until switched on again.</summary>
@@ -596,7 +654,7 @@ public partial class App : Application
             return;
         }
         if (!_hotkeys!.Register(HotkeyLookup, _settings.Hotkey))
-            _tray?.ShowBalloonTip(4000, "Glossa", $"{_settings.Hotkey} занято другой программой.", WinForms.ToolTipIcon.Warning);
+            ShowBalloon(NoticeKind.Nothing, null, 4000, "Glossa", $"{_settings.Hotkey} занято другой программой.", WinForms.ToolTipIcon.Warning);
     }
 
     /// <summary>The exe's icon (tools\make-icon.ps1 draws every size) at the tray's size.</summary>
@@ -609,6 +667,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _log?.Info("Glossa exiting");
+        _updates?.Stop();
+        _updatesStop?.Cancel();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         _hotkeys?.Dispose();
         _guard?.Dispose(); // a paused game wakes before Glossa goes
@@ -625,6 +685,8 @@ public partial class App : Application
         _localHttp?.Dispose();
         _remoteHttp?.Dispose();
         _directHttp?.Dispose();
+        _updateProxied?.Dispose();
+        _updateDirect?.Dispose();
         try { _instance?.ReleaseMutex(); } catch (ApplicationException) { }
         _instance?.Dispose();
         _activate?.Dispose();
