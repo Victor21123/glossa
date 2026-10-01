@@ -60,11 +60,16 @@ public static class VisionReading
     /// </summary>
     public static bool ReadWholeZone(OcrPage page, int doubtfulWords, PixelRect zone)
     {
-        if (page.Lines.Count > 2) return false;
-        var withLetters = page.Lines.SelectMany(l => l.Words).Count(w => w.Text.Any(char.IsLetter));
+        // The model reads horizontal pieces only: columns are not its to judge. A zone whose text is mostly vertical is left to
+        // the recognizer; otherwise the horizontal lines are judged alone (a stylized label next to a column keeps the eyes).
+        var rows = page.Lines.Where(l => !l.Vertical).ToList();
+        if (page.Lines.Where(l => l.Vertical).Sum(l => l.Text.Count(char.IsLetter)) >= rows.Sum(l => l.Text.Count(char.IsLetter))
+            && page.Lines.Any(l => l.Vertical)) return false;
+        if (rows.Count > 2) return false;
+        var withLetters = rows.SelectMany(l => l.Words).Count(w => w.Text.Any(char.IsLetter));
         if (withLetters == 0 || doubtfulWords * 2 >= withLetters) return true;
-        var letters = page.Lines.Sum(l => l.Text.Count(char.IsLetter));
-        return letters <= 3 && page.Lines.Max(l => l.Box.Width) < zone.Width / 2;
+        var letters = rows.Sum(l => l.Text.Count(char.IsLetter));
+        return letters <= 3 && rows.Max(l => l.Box.Width) < zone.Width / 2;
     }
 
     private static readonly HashSet<string> NoTextAnswers = new(StringComparer.OrdinalIgnoreCase)
@@ -133,7 +138,16 @@ public static class VisionReading
     /// the model read 3 of them right, found no text on 6 (an icon, a microphone, armour read as 西, x, AA) and one in a
     /// dense paragraph it placed a line off (<see cref="Settle"/> keeps the recognizer's word there).
     /// </summary>
-    public static bool Scrap(WordHit hit) => hit.Score < ScrapScore && hit.Line.Count(char.IsLetter) <= 3;
+    public static bool Scrap(WordHit hit) => !hit.Vertical && hit.Score < ScrapScore && hit.Line.Count(char.IsLetter) <= 3;
+
+    /// <summary>
+    /// Whether the point is in the band of a column of vertical text: within 1.5 of its widths to the side, and along its
+    /// length (half a width past each end): the vision pass reads horizontal pieces only, so there it has nothing to add and
+    /// must not run. A label a column's width above or below the column's end is not in its band.
+    /// </summary>
+    public static bool NearVertical(OcrPage page, double x, double y) =>
+        page.Lines.Any(l => l.Vertical && y >= l.Box.Top - l.Thickness * 0.5 && y <= l.Box.Bottom + l.Thickness * 0.5
+                            && Math.Max(Math.Max(l.Box.Left - x, x - l.Box.Right), 0) <= l.Thickness * 1.5);
 
     /// <summary>
     /// Tokens the model must not write in its reading: Gemma 4 26B wrote ニューゲーム as "ニューget" and "get-game" - the same
@@ -311,10 +325,14 @@ public static class VisionReading
     /// <summary>
     /// Whether the word is worth reading again: no dictionary knows it (<paramref name="known"/> false; null when
     /// there is nothing to check against), the recognizer was unsure of it, or it is the last word read in a line whose
-    /// box goes on past it (on <paramref name="page"/>, when given).
+    /// box goes on past it (on <paramref name="page"/>, when given). Never for a word of a column: the piece of screen the
+    /// model reads is a horizontal one, and a column's box is its whole length, not a line's height.
     /// </summary>
     public static bool Doubtful(WordHit hit, bool? known, OcrPage? page = null) =>
-        known == false || hit.Score < MinScore || (page is not null && UnreadAfter(page, hit));
+        !hit.Vertical && (known == false || hit.Score < MinScore || (page is not null && UnreadAfter(page, hit)));
+
+    /// <summary>The units of the page that can be read again by the model: those of horizontal lines (its piece of screen is horizontal).</summary>
+    internal static IEnumerable<OcrWord> UnitsToCheck(OcrPage page) => page.Lines.Where(l => !l.Vertical).SelectMany(l => l.Words);
 
     /// <summary>
     /// The page's words worth reading again, each once: the lookup's word under every piece the recognizer read (only
@@ -325,7 +343,8 @@ public static class VisionReading
         var noArticles = new DictionarySettings { ShowInPopup = false, HintAi = false };
         var seen = new HashSet<(string, double, double)>();
         var doubtful = new List<WordHit>();
-        foreach (var unit in page.Lines.SelectMany(l => l.Words))
+        // Columns are not read again: the model's piece of screen is horizontal (see Doubtful).
+        foreach (var unit in UnitsToCheck(page))
         {
             if (words.Hit(page, unit.Box.CenterX, unit.Box.CenterY, cjk) is not { } hit
                 || !seen.Add((hit.Word, hit.Box.Left, hit.Box.Top)) || !hit.Word.Any(char.IsLetter)) continue;
@@ -366,7 +385,7 @@ public static class VisionReading
     /// <summary>The word is the last one read in its line, and the line's box reaches on past it.</summary>
     internal static bool UnreadAfter(OcrPage page, WordHit hit)
     {
-        if (LineOf(page, hit) is not { Words.Count: > 0 } line) return false;
+        if (hit.Vertical || LineOf(page, hit) is not { Words.Count: > 0 } line) return false;
         var lastRight = line.Words.Max(w => w.Box.Right);
         return hit.Box.Right >= lastRight - 1 && line.Box.Right - lastRight > UnreadTail * line.Box.Height;
     }

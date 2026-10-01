@@ -30,10 +30,6 @@ public sealed class LookupController(
     Speech.SpeechService speech,
     ILog log)
 {
-    // Region around the cursor that is recognized, in physical pixels.
-    private const int RoiHalfWidth = 900;
-    private const int RoiUp = 260;
-    private const int RoiDown = 220;
     private static readonly System.Globalization.CultureInfo Russian = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
 
     private readonly CardService _cards = new();
@@ -252,10 +248,9 @@ public sealed class LookupController(
         }
         else
         {
-            var roi = new PixelRect(cursor.X - RoiHalfWidth, cursor.Y - RoiUp, cursor.X + RoiHalfWidth, cursor.Y + RoiDown);
-            var crop = frame.Crop(roi);
             var family = screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
-            page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct);
+            var (read, crop) = await RecognizeAroundAsync(frame, cursor.X, cursor.Y, family, screenLanguage, ct);
+            page = read;
             if (s.DebugOcrDumps)
             {
                 var dump = ShotStore.SaveJpeg(DataPaths.Logs, crop.Bgra, crop.Width, crop.Height, crop.Stride, quality: 92);
@@ -279,8 +274,13 @@ public sealed class LookupController(
         }
         log.Info($"lookup: no text recognized (capture {tCapture} ms, ocr {tOcr} ms, {page.Lines.Count} lines)");
         // A stylized font (neon outlines, glow: a title menu, 2026-09-30) the recognizer does not find at all: the model
-        // with sight reads the piece of screen around the point - at once, or on Tab when the AI waits for it.
-        if (context.Choices?.Ai == "off")
+        // with sight reads the piece of screen around the point - at once, or on Tab when the AI waits for it. Not beside
+        // a column of vertical text: the model's piece of screen is a horizontal one, it would read the neighbours' strokes.
+        if (VisionReading.NearVertical(page, cursor.X, cursor.Y))
+        {
+            NoText(run, hint: false);
+        }
+        else if (context.Choices?.Ai == "off")
         {
             NoText(run);
         }
@@ -297,11 +297,32 @@ public sealed class LookupController(
         }
     }
 
+    /// <summary>
+    /// The recognition of a lookup at a point: the window around it (<see cref="LookupRegion.Around"/>), and once more in a
+    /// window as tall as the screen when a column of vertical text near the cursor reaches the top or bottom of the first
+    /// (a column is long: the low window reads half of it). The second recognition is paid only then.
+    /// </summary>
+    private async Task<(OcrPage Page, (byte[] Bgra, int Width, int Height, int Stride, PixelRect Region) Crop)> RecognizeAroundAsync(
+        CapturedFrame frame, double x, double y, OcrModelFamily family, string? language, CancellationToken ct)
+    {
+        var crop = frame.Crop(LookupRegion.Around(x, y));
+        var page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct, frame.Width, language);
+        if (family != OcrModelFamily.CjkLatin || !LookupRegion.NeedsTaller(page, crop.Region, frame.Bounds, x)) return (page, crop);
+
+        ct.ThrowIfCancellationRequested();
+        var tall = frame.Crop(LookupRegion.Taller(x, y, frame.Bounds));
+        var again = await ocr.RecognizeAsync(tall.Bgra, tall.Width, tall.Height, tall.Stride, tall.Region, family, ct, frame.Width, language);
+        log.Info($"lookup: a column of vertical text reaches the edge of the region, read again in {tall.Region} " +
+                 $"({page.Elapsed.TotalMilliseconds:F0} + {again.Elapsed.TotalMilliseconds:F0} ms)");
+        // The tall window is narrower: the horizontal lines of the first page stay whole, the columns come from the second.
+        return (LookupRegion.Merge(page, again), tall);
+    }
+
     /// <param name="why">Why the picture was not read either (the model not downloaded, the AI off for lack of memory).</param>
-    private void NoText(Run run, string? why = null)
+    private void NoText(Run run, string? why = null, bool hint = true)
     {
         // A stylized font is the usual reason on the 12B and E4B, and without the eyes it reads worse.
-        why ??= run.Settings.LocalAi.MissesEyes(run.Settings.Eyes)
+        why ??= hint && run.Settings.LocalAi.MissesEyes(run.Settings.Eyes)
             ? "стилизованный шрифт лучше читают Глаза: Настройки -> ИИ и модели -> Глаза -> Скачать" : null;
         vm.ShowMessage(why is null ? "Под курсором не найден текст" : $"Под курсором не найден текст ({why})");
         popup.ShowNear(new PixelRect(run.Cursor.X, run.Cursor.Y, run.Cursor.X + 1, run.Cursor.Y + 1));
@@ -796,11 +817,28 @@ public sealed class LookupController(
         var screenLanguage = context.Choices?.Language ?? s.ScreenLanguage;
         var forced = screenLanguage is "en" or "ja" or "zh" ? screenLanguage : null;
         var cjk = forced is "ja" or "zh" ? forced : s.PreferredCjk;
-        // Read within at least the lookup's own height of screen, then only the words inside the zone (Zones.Around).
-        var crop = frame.Crop(Zones.Around(zone));
-        var page = crop.Width < 4 || crop.Height < 4 || zone.Width < 4 || zone.Height < 4 ? OcrPage.Empty(zone)
-            : words.Normalize(await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region,
-                screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin, ct), forced).Within(zone);
+        // Read within at least the lookup's own height of screen, then only the words inside the zone (Zones.Around); a
+        // column of vertical text that reaches the edge of that piece is read once more in a taller one (Zones.Taller).
+        var piece = Zones.Around(zone);
+        var crop = frame.Crop(piece);
+        var family = screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
+        OcrPage page;
+        if (crop.Width < 4 || crop.Height < 4 || zone.Width < 4 || zone.Height < 4)
+        {
+            page = OcrPage.Empty(zone);
+        }
+        else
+        {
+            var read = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct, frame.Width, screenLanguage);
+            if (family == OcrModelFamily.CjkLatin && LookupRegion.NeedsTaller(read, crop.Region, frame.Bounds, zone.Left, zone.Right))
+            {
+                var tall = frame.Crop(Zones.Taller(piece, frame.Bounds));
+                ct.ThrowIfCancellationRequested();
+                read = LookupRegion.Merge(read, await ocr.RecognizeAsync(tall.Bgra, tall.Width, tall.Height, tall.Stride, tall.Region, family, ct, frame.Width, screenLanguage));
+                log.Info($"translate zone: a column of vertical text reaches the edge of the piece, read again in {tall.Region}");
+            }
+            page = words.Normalize(read, forced).Within(zone);
+        }
         ct.ThrowIfCancellationRequested();
         var tOcr = sw.ElapsedMilliseconds;
 
@@ -936,10 +974,8 @@ public sealed class LookupController(
         var ct = cts.Token;
         var s = settings();
         var screenLanguage = context.Choices?.Language ?? s.ScreenLanguage;
-        var roi = new PixelRect(x - RoiHalfWidth, y - RoiUp, x + RoiHalfWidth, y + RoiDown);
-        var crop = frame.Crop(roi);
         var family = screenLanguage == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
-        var page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct);
+        var (page, _) = await RecognizeAroundAsync(frame, x, y, family, screenLanguage, ct);
         ct.ThrowIfCancellationRequested();
         var tOcr = sw.ElapsedMilliseconds;
 

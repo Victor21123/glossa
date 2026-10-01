@@ -17,8 +17,6 @@ using SkiaSharp;
 /// </summary>
 public static class OcrEval
 {
-    private const int HalfWidth = 900, Up = 260, Down = 220; // LookupController's region around the cursor
-
     public sealed record Case(string Id, string Image, double X, double Y, string Word, string? Line, string? Lang);
 
     /// <summary>The recognizer to measure and the llama-server for the second reading, from the command line.</summary>
@@ -58,20 +56,10 @@ public static class OcrEval
         foreach (var c in cases)
         {
             using var decoded = SKBitmap.Decode(c.Image) ?? throw new InvalidDataException("not an image: " + c.Image);
-            var left = (int)Math.Clamp(c.X - HalfWidth, 0, decoded.Width - 1);
-            var top = (int)Math.Clamp(c.Y - Up, 0, decoded.Height - 1);
-            var rect = SKRectI.Create(left, top, (int)Math.Min(c.X + HalfWidth, decoded.Width) - left,
-                (int)Math.Min(c.Y + Down, decoded.Height) - top);
-            using var part = new SKBitmap();
-            decoded.ExtractSubset(part, rect);
-            using var crop = part.Copy(SKColorType.Bgra8888);
-            var bytes = crop.GetPixelSpan().ToArray();
-
             var sw = Stopwatch.StartNew();
             var forced = c.Lang is "en" or "ja" or "zh" ? c.Lang : null;
             var cjk = c.Lang == "ja" ? "ja" : "zh";
-            var page = words.Normalize(await ocr.RecognizeAsync(bytes, crop.Width, crop.Height, crop.RowBytes,
-                new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), family, CancellationToken.None), forced);
+            var page = words.Normalize(await RecognizeAround(ocr, decoded, c.X, c.Y, family, c.Lang), forced);
             sw.Stop();
             var hit = words.Hit(page, c.X, c.Y, cjk);
             var first = hit?.Word ?? "";
@@ -190,7 +178,7 @@ public static class OcrEval
                 using var bgra = decoded.Copy(SKColorType.Bgra8888);
                 var sw = Stopwatch.StartNew();
                 var result = words.Normalize(await ocr.RecognizeAsync(bgra.GetPixelSpan().ToArray(), bgra.Width, bgra.Height,
-                    bgra.RowBytes, new PixelRect(0, 0, bgra.Width, bgra.Height), family, CancellationToken.None), c.Lang);
+                    bgra.RowBytes, new PixelRect(0, 0, bgra.Width, bgra.Height), family, CancellationToken.None, language: c.Lang), c.Lang);
                 pages[c.Image] = page = (string.Join(" ", result.Lines.Select(l => l.Text)), sw.ElapsedMilliseconds);
                 var (d, t) = Doubts(result, words, c.Lang);
                 doubtful += d.Count;
@@ -205,23 +193,46 @@ public static class OcrEval
     }
 
     /// <summary>
+    /// The lookup's recognition at a point of a frame, as the app makes it: the window around the point, and once more in the
+    /// tall window when a column of vertical text reaches its top or bottom (<see cref="LookupRegion"/>). With
+    /// GLOSSA_NO_TALLER=1 the window grows never (to show what growth adds).
+    /// </summary>
+    internal static async Task<OcrPage> RecognizeAround(OcrEngine ocr, SKBitmap frame, double x, double y, OcrModelFamily family, string? language = null)
+    {
+        var bounds = new PixelRect(0, 0, frame.Width, frame.Height);
+        var (page, region) = await ReadRegion(ocr, frame, LookupRegion.Around(x, y), family, language);
+        if (family != OcrModelFamily.CjkLatin || Environment.GetEnvironmentVariable("GLOSSA_NO_TALLER") == "1"
+            || !LookupRegion.NeedsTaller(page, region, bounds, x)) return page;
+        var (again, _) = await ReadRegion(ocr, frame, LookupRegion.Taller(x, y, bounds), family, language);
+        Console.WriteLine($"-- a column reaches the edge of the region: read again, {page.Elapsed.TotalMilliseconds:F0} + {again.Elapsed.TotalMilliseconds:F0} ms");
+        return LookupRegion.Merge(page, again);
+    }
+
+    /// <summary>The recognition of <paramref name="region"/> of the frame (cut at the frame's edges), and the region as read.</summary>
+    private static async Task<(OcrPage Page, PixelRect Region)> ReadRegion(OcrEngine ocr, SKBitmap frame, PixelRect region, OcrModelFamily family, string? language = null)
+    {
+        var left = (int)Math.Clamp(region.Left, 0, frame.Width - 1);
+        var top = (int)Math.Clamp(region.Top, 0, frame.Height - 1);
+        var rect = SKRectI.Create(left, top, Math.Max(1, (int)Math.Min(region.Right, frame.Width) - left),
+            Math.Max(1, (int)Math.Min(region.Bottom, frame.Height) - top));
+        using var part = new SKBitmap();
+        frame.ExtractSubset(part, rect);
+        using var crop = part.Copy(SKColorType.Bgra8888);
+        var read = new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        return (await ocr.RecognizeAsync(crop.GetPixelSpan().ToArray(), crop.Width, crop.Height, crop.RowBytes, read, family, CancellationToken.None, screenWidth: frame.Width, language: language), read);
+    }
+
+    /// <summary>
     /// <c>ocr-at &lt;image&gt; &lt;x&gt; &lt;y&gt; [ja|zh|en]</c>: one lookup at a point of a saved frame, as the app makes it: the
     /// region around the point, its lines with their boxes and word pieces, and the word, line and context it gives.
     /// </summary>
     public static async Task AtAsync(string image, double x, double y, string? lang, WordLookup words)
     {
         using var decoded = SKBitmap.Decode(image) ?? throw new InvalidDataException("not an image: " + image);
-        var left = (int)Math.Clamp(x - HalfWidth, 0, decoded.Width - 1);
-        var top = (int)Math.Clamp(y - Up, 0, decoded.Height - 1);
-        var rect = SKRectI.Create(left, top, (int)Math.Min(x + HalfWidth, decoded.Width) - left, (int)Math.Min(y + Down, decoded.Height) - top);
-        using var part = new SKBitmap();
-        decoded.ExtractSubset(part, rect);
-        using var crop = part.Copy(SKColorType.Bgra8888);
         using var ocr = Engine();
         var forced = lang is "en" or "ja" or "zh" ? lang : null;
         var cjk = lang == "zh" ? "zh" : "ja";
-        var page = words.Normalize(await ocr.RecognizeAsync(crop.GetPixelSpan().ToArray(), crop.Width, crop.Height, crop.RowBytes,
-            new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), OcrModelFamily.CjkLatin, CancellationToken.None), forced);
+        var page = words.Normalize(await RecognizeAround(ocr, decoded, x, y, OcrModelFamily.CjkLatin, lang), forced);
         foreach (var l in page.Lines.OrderBy(l => l.Box.Top))
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"[{l.Box.Left:F0},{l.Box.Top:F0} {l.Box.Width:F0}x{l.Box.Height:F0}] {l.Score:0.00} {l.Text}  | {string.Join(" ", l.Words.Select(w => $"{w.Text}@{w.Box.Left:F0}-{w.Box.Right:F0}/{w.Box.Height:F0}"))}"));
@@ -257,7 +268,7 @@ public static class OcrEval
         var cjk = lang == "zh" ? "zh" : "ja";
         var sw = Stopwatch.StartNew();
         var page = words.Normalize(await ocr.RecognizeAsync(crop.GetPixelSpan().ToArray(), crop.Width, crop.Height, crop.RowBytes,
-            new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), OcrModelFamily.CjkLatin, CancellationToken.None), forced).Within(zone);
+            new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom), OcrModelFamily.CjkLatin, CancellationToken.None, language: lang), forced).Within(zone);
         Console.WriteLine($"-- read in {sw.ElapsedMilliseconds} ms:");
         Console.WriteLine(TextBlocks.Joined(page));
         if (options.Client() is not { } vision) return;
@@ -297,7 +308,7 @@ public static class OcrEval
             var sw = Stopwatch.StartNew();
             var whole = new PixelRect(0, 0, bgra.Width, bgra.Height);
             var page = words.Normalize(await ocr.RecognizeAsync(bgra.GetPixelSpan().ToArray(), bgra.Width, bgra.Height, bgra.RowBytes,
-                whole, family, CancellationToken.None), c.Lang);
+                whole, family, CancellationToken.None, language: c.Lang), c.Lang);
             var (d, t) = Doubts(page, words, c.Lang);
             doubtful += d.Count;
             units += t;

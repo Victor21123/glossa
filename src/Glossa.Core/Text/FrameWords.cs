@@ -15,10 +15,14 @@ public sealed record FrameWord(string Text, PixelRect Box, int Line);
 public sealed class FrameWords
 {
     private readonly List<List<FrameWord>> _lines;
+    private readonly List<bool> _vertical; // per line: a column of vertical text
+    private readonly List<int> _paragraph; // per line: the paragraph it was read in (its columns share a number)
 
-    private FrameWords(List<List<FrameWord>> lines, int line, int index)
+    private FrameWords(List<List<FrameWord>> lines, List<bool> vertical, List<int> paragraph, int line, int index)
     {
         _lines = lines;
+        _vertical = vertical;
+        _paragraph = paragraph;
         LineIndex = line;
         Index = index;
     }
@@ -40,15 +44,28 @@ public sealed class FrameWords
     {
         var ocrLines = HitTester.DropFurigana(page.Lines).OrderBy(l => l.Box.Top).ThenBy(l => l.Box.Left).ToList();
         var lines = new List<List<FrameWord>>();
+        var vertical = new List<bool>();
+        var paragraphs = new List<int>();
         var sources = new List<OcrLine>();
+        var emitted = new HashSet<OcrLine>();
         foreach (var line in ocrLines)
         {
-            var words = WordsOf(line, lines.Count, cjk);
-            if (words.Count == 0) continue;
-            lines.Add(words);
-            sources.Add(line);
+            if (emitted.Contains(line)) continue;
+            // Columns are read as a whole paragraph at once, right to left; rows go by their top.
+            var group = line.Vertical ? HitTester.ParagraphOf(ocrLines, line, emitted) : [line];
+            var number = emitted.Count;
+            foreach (var l in group)
+            {
+                emitted.Add(l);
+                var words = WordsOf(l, lines.Count, cjk);
+                if (words.Count == 0) continue;
+                lines.Add(words);
+                vertical.Add(l.Vertical);
+                paragraphs.Add(number);
+                sources.Add(l);
+            }
         }
-        if (lines.Count == 0) return new FrameWords(lines, 0, 0);
+        if (lines.Count == 0) return new FrameWords(lines, vertical, paragraphs, 0, 0);
 
         const int RealText = 20;
         int? lowest = null;
@@ -56,10 +73,11 @@ public sealed class FrameWords
         var biggest = 0;
         var biggestSize = -1;
         var seen = new HashSet<OcrLine>();
+        var listCache = HitTester.NewListCache();
         foreach (var line in sources)
         {
             if (!seen.Add(line)) continue;
-            var paragraph = HitTester.ParagraphOf(sources, line, seen);
+            var paragraph = HitTester.ParagraphOf(sources, line, seen, listCache);
             foreach (var l in paragraph) seen.Add(l);
             var first = sources.IndexOf(paragraph[0]);
             var size = paragraph.Sum(l => l.Text.Length);
@@ -75,13 +93,14 @@ public sealed class FrameWords
                 lowest = first;
             }
         }
-        return new FrameWords(lines, lowest ?? biggest, 0);
+        return new FrameWords(lines, vertical, paragraphs, lowest ?? biggest, 0);
     }
 
     /// <summary>Moves the highlight one word left or right (on to the next line at its end) or one line up or down.</summary>
     public bool Move(PadButtons direction)
     {
         if (_lines.Count == 0) return false;
+        if (_vertical[LineIndex] && MoveInColumns(direction) is { } moved) return moved;
         if ((direction & Pad.Right) != 0)
         {
             if (Index + 1 < _lines[LineIndex].Count) Index++;
@@ -107,11 +126,62 @@ public sealed class FrameWords
             .ToList();
         if (candidates.Count == 0) return false;
         LineIndex = candidates[0];
-        Index = Nearest(_lines[LineIndex], x);
+        // Words of a column share their x: the height says where to enter it.
+        Index = _vertical[LineIndex] ? NearestY(_lines[LineIndex], y) : Nearest(_lines[LineIndex], x);
         return true;
 
         double Middle(int i) => _lines[i].Average(w => w.Box.CenterY);
         bool Covers(int i, double at) => _lines[i][0].Box.Left - 40 <= at && at <= _lines[i][^1].Box.Right + 40;
+    }
+
+    /// <summary>
+    /// Steps in vertical text. Down and Up go along the column and, past its end, on to the next or previous column of
+    /// the same paragraph (never into another one). Left goes to the nearest column on the left, Right on the right, and
+    /// enters it at the nearest height; with none on that side the highlight stays. Null for any other button.
+    /// </summary>
+    private bool? MoveInColumns(PadButtons direction)
+    {
+        var along = (direction & (Pad.Down | Pad.Up)) != 0;
+        if (along)
+        {
+            var step = (direction & Pad.Down) != 0 ? 1 : -1;
+            if (Index + step >= 0 && Index + step < _lines[LineIndex].Count)
+            {
+                Index += step;
+                return true;
+            }
+            var next = LineIndex + step;
+            if (next < 0 || next >= _lines.Count || !_vertical[next] || _paragraph[next] != _paragraph[LineIndex]) return false;
+            LineIndex = next;
+            Index = step > 0 ? 0 : _lines[next].Count - 1;
+            return true;
+        }
+
+        var left = (direction & Pad.Left) != 0;
+        if (!left && (direction & Pad.Right) == 0) return null;
+        var x = Current!.Box.CenterX;
+        var y = Current.Box.CenterY;
+        // The nearest column on that side, preferring those that reach the current height.
+        var target = Enumerable.Range(0, _lines.Count)
+            .Where(i => i != LineIndex && _vertical[i] && (left ? Across(i) < x : Across(i) > x))
+            .OrderBy(i => (Reaches(i, y) ? 0 : 10_000) + Math.Abs(Across(i) - x))
+            .Select(i => (int?)i)
+            .FirstOrDefault();
+        if (target is not { } t) return false;
+        LineIndex = t;
+        Index = NearestY(_lines[t], y);
+        return true;
+
+        double Across(int i) => _lines[i][0].Box.CenterX;
+        bool Reaches(int i, double at) => _lines[i].Min(w => w.Box.Top) <= at && at <= _lines[i].Max(w => w.Box.Bottom);
+    }
+
+    private static int NearestY(List<FrameWord> words, double y)
+    {
+        var best = 0;
+        for (var i = 1; i < words.Count; i++)
+            if (Math.Abs(words[i].Box.CenterY - y) < Math.Abs(words[best].Box.CenterY - y)) best = i;
+        return best;
     }
 
     private static int Nearest(List<FrameWord> words, double x)

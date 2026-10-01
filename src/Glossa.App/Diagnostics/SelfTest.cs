@@ -254,7 +254,7 @@ internal static class SelfTest
                 {
                     var (text, _) = await controller.TranslateTextAsync(block.Text, lang, Glossa.Core.Lookup.Languages.TargetFor(lang), null, null,
                         CancellationToken.None);
-                    still.AddTranslation(block.Box, block.Lines)(text);
+                    still.AddTranslation(block, blocks.Where(b => b.Block != block).Select(b => b.Block.Box))(text);
                     sb.AppendLine($"  [{lang}] {t.ElapsedMilliseconds,5} мс  {block.Text} => {text}");
                 }
                 catch (Exception ex)

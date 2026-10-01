@@ -19,7 +19,6 @@ using SkiaSharp;
 /// </summary>
 public static class OcrPoint
 {
-    private const int HalfWidth = 900, Up = 260, Down = 220; // LookupController's region around the cursor
 
     /// <param name="Word">The word a lookup should give at the point (any of "a|b"); null on no text.</param>
     /// <param name="Label">The whole line or button text at the point (any of "a|b"); null on no text.</param>
@@ -65,7 +64,7 @@ public static class OcrPoint
             string? label, word, answer = "", was = null;
             if (mode == "flow")
             {
-                var page = words.Normalize(await Recognize(ocr, decoded, new PixelRect(c.X - HalfWidth, c.Y - Up, c.X + HalfWidth, c.Y + Down)), forced);
+                var page = words.Normalize(await OcrEval.RecognizeAround(ocr, decoded, c.X, c.Y, OcrModelFamily.CjkLatin, forced), forced);
                 var hit = words.Hit(page, c.X, c.Y, cjk);
                 if (hit is null || VisionReading.Scrap(hit))
                 {
@@ -111,13 +110,12 @@ public static class OcrPoint
             {
                 // The region recognized as usual; with nothing at the point (or a scrap), again with the thresholds from
                 // GLOSSA_OCR_*: only a line found there wakes the eyes, which read just that line, cut out and enlarged.
-                var region = new PixelRect(c.X - HalfWidth, c.Y - Up, c.X + HalfWidth, c.Y + Down);
-                var hit = words.Hit(words.Normalize(await Recognize(ocr, decoded, region), forced), c.X, c.Y, cjk);
+                var hit = words.Hit(words.Normalize(await OcrEval.RecognizeAround(ocr, decoded, c.X, c.Y, OcrModelFamily.CjkLatin, forced), forced), c.X, c.Y, cjk);
                 (label, word) = (hit?.Line, hit?.Word);
                 if (hit is null || VisionReading.Scrap(hit))
                 {
                     was = hit?.Word ?? "-";
-                    var line = (await Recognize(low, decoded, region)).Lines.Where(l => EyesReading.Near(l.Box, c.X, c.Y))
+                    var line = (await OcrEval.RecognizeAround(low, decoded, c.X, c.Y, OcrModelFamily.CjkLatin, forced)).Lines.Where(l => EyesReading.Near(l.Box, c.X, c.Y))
                         .OrderBy(l => Math.Abs(l.Box.CenterY - c.Y)).FirstOrDefault();
                     if (line is null) (label, word, answer) = (null, null, "asleep");
                     else if (eyes is null) (label, word, answer) = (line.Text, null, $"awake {Where(line.Box)} score {line.Score:0.00}");

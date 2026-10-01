@@ -143,13 +143,15 @@ public sealed class LiveTranslator(
                 }
                 if (frame is null) continue;
 
+                // The whole game window is read each time, so a column of vertical text is never cut by the region: no taller second
+                // look here as in a lookup (LookupRegion); the engine's own second look for columns runs on this page as on any.
                 var crop = frame.Crop(bounds);
                 if (crop.Width < 64 || crop.Height < 36) continue;
                 if (!watcher.ShouldRecognize(ScreenFingerprint.Of(crop.Bgra, crop.Width, crop.Height, crop.Stride), DateTime.UtcNow)) continue;
 
                 var language = context.Choices?.Language ?? s.ScreenLanguage;
                 var family = language == "ru" ? OcrModelFamily.Cyrillic : OcrModelFamily.CjkLatin;
-                var page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct);
+                var page = await ocr.RecognizeAsync(crop.Bgra, crop.Width, crop.Height, crop.Stride, crop.Region, family, ct, frame.Width, language);
                 var forced = language is "en" or "ja" or "zh" ? language : null;
                 string Lang(TextBlock b) => forced ?? Languages.DetectText(b.Text, cjk);
                 if (watcher.NewLine(TextBlocks.Of(page), b => Languages.TargetFor(Lang(b), s.NativeLanguage)) is not { } line) continue;

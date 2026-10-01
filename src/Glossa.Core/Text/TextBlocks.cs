@@ -2,8 +2,8 @@ using Glossa.Core.Ocr;
 
 namespace Glossa.Core.Text;
 
-/// <summary>A paragraph on screen: its lines joined into one text, and the box around them.</summary>
-public sealed record TextBlock(string Text, PixelRect Box, int Lines);
+/// <summary>A paragraph on screen: its lines joined into one text, and the box around them. <paramref name="Vertical"/>: columns of vertical text.</summary>
+public sealed record TextBlock(string Text, PixelRect Box, int Lines, bool Vertical = false);
 
 /// <summary>
 /// The screen as paragraphs, for translation rather than for a word: the one under the cursor (Только перевод:
@@ -23,11 +23,12 @@ public static class TextBlocks
     {
         var lines = HitTester.DropFurigana(page.Lines).OrderBy(l => l.Box.Top).ThenBy(l => l.Box.Left).ToList();
         var seen = new HashSet<OcrLine>();
+        var listCache = HitTester.NewListCache();
         var blocks = new List<TextBlock>();
         foreach (var line in lines)
         {
             if (seen.Contains(line)) continue;
-            var paragraph = HitTester.ParagraphOf(lines, line, seen);
+            var paragraph = HitTester.ParagraphOf(lines, line, seen, listCache);
             foreach (var l in paragraph) seen.Add(l);
             blocks.Add(Block(paragraph));
         }
@@ -45,7 +46,7 @@ public static class TextBlocks
             var d = l.Box.DistanceTo(x, y);
             if (d < best) { best = d; nearest = l; }
         }
-        if (nearest is null || best > Math.Max(nearest.Box.Height * 0.75, 12)) return null;
+        if (nearest is null || best > Math.Max(nearest.Thickness * 0.75, 12)) return null;
         return Block(HitTester.ParagraphOf(lines, nearest));
     }
 
@@ -81,7 +82,44 @@ public static class TextBlocks
         var (text, _) = HitTester.JoinParagraph(paragraph);
         var box = paragraph[0].Box;
         foreach (var l in paragraph.Skip(1)) box = box.Union(l.Box);
-        return new TextBlock(text, box, paragraph.Count);
+        return new TextBlock(text, box, paragraph.Count, paragraph[0].Vertical);
+    }
+
+    /// <summary>Narrowest plate for a translation laid over a vertical block: its columns are too thin to hold a line of it.</summary>
+    public const double MinPlateWidth = 240;
+
+    /// <summary>
+    /// Where to lay the translation of a block over the frame: a horizontal block's own box; a vertical one's box widened
+    /// to at least <see cref="MinPlateWidth"/> around its middle, the same top and height, moved inside the frame at its
+    /// sides (narrower only when the frame itself is).
+    /// </summary>
+    public static PixelRect PlateBox(TextBlock block, PixelRect frame)
+    {
+        if (!block.Vertical) return block.Box;
+        var width = Math.Min(Math.Max(block.Box.Width, MinPlateWidth), frame.Width);
+        var left = Math.Clamp(block.Box.CenterX - width / 2, frame.Left, frame.Right - width);
+        return new PixelRect(left, block.Box.Top, left + width, block.Box.Bottom);
+    }
+
+    /// <summary>
+    /// The plate of a vertical block where other things already stand (<paramref name="occupied"/>: the other blocks of the
+    /// frame and the plates placed): the extra width goes to the side that covers least of them - centred, all to the left
+    /// or all to the right of the column (the original text stays under the plate either way). With nothing in the way it
+    /// is <see cref="PlateBox(TextBlock, PixelRect)"/>; a horizontal block's plate is its box.
+    /// </summary>
+    public static PixelRect PlateBox(TextBlock block, PixelRect frame, IReadOnlyList<PixelRect> occupied)
+    {
+        var centred = PlateBox(block, frame);
+        if (!block.Vertical || occupied.Count == 0 || centred.Width <= block.Box.Width) return centred;
+        PixelRect At(double left)
+        {
+            left = Math.Clamp(left, frame.Left, frame.Right - centred.Width);
+            return new PixelRect(left, centred.Top, left + centred.Width, centred.Bottom);
+        }
+        double Covered(PixelRect plate) => occupied.Sum(o =>
+            Math.Max(0, Math.Min(plate.Right, o.Right) - Math.Max(plate.Left, o.Left))
+            * Math.Max(0, Math.Min(plate.Bottom, o.Bottom) - Math.Max(plate.Top, o.Top)));
+        return new[] { centred, At(block.Box.Right - centred.Width), At(block.Box.Left) }.MinBy(Covered);
     }
 }
 

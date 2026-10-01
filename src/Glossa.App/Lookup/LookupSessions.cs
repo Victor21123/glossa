@@ -305,7 +305,7 @@ public sealed class LookupSessions
             // The whole still is recognized once (about as long as the region around a cursor); every word on it is then at hand.
             // «Зона» recognizes only what is drawn around, at full size.
             Page = zone ? null
-                : _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None),
+                : _ocr.RecognizeAsync(still.Bgra, still.Width, still.Height, still.Stride, still.Bounds, family, CancellationToken.None, language: context.Choices?.Language ?? _settings().ScreenLanguage),
         };
         _session = session;
         // The still frame covers the game's monitor and takes the focus itself: the card goes beside the word on it.
@@ -423,7 +423,8 @@ public sealed class LookupSessions
             var language = context.Choices?.Language ?? s.ScreenLanguage;
             var forced = language is "en" or "ja" or "zh" ? language : null;
             string Lang(TextBlock b) => forced ?? Languages.DetectText(b.Text, cjk);
-            var blocks = TextBlocks.Of(page).Where(b => TextBlocks.Translatable(b, Languages.TargetFor(Lang(b), s.NativeLanguage))).ToList();
+            var all = TextBlocks.Of(page);
+            var blocks = all.Where(b => TextBlocks.Translatable(b, Languages.TargetFor(Lang(b), s.NativeLanguage))).ToList();
             var first = TextBlocks.At(page, cursor.X, cursor.Y);
             var dialogue = TextBlocks.Dialogue(blocks);
             var order = blocks.OrderBy(b => b == first ? 0 : b == dialogue ? 1 : 2).ThenBy(b => b.Box.Top).ToList();
@@ -435,7 +436,7 @@ public sealed class LookupSessions
             var done = 0;
             foreach (var block in order)
             {
-                var show = _frame.AddTranslation(block.Box, block.Lines);
+                var show = _frame.AddTranslation(block, all.Where(b => b != block).Select(b => b.Box));
                 _frame.SetHint($"Перевожу {done + 1} из {order.Count}...");
                 var lang = Lang(block);
                 var (text, _) = await _controller.TranslateTextAsync(block.Text, lang, Languages.TargetFor(lang, s.NativeLanguage),

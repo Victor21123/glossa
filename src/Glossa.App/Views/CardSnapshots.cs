@@ -320,6 +320,30 @@ internal static class CardSnapshots
                 still.Close();
             }
 
+            // The same with vertical Japanese (ja_vert_vn.png: three columns): marks of known words along the columns, the
+            // outline after the D-pad walk (still.txt has the steps), and «Весь экран» plates with stub translations.
+            if (VerticalStill(folder) is { } vertical)
+            {
+                var still = new FrozenFrame();
+                still.Preview(vertical.Picture, vertical.Word, Lookup.LookupSessions.PadHint);
+                var known = new Glossa.Core.Library.KnownWords(VerticalKnownWords());
+                still.ShowKnown(vertical.Words.All.Select(w => (w.Box, Pinned: known.Find(w.Text)))
+                    .Where(m => m.Pinned is not null).Select(m => (m.Box, m.Pinned!.Value)).ToList());
+                SaveWindow(still, Path.Combine(folder, $"still-vertical-{themeName}.png"), vertical.Picture.PixelWidth, vertical.Picture.PixelHeight);
+                still.Close();
+
+                var plates = new FrozenFrame();
+                var blocks = Glossa.Core.Text.TextBlocks.Of(vertical.Page);
+                plates.Preview(vertical.Picture, default, $"Переведено: {blocks.Count}, щелчок по переводу - оригинал, Esc - вернуться в игру");
+                plates.Mark(null);
+                foreach (var block in blocks)
+                    plates.AddTranslation(block, blocks.Where(b => b != block).Select(b => b.Box))(block.Text.StartsWith("今日", StringComparison.Ordinal)
+                        ? "Сегодня хорошая погода, не правда ли? Не хотите прогуляться? Да, с радостью."
+                        : "(тестовый перевод)");
+                SaveWindow(plates, Path.Combine(folder, $"screen-vertical-{themeName}.png"), vertical.Picture.PixelWidth, vertical.Picture.PixelHeight);
+                plates.Close();
+            }
+
             var tray = new TrayMenu();
             tray.Fill(new TrayState("ИИ выгружена, загрузится при поиске", false, "auto", "Alt+Q", true));
             Save(tray, Path.Combine(folder, $"tray-{themeName}.png"));
@@ -446,6 +470,61 @@ internal static class CardSnapshots
     }
 
     private static (BitmapSource Picture, PixelRect Word, Glossa.Core.Text.FrameWords Words)? _walk;
+    private static (BitmapSource Picture, PixelRect Word, Glossa.Core.Text.FrameWords Words, OcrPage Page)? _verticalWalk;
+
+    /// <summary>A few words of ja_vert_vn.png as a lookup's dictionary matcher would cut them (the rest goes by character).</summary>
+    private sealed class VerticalSampleMatcher : Glossa.Core.Text.ITermMatcher
+    {
+        private static readonly string[] Terms = ["今日", "天気", "散歩", "行き", "喜ん"];
+
+        public (int Start, int Length) Match(string text, int index)
+        {
+            foreach (var term in Terms)
+                for (var start = Math.Max(0, index - term.Length + 1); start <= index && start + term.Length <= text.Length; start++)
+                    if (string.CompareOrdinal(text, start, term, 0, term.Length) == 0) return (start, term.Length);
+            return (index, 1);
+        }
+    }
+
+    /// <summary>Saved words of the vertical frame: one plain, one pinned.</summary>
+    private static IEnumerable<Glossa.Core.Library.SavedWord> VerticalKnownWords() =>
+    [
+        new() { Language = "ja", Word = "天気", Translation = "погода" },
+        new() { Language = "ja", Word = "散歩", Translation = "прогулка", Pinned = true },
+    ];
+
+    /// <summary>
+    /// Recognizes ja_vert_vn.png with the real models and steps over its words as the D-pad would (Down along a column, Left to
+    /// the next one); the steps go to still.txt beside the pictures. Null without the models or the frame.
+    /// </summary>
+    private static (BitmapSource Picture, PixelRect Word, Glossa.Core.Text.FrameWords Words, OcrPage Page)? VerticalStill(string folder)
+    {
+        if (_verticalWalk is not null) return _verticalWalk;
+        const string models = @"D:\GlossaData\models\ocr", frame = @"D:\GlossaData\test\tategaki\ja_vert_vn.png";
+        if (!OcrEngine.ModelsPresent(models) || !File.Exists(frame)) return null;
+        var picture = new BitmapImage();
+        picture.BeginInit();
+        picture.CacheOption = BitmapCacheOption.OnLoad;
+        picture.UriSource = new Uri(frame);
+        picture.EndInit();
+        var bgra = new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
+        int w = bgra.PixelWidth, h = bgra.PixelHeight, stride = w * 4;
+        var pixels = new byte[stride * h];
+        bgra.CopyPixels(pixels, stride, 0);
+        using var ocr = new OcrEngine(models);
+        var page = ocr.RecognizeAsync(pixels, w, h, stride, new PixelRect(0, 0, w, h), OcrModelFamily.CjkLatin, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        var words = Glossa.Core.Text.FrameWords.Build(page, new VerticalSampleMatcher());
+        if (words.Current is null) return null;
+        var steps = new List<string> { $"start: {words.Current.Text} (line {words.LineIndex})" };
+        foreach (var button in new[] { Glossa.Core.Input.PadButtons.DPadDown, Glossa.Core.Input.PadButtons.DPadDown, Glossa.Core.Input.PadButtons.DPadLeft,
+                     Glossa.Core.Input.PadButtons.DPadDown, Glossa.Core.Input.PadButtons.DPadLeft })
+            steps.Add($"{button}: " + (words.Move(button) ? $"{words.Current.Text} (line {words.LineIndex}, box {words.Current.Box})" : "no move"));
+        File.AppendAllText(Path.Combine(folder, "still.txt"),
+            Environment.NewLine + $"vertical ja_vert_vn.png: {page.Lines.Count} lines ({page.Lines.Count(l => l.Vertical)} columns) in {page.Elapsed.TotalMilliseconds:F0} ms; "
+            + string.Join("; ", steps) + Environment.NewLine);
+        return _verticalWalk = (picture, words.Current.Box, words, page);
+    }
 
     /// <summary>
     /// Recognizes the scene with the real OCR models and steps over its words as the D-pad would; the words visited go to

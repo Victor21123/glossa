@@ -42,7 +42,15 @@ public readonly record struct PixelRect(double Left, double Top, double Right, d
 /// </summary>
 public sealed record OcrWord(string Text, PixelRect Box, float Score);
 
-public sealed record OcrLine(string Text, PixelRect Box, IReadOnlyList<OcrWord> Words, float Score);
+/// <summary>
+/// A recognized line. <paramref name="Vertical"/> is a column of vertical text (tategaki): its units run top to bottom and
+/// its columns follow each other right to left; the engine sets it, nothing here guesses it from the box.
+/// </summary>
+public sealed record OcrLine(string Text, PixelRect Box, IReadOnlyList<OcrWord> Words, float Score, bool Vertical = false)
+{
+    /// <summary>The size of the font across the line: the height of a row, the width of a column.</summary>
+    public double Thickness => Vertical ? Box.Width : Box.Height;
+}
 
 /// <summary>«Зона» (Только перевод): a rectangle drawn around the text to translate.</summary>
 public static class Zones
@@ -58,6 +66,25 @@ public static class Zones
     public static PixelRect Around(PixelRect zone) => new(
         Math.Min(zone.Left, zone.CenterX - Reach / 2.0), Math.Min(zone.Top, zone.CenterY - Reach / 2.0),
         Math.Max(zone.Right, zone.CenterX + Reach / 2.0), Math.Max(zone.Bottom, zone.CenterY + Reach / 2.0));
+
+    /// <summary>
+    /// The piece of a zone read once more when a column of vertical text reaches the edge of <paramref name="piece"/> (see
+    /// <see cref="LookupRegion.NeedsTaller(OcrPage, PixelRect, PixelRect, double, double)"/>): <see cref="Reach"/> more above
+    /// and below, inside the frame, and no taller than <see cref="LookupRegion.TallerHeight"/> (the detector looks at a longer
+    /// side shrunk): a piece already that tall stays as it is.
+    /// </summary>
+    public static PixelRect Taller(PixelRect piece, PixelRect frame)
+    {
+        var top = Math.Max(frame.Top, piece.Top - Reach);
+        var bottom = Math.Min(frame.Bottom, piece.Bottom + Reach);
+        if (bottom - top > LookupRegion.TallerHeight)
+        {
+            var height = Math.Max(LookupRegion.TallerHeight, piece.Height);
+            top = Math.Clamp(piece.CenterY - height / 2, frame.Top, Math.Max(frame.Top, frame.Bottom - height));
+            bottom = Math.Min(frame.Bottom, top + height);
+        }
+        return new PixelRect(piece.Left, top, piece.Right, bottom);
+    }
 }
 
 /// <summary>OCR output for one captured region, already mapped to screen coordinates.</summary>
@@ -74,7 +101,8 @@ public sealed record OcrPage(IReadOnlyList<OcrLine> Lines, PixelRect Region, Tim
         var lines = new List<OcrLine>();
         foreach (var line in Lines)
         {
-            if (line.Box.CenterY < zone.Top || line.Box.CenterY > zone.Bottom) continue;
+            // A column is tall: its middle may lie outside a zone that still holds some of its words.
+            if (!line.Vertical && (line.Box.CenterY < zone.Top || line.Box.CenterY > zone.Bottom)) continue;
             var words = line.Words.Where(w => zone.Contains(w.Box.CenterX, w.Box.CenterY)).ToList();
             if (words.Count == 0) continue;
             if (words.Count == line.Words.Count)
@@ -83,7 +111,7 @@ public sealed record OcrPage(IReadOnlyList<OcrLine> Lines, PixelRect Region, Tim
                 continue;
             }
             var text = string.Join(Text.Scripts.ContainsCjk(line.Text) ? "" : " ", words.Select(w => w.Text));
-            lines.Add(new OcrLine(text, words.Select(w => w.Box).Aggregate((a, b) => a.Union(b)), words, words.Average(w => w.Score)));
+            lines.Add(new OcrLine(text, words.Select(w => w.Box).Aggregate((a, b) => a.Union(b)), words, words.Average(w => w.Score), line.Vertical));
         }
         return this with { Lines = lines, Region = zone };
     }

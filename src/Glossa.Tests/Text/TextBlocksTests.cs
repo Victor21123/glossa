@@ -29,6 +29,50 @@ public class TextBlocksTests
     }
 
     [Fact]
+    public void Each_row_of_a_word_list_is_its_own_block()
+    {
+        var page = Page(
+            Line("Word", 700, 100), Line("might", 700, 124), Line("mistake", 700, 148), Line("wheel", 700, 172), Line("magnifying", 700, 196),
+            Line("The old harbor master looked at the broken wheel", 700, 260),
+            Line("and said it was a mistake to sail tonight.", 700, 284));
+
+        var blocks = TextBlocks.Of(page);
+
+        Assert.Equal(["Word", "might", "mistake", "wheel", "magnifying",
+            "The old harbor master looked at the broken wheel and said it was a mistake to sail tonight."],
+            blocks.Select(b => b.Text));
+        Assert.Equal("wheel", TextBlocks.At(page, 720, 182)!.Text);
+    }
+
+    [Fact]
+    public void A_list_under_prose_keeps_the_prose_as_one_block()
+    {
+        var page = Page(
+            Line("The old harbor master looked at the broken wheel", 700, 100),
+            Line("and said it was a mistake.", 700, 124),
+            Line("Word", 700, 148), Line("might", 700, 172), Line("mistake", 700, 196), Line("wheel", 700, 220));
+
+        var blocks = TextBlocks.Of(page);
+
+        Assert.Equal(["The old harbor master looked at the broken wheel and said it was a mistake.", "Word", "might", "mistake", "wheel"],
+            blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void The_dialogue_above_a_choice_menu_is_picked()
+    {
+        var page = Page(
+            Line("I'm like three or maybe four years into mine.", 400, 800),
+            Line("Wait no, make it five.", 400, 824),
+            Line("Yes", 400, 900), Line("No", 400, 924), Line("Maybe", 400, 948), Line("Leave", 400, 972));
+
+        var dialogue = TextBlocks.Dialogue(TextBlocks.Of(page));
+
+        Assert.NotNull(dialogue);
+        Assert.StartsWith("I'm like three", dialogue.Text);
+    }
+
+    [Fact]
     public void A_zone_is_its_paragraphs_one_per_line() =>
         Assert.Equal("Day 3\nI'm like three or maybe four years into mine. Wait no, make it five.\n1. What do you guys do around here?",
             TextBlocks.Joined(Dialogue));

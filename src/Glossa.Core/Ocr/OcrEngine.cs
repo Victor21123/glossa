@@ -49,6 +49,9 @@ public sealed class OcrEngine : IDisposable
     private readonly OcrMemory _memory;
     private int _threads;
     private readonly Dictionary<OcrModelFamily, RapidOcr> _engines = [];
+    private VerticalReader? _vertical;
+    private bool _verticalFailed;
+    private volatile bool _disposed;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Timer? _trimTimer;
     private DateTime _lastUse = DateTime.UtcNow;
@@ -83,19 +86,44 @@ public sealed class OcrEngine : IDisposable
     /// <summary>For measuring: the recognizer's score a line needs to be kept; null keeps the preset's.</summary>
     public float? TextScore { get; init; }
 
+    /// <summary>
+    /// Read tall detector boxes as vertical Japanese (see <see cref="VerticalReader"/>); on by default. For measuring: off
+    /// gives the library's lines alone.
+    /// </summary>
+    public bool VerticalReading { get; init; } = true;
+
+    /// <summary>How many times the vertical reader's session was created (for measuring and tests: pages without columns create none).</summary>
+    public int VerticalSessionsCreated { get; private set; }
+
+    /// <summary>Raised once when the vertical reader cannot be created (until the next trim), with the reason (for the log).</summary>
+    public event Action<string>? VerticalFailed;
+
+    /// <summary>Raised when reading one column failed (not the lookup's cancellation): the library's reading of its box stays. For the log.</summary>
+    public event Action<string>? ColumnReadFailed;
+
+    /// <summary>
+    /// Whether a lookup in <paramref name="language"/> may read columns of vertical text: Japanese and Chinese do, and so
+    /// does an unknown or automatic language; English and Russian never have columns worth a second session.
+    /// </summary>
+    public static bool ColumnsAllowed(string? language) => language is not ("en" or "ru");
+
     /// <summary>Raised after an idle trim (for the log).</summary>
     public event Action? Trimmed;
 
     /// <summary>Rebuilds the sessions in use when recognition has been idle long enough; skipped while one is running.</summary>
     private void TrimIfIdle()
     {
-        if (!_used || TrimAfter is not { } after || DateTime.UtcNow - _lastUse < after) return;
-        if (!_gate.Wait(0)) return;
+        if (_disposed || !_used || TrimAfter is not { } after || DateTime.UtcNow - _lastUse < after) return;
+        bool taken;
+        try { taken = _gate.Wait(0); }
+        catch (ObjectDisposedException) { return; }
+        if (!taken) return;
         try
         {
             var families = _engines.Keys.ToList();
             foreach (var e in _engines.Values) e.Dispose();
             _engines.Clear();
+            DisposeVertical(); // created again by the next column, so its memory goes back meanwhile
             foreach (var family in families) Get(family);
             _used = false;
         }
@@ -105,9 +133,10 @@ public sealed class OcrEngine : IDisposable
         }
         finally
         {
-            _gate.Release();
+            try { _gate.Release(); }
+            catch (ObjectDisposedException) { } // disposed while this ran
         }
-        Trimmed?.Invoke();
+        if (!_disposed) Trimmed?.Invoke();
     }
 
     /// <summary>Processor threads per recognition. A change takes effect from the next lookup (sessions are rebuilt).</summary>
@@ -124,6 +153,7 @@ public sealed class OcrEngine : IDisposable
                 _threads = value;
                 foreach (var e in _engines.Values) e.Dispose();
                 _engines.Clear();
+                DisposeVertical();
             }
             finally
             {
@@ -145,16 +175,19 @@ public sealed class OcrEngine : IDisposable
 
     /// <summary>
     /// Recognizes a BGRA image captured from <paramref name="region"/> (screen pixels) and returns
-    /// lines and words in screen coordinates.
+    /// lines and words in screen coordinates. <paramref name="screenWidth"/> is the width of the screen the image is a part of
+    /// (0: the image is the whole screen or it is not known): the second look at a page with columns is sized by it.
+    /// <paramref name="language"/> is the language of the text on screen as the lookup knows it (null: not known); columns
+    /// are read only where <see cref="ColumnsAllowed"/>.
     /// </summary>
     public async Task<OcrPage> RecognizeAsync(
-        byte[] bgra, int width, int height, int stride, PixelRect region, OcrModelFamily family, CancellationToken ct)
+        byte[] bgra, int width, int height, int stride, PixelRect region, OcrModelFamily family, CancellationToken ct, int screenWidth = 0, string? language = null)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             _used = true;
-            return await Task.Run(() => Recognize(bgra, width, height, stride, region, family, ct), ct).ConfigureAwait(false);
+            return await Task.Run(() => Recognize(bgra, width, height, stride, region, family, screenWidth, ColumnsAllowed(language), ct), ct).ConfigureAwait(false);
         }
         finally
         {
@@ -163,7 +196,7 @@ public sealed class OcrEngine : IDisposable
         }
     }
 
-    private OcrPage Recognize(byte[] bgra, int width, int height, int stride, PixelRect region, OcrModelFamily family, CancellationToken ct)
+    private OcrPage Recognize(byte[] bgra, int width, int height, int stride, PixelRect region, OcrModelFamily family, int screenWidth, bool columns, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
         var engine = Get(family);
@@ -196,19 +229,150 @@ public sealed class OcrEngine : IDisposable
         if (BoxScoreThresh is { } boxScore) options = options with { BoxScoreThresh = boxScore };
         if (TextScore is { } textScore) options = options with { TextScore = textScore };
 
+        // The library drops every block whose read scores under TextScore, and a clockwise-read column always does: its
+        // box would never reach the vertical pass. So it keeps them all here and the same filter runs below.
+        var vertical = VerticalReading && columns && family == OcrModelFamily.CjkLatin;
+        var minScore = options.TextScore;
+        if (vertical) options = options with { TextScore = 0f };
+
         var result = engine.Detect(bitmap, options, ct);
         var lines = new List<OcrLine>(result.TextBlocks.Length);
+        var quads = new Dictionary<PixelRect, SKPointI[]>(); // the detector's quadrilateral of each box (bitmap pixels)
         foreach (var block in result.TextBlocks)
         {
-            if (string.IsNullOrWhiteSpace(block.Text)) continue;
             var lineBox = ToRect(block.BoxPoints, region);
+            quads.TryAdd(lineBox, block.BoxPoints);
+            // A blank block is kept for now: a tall one is a column the library could not read, a small one under a
+            // column is its final period; the vertical pass needs their boxes.
+            if (string.IsNullOrWhiteSpace(block.Text))
+            {
+                if (vertical) lines.Add(new OcrLine("", lineBox, [], 0f));
+                continue;
+            }
             var words = block.WordResults is { Length: > 0 } wr
                 ? wr.Where(w => !string.IsNullOrWhiteSpace(w.Text))
                     .Select(w => new OcrWord(w.Text, ToRect(w.BoxPoints, region), w.Score)).ToList()
                 : [new OcrWord(block.Text, lineBox, Average(block.CharScores))];
             lines.Add(new OcrLine(block.Text, lineBox, words, Average(block.CharScores)));
         }
+        if (vertical)
+        {
+            Func<PixelRect, IReadOnlyList<PixelRect>, VerticalRead?> read = (box, pieces) => ReadColumn(bitmap, region, box, pieces, quads, family, ct);
+            var tried = new HashSet<OcrLine>(ReferenceEqualityComparer.Instance);
+            lines = VerticalColumns.Apply(lines, read, minScore, tried);
+            // The second look: a page that has a column (it may have more the first pass lost) or a column shredded into
+            // glyphs (nothing of it reached the page as a column at all).
+            // (a page with no Chinese or Japanese on it has neither: the shape alone is not enough.)
+            if (lines.Any(l => l.Vertical) || (VerticalColumns.PageHasCjk(lines, minScore) && VerticalColumns.LooksShredded(lines)))
+                lines = AddMissedColumns(engine, bitmap, options, region, lines, minScore, read, quads, screenWidth, tried, ct);
+            // The library's own filter, which TextScore = 0 switched off for this call: the lines it would have dropped.
+            lines.RemoveAll(l => !l.Vertical && (string.IsNullOrWhiteSpace(l.Text) || l.Score < minScore));
+        }
         return new OcrPage(MergeFragments(lines), region, sw.Elapsed);
+    }
+
+
+    /// <summary>
+    /// A page with a column often has more of them that the first pass lost. One more detector-only pass at
+    /// <see cref="VerticalColumns.PassSide"/> finds their boxes: at the size of the lookup (the short side blown up to 736
+    /// px, or a whole 1080p frame as it is) the detector cuts a thin column into glyphs, which the library reads as
+    /// nothing and drops, so its box never reaches the page; shrunk to half it gives one box per column (tategaki
+    /// experiment: book frame 1 of 4 columns lost at native size, none at 960 of 1920) in about a fifth of the time of the
+    /// first pass. A tall box that no line of the page already covers is a candidate; one that is the same column as a
+    /// line the first look cut short, but longer, replaces it when it reads. Pages without a column never pay for it.
+    /// </summary>
+    private static List<OcrLine> AddMissedColumns(RapidOcr engine, SKBitmap bitmap, RapidOcrOptions options, PixelRect region,
+        List<OcrLine> lines, float minScore, Func<PixelRect, IReadOnlyList<PixelRect>, VerticalRead?> read,
+        Dictionary<PixelRect, SKPointI[]> quads, int screenWidth, ISet<OcrLine> tried, CancellationToken ct)
+    {
+        var found = new List<OcrLine>();
+        var outgrown = new List<(OcrLine Old, PixelRect Box)>(); // columns the first look cut short, and the longer boxes of them
+        foreach (var box in engine.DetectBoxes(bitmap, options with { ImgResize = VerticalColumns.PassSide(Math.Max(bitmap.Width, bitmap.Height), screenWidth) }, ct))
+        {
+            var rect = ToRect(box.BoxPoints, region);
+            if (!VerticalColumns.IsColumn(rect)) continue;
+            if (tried.Any(l => VerticalColumns.SameBox(l.Box, rect))) continue; // the first look read this box and it was not a column
+            var old = lines.FirstOrDefault(l => VerticalColumns.Outgrows(rect, l));
+            if (old is not null)
+            {
+                if (outgrown.Any(o => ReferenceEquals(o.Old, old))) continue;
+                outgrown.Add((old, rect));
+            }
+            else if (lines.Any(l => (l.Vertical || l.Score >= minScore) && VerticalColumns.Covers(l.Box, rect)))
+            {
+                continue;
+            }
+            quads.TryAdd(rect, box.BoxPoints);
+            found.Add(new OcrLine("", rect, [], 0f));
+        }
+        if (found.Count == 0) return lines;
+
+        return VerticalColumns.ReplaceOutgrown(lines, outgrown, found, read, minScore, tried);
+    }
+
+    /// <summary>
+    /// Reads one column (screen box) with the vertical reader, created on the first one; null when it cannot be read. The
+    /// column is cropped along the detector's quadrilaterals of its <paramref name="pieces"/> (a leaning column), the box
+    /// when a piece has none.
+    /// </summary>
+    private VerticalRead? ReadColumn(SKBitmap bitmap, PixelRect region, PixelRect box, IReadOnlyList<PixelRect> pieces,
+        Dictionary<PixelRect, SKPointI[]> quads, OcrModelFamily family, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_verticalFailed) return null;
+        try
+        {
+            if (_vertical is null)
+            {
+                var (_, rec, keys) = ModelPaths(family);
+                _vertical = new VerticalReader(rec, keys, _threads, _memory);
+                VerticalSessionsCreated++;
+            }
+            var corners = pieces
+                .Select(p => quads.TryGetValue(p, out var q) ? q.Select(c => ((double)c.X, (double)c.Y)).ToArray() : QuadOf(p.Offset(-region.Left, -region.Top)))
+                .ToList();
+            var column = ColumnQuad.Fit(corners) ?? ColumnQuad.FromRect(box.Offset(-region.Left, -region.Top));
+            return _vertical.Read(bitmap, column, ct)?.Offset(region.Left, region.Top);
+        }
+        catch (Exception e)
+        {
+            ct.ThrowIfCancellationRequested(); // a read stopped by the lookup's token
+            if (_vertical is null)
+            {
+                // The session could not be made: no retry per column until the next trim or change of threads.
+                _verticalFailed = true;
+                VerticalFailed?.Invoke(e.Message);
+            }
+            else
+            {
+                ColumnReadFailed?.Invoke(e.GetType().Name + ": " + e.Message);
+            }
+            return null; // the library's reading of the box stays
+        }
+    }
+
+    private static (double X, double Y)[] QuadOf(PixelRect r) => [(r.Left, r.Top), (r.Right, r.Top), (r.Right, r.Bottom), (r.Left, r.Bottom)];
+
+    private void DisposeVertical()
+    {
+        _vertical?.Dispose();
+        _vertical = null;
+        _verticalFailed = false;
+    }
+
+    /// <summary>The widest gap, in line heights, between two pieces that are still one line.</summary>
+    private const double PieceGap = 1.5;
+
+    /// <summary>
+    /// Whether two pieces are parts of one visual line: they share a baseline (the vertical overlap is most of the lower
+    /// box) and the gap between them is short.
+    /// </summary>
+    internal static bool SameRow(PixelRect a, PixelRect b)
+    {
+        var overlap = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+        var minH = Math.Min(a.Height, b.Height);
+        var gap = Math.Max(b.Left - a.Right, a.Left - b.Right);
+        return overlap > minH * 0.6 && gap < Math.Max(a.Height, b.Height) * PieceGap;
     }
 
     /// <summary>
@@ -217,7 +381,8 @@ public sealed class OcrEngine : IDisposable
     /// </summary>
     internal static List<OcrLine> MergeFragments(List<OcrLine> lines)
     {
-        var pending = lines.OrderBy(l => l.Box.Top).ThenBy(l => l.Box.Left).ToList();
+        // Rows from the top; columns last, right to left (the order tategaki is read in).
+        var pending = lines.OrderBy(l => l.Vertical).ThenBy(l => l.Vertical ? -l.Box.Right : l.Box.Top).ThenBy(l => l.Box.Left).ToList();
         var result = new List<OcrLine>();
         while (pending.Count > 0)
         {
@@ -231,10 +396,8 @@ public sealed class OcrEngine : IDisposable
                 for (var i = 0; i < pending.Count; i++)
                 {
                     var c = pending[i];
-                    var overlap = Math.Min(box.Bottom, c.Box.Bottom) - Math.Max(box.Top, c.Box.Top);
-                    var minH = Math.Min(box.Height, c.Box.Height);
-                    var gap = Math.Max(c.Box.Left - box.Right, box.Left - c.Box.Right);
-                    if (overlap > minH * 0.6 && gap < Math.Max(box.Height, c.Box.Height) * 1.5)
+                    if (c.Vertical || group[0].Vertical) continue; // columns are not a row: they never merge here
+                    if (SameRow(box, c.Box))
                     {
                         group.Add(c);
                         pending.RemoveAt(i);
@@ -252,23 +415,22 @@ public sealed class OcrEngine : IDisposable
                 text,
                 group.Select(g => g.Box).Aggregate((a, b) => a.Union(b)),
                 group.SelectMany(g => g.Words).ToList(),
-                group.Average(g => g.Score)));
+                group.Average(g => g.Score),
+                group[0].Vertical));
         }
         return result;
     }
 
-    private RapidOcr Get(OcrModelFamily family)
+    /// <summary>The detector, recognizer and character list of a family.</summary>
+    private (string Det, string Rec, string Keys) ModelPaths(OcrModelFamily family)
     {
-        if (_engines.TryGetValue(family, out var e)) return e;
-
         var v5 = Path.Combine(_modelsDir, "v5");
         var v6 = Path.Combine(_modelsDir, "v6");
-        var cls = Path.Combine(v5, "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx");
         // v6 medium reads with the same 18 708 characters as small (checked 2026-09-29), so it uses small's list.
         var v6Keys = Path.Combine(v6, "ppocrv6_small_dict.txt");
         var v6MediumRec = Path.Combine(v6, "PP-OCRv6_rec_medium.onnx");
         var v5Det = Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx");
-        var (det, rec, keys) = family switch
+        return family switch
         {
             OcrModelFamily.CjkLatin when File.Exists(v6MediumRec) && File.Exists(v6Keys) => (v5Det, v6MediumRec, v6Keys),
             OcrModelFamily.Cyrillic => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
@@ -280,7 +442,14 @@ public sealed class OcrEngine : IDisposable
             _ => (Path.Combine(v5, "ch_PP-OCRv5_mobile_det.onnx"),
                 Path.Combine(v5, "ch_PP-OCRv5_rec_mobile.onnx"), Path.Combine(v5, "ppocrv5_ch_dict.txt")),
         };
+    }
 
+    private RapidOcr Get(OcrModelFamily family)
+    {
+        if (_engines.TryGetValue(family, out var e)) return e;
+
+        var (det, rec, keys) = ModelPaths(family);
+        var cls = Path.Combine(_modelsDir, "v5", "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx");
         var so = RapidOcr.GetDefaultSessionOptions(_threads);
         // ORT worker threads spin after each run by default and burn cores a running game needs.
         so.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
@@ -301,9 +470,20 @@ public sealed class OcrEngine : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _trimTimer?.Dispose();
-        foreach (var e in _engines.Values) e.Dispose();
-        _engines.Clear();
+        // A recognition in flight is using the sessions natively: wait for it (a session disposed under a run is a crash).
+        var held = _gate.Wait(TimeSpan.FromSeconds(30));
+        try
+        {
+            foreach (var e in _engines.Values) e.Dispose();
+            _engines.Clear();
+            DisposeVertical();
+        }
+        finally
+        {
+            if (held) _gate.Release();
+        }
         _gate.Dispose();
     }
 }

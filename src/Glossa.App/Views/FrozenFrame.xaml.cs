@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using Glossa.App.Capture;
 using Glossa.App.Interop;
 using Glossa.Core.Ocr;
+using CoreBlock = Glossa.Core.Text.TextBlock;
 
 namespace Glossa.App.Views;
 
@@ -22,6 +23,7 @@ public partial class FrozenFrame : Window
     private const double MinDrag = 8;
 
     private PixelRect _bounds;
+    private readonly List<PixelRect> _plates = []; // where the vertical blocks' plates stand (they widen, so they may meet)
     private IntPtr _hwnd;
     private Point? _dragFrom;
 
@@ -123,6 +125,7 @@ public partial class FrozenFrame : Window
         Highlight.Visibility = Visibility.Collapsed;
         ShowKnown([]);
         Plates.Children.Clear();
+        _plates.Clear();
         if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(this).EnsureHandle();
         Native.SetWindowDisplayAffinity(_hwnd, hideFromCapture ? Native.WDA_EXCLUDEFROMCAPTURE : Native.WDA_NONE);
         Show();
@@ -146,24 +149,35 @@ public partial class FrozenFrame : Window
         Highlight.Visibility = Visibility.Collapsed;
         ShowKnown([]);
         Plates.Children.Clear();
+        _plates.Clear();
     }
 
     /// <summary>
     /// Перевод экрана: a plate exactly over a paragraph (screen pixels) in the window's colours. The translation is set in
     /// the original's type size and shrinks to fit the original's place when it is longer (Russian often is), so plates
-    /// never run over each other. A click shows the original under it and back. Returns where the text goes as it streams.
+    /// never run over each other. A column of vertical text is too thin to hold a line of Russian: its plate is wider
+    /// (<see cref="Glossa.Core.Text.TextBlocks.PlateBox"/>), the translation reads horizontally in a size taken from the column's width, and
+    /// the Viewbox shrinks what does not fit its height; the extra width goes to the side where the other blocks
+    /// (<paramref name="others"/>, the frame's other paragraphs) and the plates already placed are not. A click shows the
+    /// original under it and back. Returns where the text goes as it streams.
     /// </summary>
-    public Action<string> AddTranslation(PixelRect box, int lines)
+    public Action<string> AddTranslation(CoreBlock block, IEnumerable<PixelRect>? others = null)
     {
         var scale = Scale();
         const double pad = 4, inset = 6;
+        var box = Glossa.Core.Text.TextBlocks.PlateBox(block, _bounds, [.. others ?? [], .. _plates]);
         var width = Math.Max(box.Width / scale + pad * 2, 120);
         // A one-line caption has room beside it: widen before shrinking its (usually longer) translation.
-        if (lines == 1) width = Math.Max(width, Math.Min(width * 1.8, 420));
+        if (!block.Vertical && block.Lines == 1) width = Math.Max(width, Math.Min(width * 1.8, 420));
+        // Where the plate really stands (screen pixels), widened or not: the next plates keep clear of it.
+        _plates.Add(new PixelRect(box.Left, box.Top, box.Left + (width - pad * 2) * scale, box.Bottom));
+        var size = block.Vertical
+            ? block.Box.Width / Math.Max(1, block.Lines) / scale * 0.5 // a column's width is the size of its letters
+            : block.Box.Height / Math.Max(1, block.Lines) / scale * 0.58;
         var text = new TextBlock
         {
             Text = "...", TextWrapping = TextWrapping.Wrap, Width = width - inset * 2,
-            FontSize = Math.Clamp(box.Height / Math.Max(1, lines) / scale * 0.58, 11, 22),
+            FontSize = Math.Clamp(size, 11, 22),
         };
         text.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         var plate = new Border
@@ -177,6 +191,13 @@ public partial class FrozenFrame : Window
         plate.SetResourceReference(Border.BorderBrushProperty, "Rule");
         Place(plate, box, scale, pad);
         plate.Width = width;
+        if (block.Vertical)
+        {
+            // A column's plate is as tall as its text needs (up to the column's height), from the column's top: the rest of
+            // the original stays in view, and the Viewbox shrinks the text only when the column is too short for it.
+            plate.ClearValue(HeightProperty);
+            plate.MaxHeight = box.Height / scale + pad * 2;
+        }
         plate.MouseLeftButtonUp += (_, e) =>
         {
             plate.Opacity = plate.Opacity > 0.5 ? 0.06 : 1;

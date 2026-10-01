@@ -146,6 +146,8 @@ public partial class App : Application
             Enum.TryParse<OcrMemory>(Environment.GetEnvironmentVariable("GLOSSA_OCR_MEMORY"), out var memory) ? memory : OcrMemory.Arena,
             TimeSpan.FromSeconds(int.TryParse(Environment.GetEnvironmentVariable("GLOSSA_OCR_TRIM"), out var trim) ? trim : 120));
         _ocr.Trimmed += () => log.Info("OCR idle — buffers released");
+        _ocr.ColumnReadFailed += why => log.Warn("OCR: a column of vertical text could not be read, the library's reading stays: " + why);
+        _ocr.VerticalFailed += why => log.Warn("OCR: the reader of vertical text could not start, columns stay unread until the next idle trim: " + why);
         ApplyPriority();
         _capture = new ScreenCapture(log);
         _llama = new LlamaServerHost(log, _localHttp, AiRouter.FreeVramMb, Interop.Native.FreeRamMb);
