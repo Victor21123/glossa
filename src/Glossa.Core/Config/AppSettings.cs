@@ -144,6 +144,12 @@ public sealed class UpdateSettings
 
     /// <summary>The release page of <see cref="LatestVersion"/>; checked again before it is opened.</summary>
     public string LatestUrl { get; set; } = "";
+
+    /// <summary>
+    /// The newer version the user has seen in the window's notice (or opened from «Проверить сейчас»): the notice comes
+    /// once a version, whenever the window is next open - not in the tray (the user, 2026-10-04).
+    /// </summary>
+    public string SeenVersion { get; set; } = "";
 }
 
 /// <summary>

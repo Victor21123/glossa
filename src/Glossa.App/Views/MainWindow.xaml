@@ -689,6 +689,24 @@
         <Grid x:Name="ModalHost" Visibility="Collapsed">
             <Border Background="{DynamicResource Scrim}" MouseLeftButtonDown="OnCloseModal" />
 
+            <!-- Новая версия (2026-10-04: in the window, not the tray) -->
+            <Border x:Name="UpdateDialog" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="14"
+                    Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="30,24,30,24"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Tag="M6,6 L18,18 M18,6 L6,18" Click="OnCloseModal" ToolTip="Закрыть (Esc)" />
+                        <TextBlock x:Name="UpdateTitle" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource Note}" TextWrapping="Wrap" Margin="0,12,0,0" FontSize="14"
+                               Text="Новая версия уже на GitHub. На странице - что нового и архив: закрой Glossa и распакуй его поверх папки программы, твои слова и настройки останутся." />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                        <Button Style="{StaticResource GhostButton}" Content="Позже" Click="OnCloseModal" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource PrimaryButton}" Content="Открыть страницу" Click="OnUpdateOpen" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Картинка значения -->
             <v:PicturePicker x:Name="PicturePicker" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
 

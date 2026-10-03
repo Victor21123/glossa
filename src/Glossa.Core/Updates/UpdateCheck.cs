@@ -182,6 +182,10 @@ public static partial class UpdateCheck
         updates.LatestUrl = release.Url;
     }
 
+    /// <summary>The newer version the window still has to tell about: known, newer than this one, not seen yet.</summary>
+    public static PendingUpdate? Unseen(UpdateSettings updates, AppVersion current) =>
+        Pending(updates, current) is { } pending && AppVersion.Parse(updates.SeenVersion)?.ToString() != pending.Version ? pending : null;
+
     /// <summary>The newer version the settings remember, until the running one catches up; the address is checked again (the file can be edited by hand).</summary>
     public static PendingUpdate? Pending(UpdateSettings updates, AppVersion current) =>
         AppVersion.Parse(updates.LatestVersion) is { IsPrerelease: false } latest && latest > current

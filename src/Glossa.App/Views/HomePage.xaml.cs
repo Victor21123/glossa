@@ -21,7 +21,6 @@ public partial class HomePage : UserControl
     private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
     // The day map's weeks: half a year at least, a year at most - as many as leave the companion its own width.
     private const int FewestWeeks = 26, MostWeeks = 53, WeekWidth = 20;
-    private const double CompanionWidth = 680;
 
     // Round the weeks in their row: the card's border and padding (1 + 24 a side), the weekday labels, the gap after.
     private const double AroundWeeks = 2 * 25 + 26 + 20;
@@ -510,6 +509,7 @@ public partial class HomePage : UserControl
     protected override void OnDpiChanged(System.Windows.DpiScale oldDpi, System.Windows.DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
+        FitHeat(); // the companion's 2x width in points changes with the monitor's scale
         SizeName(((FrameworkElement)CompanionInfo.Parent).ActualWidth); // another monitor: whole pixels again
     }
 
@@ -656,19 +656,34 @@ public partial class HomePage : UserControl
     }
 
     /// <summary>
-    /// The weeks the row has room for: what is left after the companion's <see cref="CompanionWidth"/>, in whole
+    /// The weeks the row has room for: what is left after the companion's card (<see cref="CompanionNeed"/>), in whole
     /// weeks; the map is drawn again when that changes.
     /// </summary>
     private void FitHeat()
     {
         if (Lower.ActualWidth <= 0)
             return;
-        var weeks = Math.Clamp((int)((Lower.ActualWidth - CompanionWidth - AroundWeeks) / WeekWidth), FewestWeeks, MostWeeks);
+        var weeks = Math.Clamp((int)((Lower.ActualWidth - CompanionNeed() - AroundWeeks) / WeekWidth), FewestWeeks, MostWeeks);
         if (weeks == _weeks)
             return;
         _weeks = weeks;
         if (_heat is { } h)
             FillHeat(h.Activity, h.Series, h.Today, h.Goal);
+    }
+
+    /// <summary>
+    /// The companion card's width with every companion at its full 2x scale: the widest sprite of the catalog in screen
+    /// pixels, its margins, the room beside it and the card's own edges. A fixed width fitted 2B (238 px) and halved
+    /// the wider ones (the user, 2026-10-04: "Остальных скукожило").
+    /// </summary>
+    private double CompanionNeed()
+    {
+        var widest = _services?.Companions?.Catalog.All.Select(c => c.Width).DefaultIfEmpty(0).Max() ?? 0;
+        if (widest == 0)
+            widest = 262; // no catalog: the widest of the eleven
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+        return Math.Ceiling(widest * Sprite.MaxScale / dpi) + Sprite.Margin.Left + Sprite.Margin.Right + Sprite.Beside
+               + 2 * 25 + 4;
     }
 
     /// <summary>

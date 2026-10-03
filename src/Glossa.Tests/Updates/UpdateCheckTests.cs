@@ -588,4 +588,17 @@ public class UpdateCheckTests
         Assert.Equal("0.1.0", back.LatestVersion);
         Assert.Equal(UpdateCheck.ReleasesPage + "/tag/v0.1.0", back.LatestUrl);
     }
+
+    [Fact]
+    public void The_window_tells_about_a_newer_version_once_and_again_for_the_next_one()
+    {
+        var updates = new UpdateSettings { LatestVersion = "0.1.0", LatestUrl = UpdateCheck.ReleasesPage + "/tag/v0.1.0" };
+
+        Assert.Equal("0.1.0", UpdateCheck.Unseen(updates, V003)!.Version);
+        updates.SeenVersion = "0.1.0";
+        Assert.Null(UpdateCheck.Unseen(updates, V003));
+        updates.LatestVersion = "0.1.1";
+        Assert.Equal("0.1.1", UpdateCheck.Unseen(updates, V003)!.Version);
+        Assert.Null(UpdateCheck.Unseen(updates, AppVersion.Parse("0.1.1")!.Value)); // updated already
+    }
 }

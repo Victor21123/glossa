@@ -500,8 +500,8 @@ public partial class App : Application
         _updateDirect = UpdateChecker.CreateClient(useSystemProxy: false);
         _updates = _services!.Updates = new UpdateService(() => _settings, () => _store!.Save(_settings),
             new UpdateChecker(_updateProxied, _updateDirect), AppVersion.Current, log, post: work => Dispatcher.InvokeAsync(work).Task);
-        _updates.Announce += update =>
-            ShowBalloon(NoticeKind.Update, update.Url, 10000, UpdateTexts.BalloonTitle(update.Version), UpdateTexts.BalloonText, WinForms.ToolTipIcon.Info);
+        // A newer version is told in the window, not the tray (the user, 2026-10-04): now if it is open, else when it opens.
+        _updates.Announce += _ => _main?.TellUpdate();
         // The switch turned on: a due check runs now, not at the next hourly wake-up.
         _updatesWereOn = _settings.Updates.CheckForUpdates;
         _services.SettingsChanged += () =>

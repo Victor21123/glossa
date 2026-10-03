@@ -112,9 +112,10 @@ public partial class AppSection : UserControl
         CheckNow.IsEnabled = false;
         UpdateStatus.Text = "Проверяю...";
         UpdateStatus.FontWeight = FontWeights.Normal;
+        Glossa.Core.Updates.UpdateOutcome? outcome = null;
         try
         {
-            await updates.CheckNowAsync(CancellationToken.None);
+            outcome = await updates.CheckNowAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -124,6 +125,13 @@ public partial class AppSection : UserControl
         {
             CheckNow.IsEnabled = true;
             ShowUpdateState();
+        }
+        // A newer version found by the click: straight to its page (the user, 2026-10-04: "просто перекидывало туда").
+        if (outcome is { Status: Glossa.Core.Updates.UpdateStatus.Available } && updates.Pending is { } pending)
+        {
+            _services.Settings.Updates.SeenVersion = pending.Version; // seen: the window's notice does not come for it
+            _services.SaveSettings(_services.Settings);
+            _services.OpenReleasePage(pending.Url);
         }
     }
 

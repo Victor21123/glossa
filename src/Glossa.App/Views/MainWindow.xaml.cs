@@ -112,6 +112,7 @@ public partial class MainWindow : Window
         {
             if (IsVisible) { UpdateAiStatus(); _aiTimer.Start(); }
             else _aiTimer.Stop();
+            if (IsVisible) Dispatcher.BeginInvoke(TellUpdate); // after the window has come up
         };
 
         Show(_library.Selected);
@@ -584,6 +585,7 @@ public partial class MainWindow : Window
 
     private void ShowModal(FrameworkElement dialog)
     {
+        UpdateDialog.Visibility = dialog == UpdateDialog ? Visibility.Visible : Visibility.Collapsed;
         AddWordDialog.Visibility = dialog == AddWordDialog ? Visibility.Visible : Visibility.Collapsed;
         CollectionDialog.Visibility = dialog == CollectionDialog ? Visibility.Visible : Visibility.Collapsed;
         PicturePicker.Visibility = dialog == PicturePicker ? Visibility.Visible : Visibility.Collapsed;
@@ -592,10 +594,60 @@ public partial class MainWindow : Window
 
     internal void CloseModal()
     {
+        // The notice closed any way (a button, Esc, the dimmed window) is seen: it does not come back for this version.
+        if (UpdateDialog.Visibility == Visibility.Visible) Seen();
         ModalHost.Visibility = Visibility.Collapsed;
         _pendingForCollection = [];
         PicturePicker.Stop();
         _picturing = null;
+        TellUpdate(); // a notice that waited for another dialog
+    }
+
+    // «Новая версия»
+
+    /// <summary>
+    /// The notice of a newer version, once a version, in the window (the user, 2026-10-04: "Нужно уведомление в
+    /// приложении"): when the window is open and no other dialog is; the update check calls it when it finds one, the
+    /// window when it is shown, so one found while Glossa sat in the tray waits for the window - never over a game.
+    /// </summary>
+    public void TellUpdate()
+    {
+        if (!IsVisible || ModalHost.Visibility == Visibility.Visible
+            || _services.Updates is not { } updates
+            || Glossa.Core.Updates.UpdateCheck.Unseen(_services.Settings.Updates, updates.Current) is not { } update)
+            return;
+        _update = update;
+        UpdateTitle.Text = $"Вышла Glossa {update.Version}";
+        ShowModal(UpdateDialog);
+    }
+
+    private Glossa.Core.Updates.PendingUpdate? _update;
+
+#if DEBUG
+    /// <summary>Snapshots (--render-main): the notice on a window that is drawn, not shown.</summary>
+    internal void SnapshotUpdate(Glossa.Core.Updates.PendingUpdate update)
+    {
+        _update = update;
+        UpdateTitle.Text = $"Вышла Glossa {update.Version}";
+        ShowModal(UpdateDialog);
+    }
+#endif
+
+    private void OnUpdateOpen(object sender, RoutedEventArgs e)
+    {
+        var url = _update?.Url;
+        CloseModal();
+        _services.OpenReleasePage(url);
+    }
+
+    /// <summary>Told: the notice does not come again for this version (the settings line and the tray item stay).</summary>
+    private void Seen()
+    {
+        if (_update is not { } update)
+            return;
+        _update = null;
+        _services.Settings.Updates.SeenVersion = update.Version;
+        _services.SaveSettings(_services.Settings);
     }
 
     // «Картинка значения»

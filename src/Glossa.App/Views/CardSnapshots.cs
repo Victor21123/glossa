@@ -220,6 +220,11 @@ internal static class CardSnapshots
             theme.Apply(themeName);
             var window = new MainWindow(services);
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}.png"));
+#if DEBUG
+            window.SnapshotUpdate(new Glossa.Core.Updates.PendingUpdate("0.1.1", Glossa.Core.Updates.UpdateCheck.ReleasesPage + "/tag/v0.1.1"));
+            SaveWindow(window, Path.Combine(folder, $"update-{themeName}.png")); // the notice of a newer version
+            window.CloseModal();
+#endif
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min.png"), 1100, 700); // the smallest window
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min-companion.png"), 1100, 1500); // its companion
             window.HomePage.Say(Glossa.Core.Companions.SpeechEvents.StudyDue); // the speech bubble on the snapshot
