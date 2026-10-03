@@ -130,7 +130,7 @@ public sealed record RecordedLookup(string WordId, bool NewWord, bool Revived, s
 
 public sealed partial class LibraryStore : IDisposable
 {
-    private const int SchemaVersion = 11;
+    private const int SchemaVersion = 13;
     private readonly SqliteConnection _db;
     private readonly string _path;
     private readonly object _gate = new();
@@ -365,6 +365,53 @@ public sealed partial class LibraryStore : IDisposable
                   WHERE day IS NOT NULL
                   GROUP BY day, kind;
                 PRAGMA user_version = 11;
+                """);
+            tx.Commit();
+        }
+        if (version < 12)
+        {
+            // The companions (LibraryStore.Companions.cs): who is with the user since when (one active now; the status
+            // leaves room for keeping several later), and every roll with its numbers - a later guarantee after N
+            // commons counts from this log. Only the user's own save knows his companions.
+            Exec("""
+                CREATE TABLE IF NOT EXISTS companions(
+                  companion_id TEXT PRIMARY KEY,
+                  adopted_utc TEXT NOT NULL,
+                  adopted_day TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'active',
+                  retired_utc TEXT);
+                CREATE TABLE IF NOT EXISTS companion_rolls(
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  rolled_utc TEXT NOT NULL,
+                  reason TEXT NOT NULL,
+                  rarity_roll REAL NOT NULL,
+                  rarity TEXT NOT NULL,
+                  pick_roll REAL NOT NULL,
+                  companion_id TEXT NOT NULL,
+                  pool_size INTEGER NOT NULL);
+                """);
+        }
+        if (version < 13)
+        {
+            // The companion's seal (Companions.CompanionGuard, 2026-10-03): a bond carries an HMAC and the tag of the PC
+            // that sealed it, and a companion caught forged leaves for a week (companion_bans). Bonds from before have
+            // no seal - only test builds made them - and retire: a bond written in by hand before the update must not
+            // be sealed by it. The next visit brings this PC's own companion.
+            using var tx = _db.BeginTransaction();
+            foreach (var column in new[] { "seal", "machine" })
+                if (Convert.ToInt64(Scalar("SELECT COUNT(*) FROM pragma_table_info('companions') WHERE name = $c", ("$c", column)),
+                        CultureInfo.InvariantCulture) == 0)
+                    Exec($"ALTER TABLE companions ADD COLUMN {column} TEXT;");
+            Exec("""
+                CREATE TABLE IF NOT EXISTS companion_bans(
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  from_utc TEXT NOT NULL,
+                  until_utc TEXT NOT NULL,
+                  companion_id TEXT NOT NULL,
+                  seal TEXT NOT NULL);
+                UPDATE companions SET status = 'retired', retired_utc = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                  WHERE status = 'active';
+                PRAGMA user_version = 13;
                 """);
             tx.Commit();
         }

@@ -37,6 +37,12 @@
     <Resource Include="Assets\glossa.ico" />
   </ItemGroup>
 
+  <ItemGroup Condition="Exists('$(GlossaSecrets)companions.pack')">
+    <!-- Companions: one encrypted pack beside the exe, made from the author's catalog by "glossa-cli companions pack"
+         (tools\publish.ps1 and release.ps1 make it first). No picture lies in the open beside the program. -->
+    <None Include="$(GlossaSecrets)companions.pack" Link="companions.pack" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- tools\publish.ps1 makes a portable build, which carries native libraries for every platform (~340 MB).
        Glossa runs on 64-bit Windows only; a win-x64 publish would instead need the runtime packs downloaded. -->
   <Target Name="PublishWinX64NativesOnly" AfterTargets="ComputeResolvedFilesToPublishList">

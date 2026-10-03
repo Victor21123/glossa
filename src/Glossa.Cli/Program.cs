@@ -238,6 +238,12 @@ switch (args[0])
         await bench.EvalAsync(args[1], args[2], Opt(args, "--card"), Opt(args, "--tr"));
         break;
     }
+    case "secrets":
+        // secrets init | secrets word   (the author's companion keys, outside the repository: SecretsTool)
+        return SecretsTool.Run(args);
+    case "companions":
+        // companions pack [catalog]   (assets\companions -> <secrets>\companions.pack, encrypted)
+        return SecretsTool.Pack(args);
     default:
         Console.WriteLine("unknown command");
         return 1;

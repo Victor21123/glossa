@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Glossa.Tests" />
+  </ItemGroup>
+
+  <!-- The release's companion keys, only where the author's secrets folder is (see Directory.Build.props). -->
+  <ItemGroup Condition="Exists('$(GlossaSecrets)CompanionSecrets.g.cs')">
+    <Compile Include="$(GlossaSecrets)CompanionSecrets.g.cs" Link="Companions\CompanionSecrets.g.cs" />
   </ItemGroup>
 
   <ItemGroup>

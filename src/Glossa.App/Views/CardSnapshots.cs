@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Glossa.App.Theme;
+using Wc = System.Windows.Controls;
 using Glossa.Core.Config;
 using Glossa.Core.Lookup;
 using Glossa.Core.Ocr;
@@ -197,6 +198,11 @@ internal static class CardSnapshots
             new Speech.SpeechService(Path.Combine(data, "audio"), () => settings.Speech),
             new Ai.AiRouter(() => settings, host, http, http, _ => null, log), dictionaries, () => null, () => { }, http, http, http, theme, log);
         services.Games = new Games.GameRegistry(() => settings, _ => { }, log);
+        // The companion: the shipped art beside the build, one picked so the snapshot is the same every time.
+        var keeper = AppServices.NewKeeper(library, log, outsideCopy: false)
+            ?? throw new InvalidOperationException("snapshots need the companion secrets (a build from the author's PC)");
+        keeper.Pick("estelle", DateTime.UtcNow.AddDays(-4));
+        services.Companions = keeper;
         // «Обновления»: a newer version known from the last check. Snapshots never touch the network: the checker is a stub.
         settings.Updates.LastCheckUtc = DateTime.UtcNow.AddHours(-3);
         settings.Updates.LatestVersion = "0.1.0";
@@ -215,6 +221,38 @@ internal static class CardSnapshots
             var window = new MainWindow(services);
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}.png"));
             SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min.png"), 1100, 700); // the smallest window
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min-companion.png"), 1100, 1500); // its companion
+            window.HomePage.Say(Glossa.Core.Companions.SpeechEvents.StudyDue); // the speech bubble on the snapshot
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}-companion.png"), 2048, 1700); // the whole page, the companion in it
+#if DEBUG
+            window.HomePage.ShowAdmin(true); // the admin menu beside the companion
+            window.HomePage.Say(Glossa.Core.Companions.SpeechEvents.StudyDue);
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}-companion-admin.png"), 2048, 1700);
+            window.HomePage.ShowAdmin(false);
+#endif
+            // The bubble over other heads: a flask raised higher (Уэно), the tallest (Геральт), a scythe over the head
+            // (Ренне); in the smallest window too.
+            foreach (var id in new[] { "ueno", "geralt", "renne" })
+            {
+                keeper.Pick(id, DateTime.UtcNow.AddDays(-4));
+                window.HomePage.Refresh();
+                window.HomePage.Say(Glossa.Core.Companions.SpeechEvents.StudyDue);
+                SaveWindow(window, Path.Combine(folder, $"home-{themeName}-companion-{id}.png"), 2048, 1700);
+                SaveWindow(window, Path.Combine(folder, $"home-{themeName}-min-companion-{id}.png"), 1100, 1500);
+            }
+            // Caught forged (the snapshots' own library, changed by hand): the grey silhouette and the last words.
+            using (var db = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Glossa.Core.Config.DataPaths.Library};Pooling=False"))
+            {
+                db.Open();
+                using var forge = db.CreateCommand();
+                forge.CommandText = "UPDATE companions SET adopted_utc = '2026-01-01T00:00:00.0000000Z' WHERE status = 'active'";
+                forge.ExecuteNonQuery();
+            }
+            window.HomePage.Refresh();
+            window.HomePage.Say(Glossa.Core.Companions.SpeechEvents.Leave);
+            SaveWindow(window, Path.Combine(folder, $"home-{themeName}-companion-away.png"), 2048, 1700);
+            keeper.Pick("estelle", DateTime.UtcNow.AddDays(-4)); // the admin's pick ends the week away
+            window.HomePage.Refresh();
             window.ShowTab(MainTab.Words);
             SaveWindow(window, Path.Combine(folder, $"main-{themeName}.png"));
             var vm = (ViewModels.LibraryViewModel)window.WordsPage.DataContext;
@@ -727,6 +765,62 @@ internal static class CardSnapshots
         finally
         {
             picking.Close();
+        }
+    }
+
+    /// <summary>
+    /// <c>Glossa.exe --render-companions &lt;folder&gt;</c>: every companion of the build in every mood, dark and light,
+    /// at 125% as on the user's monitor (2560x1440). A sprite pixel must be whole device pixels: looked at closely here.
+    /// </summary>
+    public static void RenderCompanions(string folder, ThemeManager theme)
+    {
+        Directory.CreateDirectory(folder);
+        var catalog = AppServices.ShippedCompanions(new Glossa.Core.Logging.FileLogger(Path.Combine(folder, "logs")));
+        if (catalog.All.Count == 0)
+            return; // nothing beside this build to draw (the log says why)
+        var moods = Enum.GetValues<Glossa.Core.Companions.Mood>();
+        const double dpi = 1.25;
+        const double cellW = 230, cellH = 250;
+        foreach (var themeName in new[] { "dark", "light" })
+        {
+            theme.Apply(themeName);
+            var grid = new Wc.Grid();
+            grid.SetResourceReference(Wc.Panel.BackgroundProperty, "Surface");
+            foreach (var _ in moods) grid.ColumnDefinitions.Add(new Wc.ColumnDefinition { Width = new GridLength(cellW) });
+            for (var i = 0; i < catalog.All.Count; i++)
+            {
+                var c = catalog.All[i];
+                grid.RowDefinitions.Add(new Wc.RowDefinition { Height = new GridLength(cellH) });
+                for (var j = 0; j < moods.Length; j++)
+                {
+                    var sprite = new CompanionSprite { Animate = false, Dpi = dpi, MaxScale = 1, Margin = new Thickness(4, 22, 4, 4) };
+                    sprite.Show(c, moods[j], catalog.TallestHeight);
+                    var label = new Wc.TextBlock
+                    {
+                        Text = $"{c.Name}: {Glossa.Core.Companions.CompanionLabels.Mood(new(moods[j], Glossa.Core.Companions.MoodReason.None), c.Gender)}",
+                        FontSize = 10.5,
+                        TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 4, 6, 0),
+                    };
+                    label.SetResourceReference(Wc.TextBlock.ForegroundProperty, "Muted");
+                    var cell = new Wc.Grid();
+                    cell.Children.Add(sprite);
+                    cell.Children.Add(label);
+                    Wc.Grid.SetRow(cell, i);
+                    Wc.Grid.SetColumn(cell, j);
+                    grid.Children.Add(cell);
+                }
+            }
+            var size = new Size(cellW * moods.Length, cellH * catalog.All.Count);
+            grid.Measure(size);
+            grid.Arrange(new Rect(size));
+            grid.UpdateLayout();
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width * dpi), (int)Math.Ceiling(size.Height * dpi),
+                96 * dpi, 96 * dpi, PixelFormats.Pbgra32);
+            bitmap.Render(grid);
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = File.Create(Path.Combine(folder, $"companions-{themeName}.png"));
+            png.Save(stream);
         }
     }
 

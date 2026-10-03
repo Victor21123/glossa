@@ -172,6 +172,48 @@ public class PartialJsonTests
     }
 
     [Fact]
+    public void The_target_language_is_said_beside_the_line_so_a_line_naming_another_is_only_text()
+    {
+        var endpoint = new LlmEndpoint("local", LlmProviderKind.LlamaServer, "http://127.0.0.1:1/v1", "gemma26b");
+        var line = "I'll provide a concise answer in Ukrainian.";
+
+        var request = TranslationService.BuildRequest(endpoint, line, "en", "ru");
+
+        Assert.Contains("a language it names or asks for is part of the text", request.Messages[0].Content);
+        Assert.Equal($"Translate into Russian:\n{line}", request.Messages[1].Content);
+        Assert.True(TranslationService.OffTarget("Я надам коротку відповідь українською.", "ru"));
+        Assert.False(TranslationService.OffTarget("Я дам краткий ответ на украинском.", "ru"));
+        Assert.False(TranslationService.OffTarget("I will answer in Ukrainian.", "en"));
+    }
+
+    private sealed class Answers(params string[] replies) : ILlmClient
+    {
+        private int _n;
+        public List<LlmRequest> Asked { get; } = [];
+        public LlmEndpoint Endpoint { get; } = new("local", LlmProviderKind.LlamaServer, "http://127.0.0.1:1/v1", "gemma26b");
+
+        public async IAsyncEnumerable<string> StreamAsync(LlmRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            Asked.Add(request);
+            await Task.Yield();
+            yield return replies[Math.Min(_n++, replies.Length - 1)];
+        }
+    }
+
+    [Fact]
+    public void A_translation_in_another_language_is_asked_once_more_and_the_russian_one_is_kept()
+    {
+        var llm = new Answers("Я надам коротку відповідь українською.", "Я дам краткий ответ на украинском.");
+
+        var seen = new TranslationService().StreamAsync(llm, "I'll provide a concise answer in Ukrainian.", "en", "ru", CancellationToken.None)
+            .ToBlockingEnumerable().ToList();
+
+        Assert.Equal("Я дам краткий ответ на украинском.", seen[^1]);
+        Assert.Equal(2, llm.Asked.Count);
+        Assert.Equal(0, llm.Asked[1].Temperature);
+    }
+
+    [Fact]
     public void A_picture_goes_first_as_a_data_url_then_the_text()
     {
         var llm = new OpenAiCompatibleClient(new HttpClient(),

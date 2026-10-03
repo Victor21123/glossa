@@ -7,3 +7,9 @@ __pycache__/
 *.pyc
 /data/
 /eval/samples/
+
+# Companion art and keys: only the encrypted pack ships, built outside the repository.
+assets/companions/
+GlossaSecrets/
+CompanionSecrets.g.cs
+companions.pack

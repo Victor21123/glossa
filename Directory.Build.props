@@ -1,11 +1,17 @@
 <Project>
   <PropertyGroup>
     <!-- The one place for the version: assemblies, the About line, the update check and tools/release.ps1 all read it. -->
-    <Version>0.0.3</Version>
+    <Version>0.1.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The author's secrets folder, outside the repository (GLOSSA_SECRETS, else ..\GlossaSecrets beside the clone): the
+         companions' keys (CompanionSecrets.g.cs, written by "glossa-cli secrets") and the encrypted art
+         (companions.pack, "glossa-cli companions pack"). A clone without it builds a Glossa with no companions. -->
+    <GlossaSecrets Condition="'$(GlossaSecrets)' == ''">$(GLOSSA_SECRETS)</GlossaSecrets>
+    <GlossaSecrets Condition="'$(GlossaSecrets)' == ''">$(MSBuildThisFileDirectory)..\GlossaSecrets</GlossaSecrets>
+    <GlossaSecrets>$([MSBuild]::EnsureTrailingSlash('$(GlossaSecrets)'))</GlossaSecrets>
   </PropertyGroup>
 </Project>

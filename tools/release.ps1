@@ -32,6 +32,17 @@ $app = Join-Path $out 'Glossa'
 $zip = Join-Path $out "Glossa-$Version-win-x64.zip"
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+# The companions' art: packed and encrypted from the author's catalog into the secrets folder (outside the
+# repository, see Directory.Build.props); the build puts companions.pack beside the exe. No secrets - no companions.
+$secrets = if ($env:GLOSSA_SECRETS) { $env:GLOSSA_SECRETS } else { Join-Path (Split-Path $root) 'GlossaSecrets' }
+if (Test-Path (Join-Path $secrets 'keys.json')) {
+    Push-Location $root
+    try { dotnet run --project (Join-Path $root 'src\Glossa.Cli') -c Release -v quiet -- companions pack }
+    finally { Pop-Location }
+    if ($LASTEXITCODE) { throw "companions pack failed ($LASTEXITCODE)" }
+} else {
+    Write-Host 'No secrets folder: this build has no companions.'
+}
 Write-Host 'Building...'
 dotnet publish (Join-Path $root 'src\Glossa.App\Glossa.App.csproj') -c Release -o $app --nologo -v quiet
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)" }

@@ -88,6 +88,7 @@
             <Button x:Name="UpdateItem" Style="{StaticResource TrayItem}" Click="OnUpdate" Visibility="Collapsed" FontWeight="SemiBold" />
             <Button x:Name="OpenItem" Style="{StaticResource TrayItem}" Content="Открыть словарь" Click="OnOpen" />
             <Button x:Name="StudyItem" Style="{StaticResource TrayItem}" Content="Учёба" Click="OnStudy" />
+            <Button x:Name="AiItem" Style="{StaticResource TrayItem}" Click="OnAi" Visibility="Collapsed" />
             <Border Style="{StaticResource Sep}" />
             <TextBlock Text="РЕЖИМ ИИ" Style="{StaticResource Caption}" Margin="10,6,10,4" />
             <RadioButton x:Name="ModeAuto" Style="{StaticResource TrayChoice}" Content="Авто" GroupName="TrayMode" Tag="auto" Click="OnMode" />

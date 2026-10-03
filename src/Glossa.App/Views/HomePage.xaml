@@ -1,6 +1,7 @@
 <UserControl x:Class="Glossa.App.Views.HomePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Glossa.App.Views">
     <!-- «Главная»: where the window opens. The dictionary (or, in «Только перевод», how to call the translation) beside the
          AI's state, the numbers, and the lookup map with the companion's place to its right (it comes with study).
          No settings here: the essentials are set on first launch, the rest in Настройки. Fills any window width. -->
@@ -84,6 +85,8 @@
                             <TextBlock x:Name="AiState" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
                         </StackPanel>
                         <ContentControl x:Name="AiMissing" Style="{StaticResource WarnText}" FontSize="12.5" Margin="0,8,0,0" Visibility="Collapsed" />
+                        <!-- "Загрузить в фон" / "Выгрузить" (2026-10-03): the model ready before Alt+Q; loaded by hand it stays through idle. -->
+                        <Button x:Name="AiLoad" HorizontalAlignment="Left" Margin="0,12,0,0" Click="OnAiLoad" Visibility="Collapsed" />
                         <Grid Margin="0,16,0,-8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -155,7 +158,8 @@
                 </Grid>
             </StackPanel>
 
-            <!-- The lookup map and the languages; the companion takes the rest of the width to the right (decided 2026-09-29). -->
+            <!-- The lookup map and the languages; the companion to the right. A wide window gives the map more weeks (up to a
+                 year), not the companion an empty middle (the user, 2026-10-03). -->
             <Grid x:Name="Lower" Margin="0,20,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -163,7 +167,7 @@
                 </Grid.ColumnDefinitions>
                 <Border x:Name="HeatPanel" Style="{StaticResource SidePanel}" Margin="0,0,20,0">
                     <StackPanel>
-                        <TextBlock Text="ДНИ С GLOSSA, ПОЛГОДА" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
+                        <TextBlock x:Name="HeatCaption" Text="ДНИ С GLOSSA, ПОЛГОДА" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
                         <StackPanel Orientation="Horizontal">
                             <StackPanel Margin="0,0,10,0">
                                 <TextBlock Text="пн" FontSize="11.5" Foreground="{DynamicResource Muted}" Height="20" Margin="0,0,0,20" />
@@ -186,15 +190,59 @@
                     </StackPanel>
                 </Border>
 
-                <!-- The companion lives here; until study brings it, its place is only marked. -->
-                <Grid x:Name="Companion" Grid.Column="1" MinWidth="320" MinHeight="210">
-                    <Rectangle RadiusX="12" RadiusY="12" Stroke="{DynamicResource Rule}" StrokeThickness="1.5" StrokeDashArray="4 3" />
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="28">
-                        <TextBlock Text="Спутник" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock Text="Здесь будет твой спутник - он растёт от дней подряд с Glossa: поиска, учёбы или перевода." Style="{StaticResource Note}"
-                                   TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0" />
-                    </StackPanel>
-                </Grid>
+                <!-- The companion (2026-10-03): the character in full height on the floor of the card, who it is, how it feels
+                     and why, the days together. Shown in every mode and with the statistics off: the series feeds it. -->
+                <Border x:Name="CompanionPanel" Grid.Column="1" Style="{StaticResource SidePanel}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="СПУТНИК" Style="{StaticResource SectionCaption}" Margin="0,0,0,12" />
+                        <Grid>
+                        <DockPanel>
+                        <!-- The character in full height on the left (it asks for the room of a 2x scale and for the bubble's
+                             room over its head); beside it, the admin menu while it is open. -->
+                        <v:CompanionSprite x:Name="Sprite" DockPanel.Dock="Left" Margin="12,0,36,0" Cursor="Hand"
+                                           HeadRoom="{x:Static v:SpeechBubble.Room}" Beside="200" />
+                        <Grid>
+                            <!-- Who and how, in the card's top right corner (the user marked the place, 2026-10-03). -->
+                            <StackPanel x:Name="CompanionInfo" VerticalAlignment="Top" HorizontalAlignment="Right" MaxWidth="440">
+                                <TextBlock x:Name="CompanionName" FontSize="24" TextWrapping="Wrap" TextAlignment="Right"
+                                           TextOptions.TextRenderingMode="Aliased" TextOptions.TextFormattingMode="Display" />
+                                <TextBlock x:Name="CompanionWho" Style="{StaticResource Note}" TextWrapping="Wrap" TextAlignment="Right" Margin="0,2,0,0" />
+                                <TextBlock x:Name="CompanionMood" FontSize="14" TextWrapping="Wrap" TextAlignment="Right" Margin="0,10,0,0" />
+                                <TextBlock x:Name="CompanionDays" Style="{StaticResource Note}" TextWrapping="Wrap" TextAlignment="Right" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left" MaxWidth="440" Margin="0,0,0,8">
+                            <!-- The admin menu: opened for the session by the secret word typed on this page
+                                 (HomePage.AdminOn); the mood here is a preview, nothing saved. -->
+                            <StackPanel x:Name="CompanionDev" Visibility="Collapsed">
+                                <TextBlock Text="АДМИН-МЕНЮ" Style="{StaticResource SectionCaption}" Margin="0,0,0,8" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="DevCompanion" />
+                                    <ComboBox x:Name="DevMood" Grid.Column="2" SelectionChanged="OnDevMood" />
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="Взять" Click="OnDevPick" Margin="0,0,8,0" />
+                                    <Button Content="Бросок" Click="OnDevRoll" Margin="0,0,8,0" />
+                                    <Button Content="Закрыть" Click="OnDevClose" />
+                                </StackPanel>
+                                <TextBlock x:Name="DevLog" Style="{StaticResource Note}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                            </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                        </DockPanel>
+                        <!-- The speech bubble (the user's sketch, 2026-10-03): over the head, its tail down to it, reaching
+                             right over the free top of the words' column. Placed by HomePage.PlaceBubble; clicks go through
+                             to the companion. -->
+                        <Canvas x:Name="BubbleLayer" IsHitTestVisible="False" UseLayoutRounding="True">
+                            <v:SpeechBubble x:Name="Bubble" Visibility="Collapsed" />
+                        </Canvas>
+                        </Grid>
+                    </DockPanel>
+                </Border>
             </Grid>
         </StackPanel>
     </ScrollViewer>

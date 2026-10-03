@@ -11,8 +11,11 @@ namespace Glossa.App.Views;
 /// <remarks>
 /// <paramref name="TranslateOnly"/>: «Только перевод», where the dictionary is hidden and the item opens «Главная».
 /// <paramref name="UpdateItem"/>: the text of the item that opens the release page while a newer version waits; null - no item.
+/// <paramref name="CanLoad"/>: a local model ready to load, so "Загрузить модель в фон" / "Выгрузить модель" shows.
+/// <paramref name="AiBusy"/>: the model loading, or about to leave after a lookup - the item waits.
 /// </remarks>
-public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn, bool TranslateOnly = false, string? UpdateItem = null);
+public sealed record TrayState(string Status, bool AiLoaded, string Mode, string Hotkey, bool LookupOn, bool TranslateOnly = false,
+    string? UpdateItem = null, bool CanLoad = false, bool AiBusy = false);
 
 /// <summary>The tray icon's menu, drawn like the rest of Glossa; it closes as soon as it loses focus.</summary>
 public partial class TrayMenu : Window
@@ -29,6 +32,9 @@ public partial class TrayMenu : Window
     public event Action? ExitRequested;
     public event Action<string>? ModeChanged;
     public event Action<bool>? LookupToggled;
+
+    /// <summary>"Загрузить модель в фон" or "Выгрузить модель".</summary>
+    public event Action? AiToggled;
 
     public TrayMenu()
     {
@@ -69,6 +75,10 @@ public partial class TrayMenu : Window
         UpdateItem.Visibility = state.UpdateItem is null ? Visibility.Collapsed : Visibility.Visible;
         OpenItem.Content = state.TranslateOnly ? "Открыть Glossa" : "Открыть словарь";
         StudyItem.Visibility = state.TranslateOnly ? Visibility.Collapsed : Visibility.Visible;
+        AiItem.Visibility = state.CanLoad ? Visibility.Visible : Visibility.Collapsed;
+        AiItem.IsEnabled = !state.AiBusy;
+        AiItem.Content = state.AiBusy ? (state.AiLoaded ? "Модель выгрузится после поиска" : "Модель загружается...")
+            : state.AiLoaded ? "Выгрузить модель" : "Загрузить модель в фон";
         StateDot.SetResourceReference(Shape.FillProperty, state.AiLoaded ? "Good" : "Surface");
         StateDot.SetResourceReference(Shape.StrokeProperty, state.AiLoaded ? "Good" : "Muted");
         ModeAuto.IsChecked = state.Mode == "auto";
@@ -95,6 +105,12 @@ public partial class TrayMenu : Window
     {
         Hide();
         StudyRequested?.Invoke();
+    }
+
+    private void OnAi(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        AiToggled?.Invoke();
     }
 
     private void OnSettings(object sender, RoutedEventArgs e)

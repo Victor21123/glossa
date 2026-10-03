@@ -107,7 +107,8 @@ public static class GameRing
 }
 
 /// <summary>
-/// Onest for the interface and Literata for the card's serif translation are bundled (OFL, Assets/Fonts);
+/// Onest for the interface, Literata for the card's serif translation and Press Start 2P for the companion's name
+/// are bundled (OFL, Assets/Fonts);
 /// Japanese and Chinese fall back to the Windows fonts, picked per language so Han characters get the right forms.
 /// </summary>
 public static class UiFonts
@@ -118,6 +119,9 @@ public static class UiFonts
     public static readonly FontFamily Japanese = new(Base, "./Assets/Fonts/#Onest, Yu Gothic UI");
     public static readonly FontFamily Chinese = new(Base, "./Assets/Fonts/#Onest, Microsoft YaHei UI");
     public static readonly FontFamily Serif = new(Base, "./Assets/Fonts/#Literata, Georgia");
+
+    /// <summary>The companion's name: Press Start 2P (OFL), 8-bit like the sprites (the user's pick, 2026-10-03).</summary>
+    public static readonly FontFamily Pixel = new(Base, "./Assets/Fonts/#Press Start 2P, Onest");
 
     public static FontFamily For(string? language) => language switch
     {

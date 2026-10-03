@@ -19,12 +19,15 @@ public static class ModelLifetime
     /// Why a loaded, not busy local model should go now, or null: no lookups for the idle time (the shorter game
     /// time while the game of the last lookup is in front), or a game that took video memory after the model settled
     /// and is now short of it. <paramref name="freeVramMb"/> and <paramref name="freeAfterLoadMb"/> are -1 when unknown.
+    /// <paramref name="pinned"/>: loaded by hand ("Загрузить в фон", user 2026-10-03) - idle never unloads it, a game
+    /// short of video memory still does.
     /// </summary>
-    public static string? UnloadReason(AppSettings s, bool inGame, TimeSpan idle, TimeSpan sinceLoad, int freeVramMb, int freeAfterLoadMb)
+    public static string? UnloadReason(AppSettings s, bool inGame, TimeSpan idle, TimeSpan sinceLoad, int freeVramMb, int freeAfterLoadMb,
+        bool pinned = false)
     {
         var game = inGame && s.Performance.GameIdleUnloadMinutes > 0;
         var minutes = game ? s.Performance.GameIdleUnloadMinutes : s.LocalAi.IdleUnloadMinutes;
-        if (minutes > 0 && idle >= TimeSpan.FromMinutes(minutes))
+        if (!pinned && minutes > 0 && idle >= TimeSpan.FromMinutes(minutes))
             return $"idle {minutes} min{(game ? " in a game" : "")}";
         if (s.Performance.YieldVram && sinceLoad >= Settle && freeVramMb is >= 0 and < YieldBelowMb
             && freeAfterLoadMb >= 0 && freeAfterLoadMb - freeVramMb >= TakenByOthersMb)

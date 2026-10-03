@@ -652,4 +652,16 @@ public static class DataPaths
 
     /// <summary>Compiled CUDA kernels of llama-server, kept with the data rather than on the system drive.</summary>
     public static string CudaCache => System.IO.Path.Combine(Root, "cuda-cache");
+
+    /// <summary>
+    /// Companions of one's own, read after those beside the program (and replacing one of the same id): a character
+    /// that never enters the public repository.
+    /// </summary>
+    public static string Companions => System.IO.Path.Combine(Root, "companions");
+
+    /// <summary>
+    /// The owner's test strip on the companion card (pick, roll, mood): shown only while this file exists. Nothing in
+    /// the program creates it.
+    /// </summary>
+    public static string CompanionsDev => System.IO.Path.Combine(Root, "companions.dev");
 }

@@ -84,6 +84,96 @@ public sealed class AppServices(
     /// <summary>Настройки → Игры и профили: the programs looked up in (null only in design snapshots without games).</summary>
     public Games.GameRegistry? Games { get; set; }
 
+    /// <summary>
+    /// The companion on «Главная»: the catalog from the encrypted pack beside the program, the active one from the
+    /// library (null in the selftest, which shows no home page).
+    /// </summary>
+    public Glossa.Core.Companions.CompanionKeeper? Companions { get; set; }
+
+    /// <summary>
+    /// The companions this build can open: <c>companions.pack</c> beside the exe with the build's art key. None in a
+    /// build from the public sources (no key) - see <see cref="Glossa.Core.Companions.CompanionSecrets"/>.
+    /// </summary>
+    public static Glossa.Core.Companions.CompanionCatalog ShippedCompanions(Glossa.Core.Logging.ILog? log) =>
+        Glossa.Core.Companions.CompanionCatalog.LoadPack(Path.Combine(AppContext.BaseDirectory, "companions.pack"),
+            Glossa.Core.Companions.CompanionSecrets.Keys?.Art, log);
+
+    /// <summary>
+    /// The keeper of the companion with this build's keys, this PC's identity and the ban's copy in the registry;
+    /// null in a build without the secrets. <paramref name="outsideCopy"/>: false for snapshots, which must not read or
+    /// write the user's registry.
+    /// </summary>
+    public static Glossa.Core.Companions.CompanionKeeper? NewKeeper(Glossa.Core.Library.LibraryStore library,
+        Glossa.Core.Logging.ILog log, bool outsideCopy = true)
+    {
+        if (Glossa.Core.Companions.CompanionSecrets.Keys is not { } keys)
+        {
+            log.Info("Companions: this build has no secrets (built from the public sources) - no companions");
+            return null;
+        }
+        // Without this PC's identity a bond would look moved and the companion would change: none this run instead.
+        if (ThisPc() is not { } pc)
+        {
+            log.Warn("Companions: this PC's MachineGuid is unreadable - no companion this run");
+            return null;
+        }
+        var user = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "no-user";
+        var guard = new Glossa.Core.Companions.CompanionGuard(keys.Seal, keys.Fate, $"{pc}|{user}", Random.Shared.NextDouble,
+            Glossa.Core.Companions.CompanionGuard.FateByPc,
+            outsideCopy ? ReadBanCopy : null, outsideCopy ? WriteBanCopy : null, pc);
+        return new Glossa.Core.Companions.CompanionKeeper(library, ShippedCompanions(log), guard,
+            new Glossa.Core.Companions.MoodRules());
+    }
+
+    /// <summary>This PC for the companion's seal and fate: the Windows install's MachineGuid; null when unreadable.</summary>
+    private static string? ThisPc()
+    {
+        string? machine = null;
+        try
+        {
+            using var key = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine,
+                Microsoft.Win32.RegistryView.Registry64).OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+            machine = key?.GetValue("MachineGuid") as string;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+        {
+        }
+        return string.IsNullOrWhiteSpace(machine) ? null : machine;
+    }
+
+    // The week away's second copy, outside the library: restoring an older library.db does not end it.
+    private const string BanKey = @"Software\Glossa\Companion";
+
+    private static string? ReadBanCopy()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(BanKey);
+            return key?.GetValue("ban") as string;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static void WriteBanCopy(string value)
+    {
+        if (_banCopyRefused)
+            return; // refused once: not again on every refresh
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(BanKey);
+            key.SetValue("ban", value);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+        {
+            _banCopyRefused = true;
+        }
+    }
+
+    private static bool _banCopyRefused;
+
     /// <summary>The eyes' server (null only in design snapshots): where they read now, for Настройки -> ИИ и модели.</summary>
     public Ai.EyesService? Eyes { get; set; }
 

@@ -84,17 +84,30 @@ public sealed class AiRouter : IDisposable
 
     /// <param name="mode">A game profile's own mode («ИИ в этой игре»: lowvram), or null for the general one. A model
     /// loaded for another mode is restarted in the one asked for.</param>
-    public async Task<AiClients> GetAsync(CancellationToken ct, string? mode = null)
+    public Task<AiClients> GetAsync(CancellationToken ct, string? mode = null) => LoadAsync(ct, mode, pin: false);
+
+    /// <param name="pin">"Загрузить в фон": the model is kept through idle. The pin belongs to the model it was set on:
+    /// one loaded anew (the first, after a crash, for another mode) by a lookup is not pinned.</param>
+    private async Task<AiClients> LoadAsync(CancellationToken ct, string? mode, bool pin)
     {
         _lastUse = DateTime.UtcNow;
         mode ??= _settings().LocalAi.Mode;
         bool Usable(AiClients c) => _currentMode == mode && (c.Dictionary is null || _host.IsAlive(DictRole) || !c.Dictionary.Endpoint.IsLocal);
-        if (_current is { } c && Usable(c)) return c;
+        AiClients Kept(AiClients c)
+        {
+            if (pin)
+            {
+                Pinned = true;
+                _dropWhenFree = false;
+            }
+            return c;
+        }
+        if (_current is { } c && Usable(c)) return Kept(c);
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (_current is { } again && Usable(again)) return again;
+            if (_current is { } again && Usable(again)) return Kept(again);
             if (_current is not null && _currentMode != mode)
             {
                 _log.Info($"AI: switching to mode {mode}");
@@ -102,6 +115,8 @@ public sealed class AiRouter : IDisposable
                 _host.Stop(DictRole);
             }
             _currentMode = mode;
+            Pinned = false;
+            _dropWhenFree = false;
             // The model is fitted to the video memory it finds free: eyes on the card would squeeze it (every card 57%
             // slower, measured 2026-09-30), so they leave first and come back after it.
             Eyes?.StopIfGpu();
@@ -109,6 +124,7 @@ public sealed class AiRouter : IDisposable
             _loadedAt = DateTime.UtcNow;
             _freeAfterLoad = -1;
             _log.Info($"AI: {_current.Description}");
+            Pinned = pin;
             Eyes?.WarmAfterMain(_current, () => Volatile.Read(ref _inUse) > 0);
             return _current;
         }
@@ -118,12 +134,79 @@ public sealed class AiRouter : IDisposable
         }
     }
 
+    /// <summary>
+    /// The model loaded by hand ("Загрузить в фон", user 2026-10-03), so Alt+Q does not wait for it: idle never unloads
+    /// it; a game short of video memory still does (<see cref="PinnedUnloaded"/> tells why), and so does "Выгрузить".
+    /// </summary>
+    public bool Pinned { get => _pinned; private set => _pinned = value; }
+
+    /// <summary>Between "Загрузить в фон" and the model ready (seconds to a minute for the 26B).</summary>
+    public bool Loading { get => _loading; private set => _loading = value; }
+
+    /// <summary>"Выгрузить" came while the model loaded or served a lookup: it leaves as soon as it is free.</summary>
+    public bool UnloadPending => _dropWhenFree;
+
+    // Written on the UI thread, read by the watch on the timer's.
+    private volatile bool _pinned;
+    private volatile bool _loading;
+    private volatile bool _dropWhenFree;
+
+    /// <summary>Loaded, unloaded, pinned or loading changed (any thread).</summary>
+    public event Action? StateChanged;
+
+    /// <summary>A model loaded by hand left for a game short of video memory: the reason, for a notice.</summary>
+    public event Action<string>? PinnedUnloaded;
+
+    /// <summary>
+    /// "Загрузить в фон": loads the model now and keeps it through idle. Throws <see cref="LlmException"/> as a lookup
+    /// would. A second call while the first loads does nothing.
+    /// </summary>
+    public async Task PreloadAsync(CancellationToken ct)
+    {
+        if (Loading) return;
+        Loading = true;
+        StateChanged?.Invoke();
+        try
+        {
+            // Busy through the load: the watch would take the model's own growing video memory for a game's.
+            using (Use())
+                await LoadAsync(ct, null, pin: true).ConfigureAwait(false);
+            _log.Info("AI: loaded by hand, kept through idle");
+        }
+        finally
+        {
+            Loading = false;
+            StateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>"Выгрузить": the model leaves memory now and the next lookup loads it again, as before.</summary>
+    /// <returns>False when it is loading or serving a lookup: it then leaves as soon as it is free (<see cref="UnloadPending"/>).</returns>
+    public bool UnloadNow()
+    {
+        Pinned = false;
+        if (Loading || Volatile.Read(ref _inUse) > 0)
+        {
+            _dropWhenFree = true;
+            _log.Info("AI: unload by hand waits until the model is free");
+            StateChanged?.Invoke();
+            return false;
+        }
+        Unload();
+        _log.Info("AI: unloaded by hand");
+        StateChanged?.Invoke();
+        return true;
+    }
+
     /// <summary>Forget the current choice (settings changed); servers are restarted on the next lookup.</summary>
     public void Reset()
     {
         _current = null;
+        Pinned = false;
+        _dropWhenFree = false;
         _host.Stop(DictRole);
         Eyes?.Reset();
+        StateChanged?.Invoke();
     }
 
     /// <summary>The eyes, brought up after the model and stopped before it loads; set once at start.</summary>
@@ -212,6 +295,15 @@ public sealed class AiRouter : IDisposable
         try
         {
             if (Volatile.Read(ref _inUse) > 0 || !_host.IsRunning(DictRole)) return;
+            if (_dropWhenFree)
+            {
+                _dropWhenFree = false;
+                Pinned = false;
+                _log.Info("AI: unloaded by hand, once free");
+                Unload();
+                StateChanged?.Invoke();
+                return;
+            }
             var s = _settings();
             var game = InGame?.Invoke() == true;
             var now = DateTime.UtcNow;
@@ -219,10 +311,16 @@ public sealed class AiRouter : IDisposable
             // model itself left, so later drops below it are someone else's (a game's).
             var free = s.Performance.YieldVram && now - _loadedAt >= ModelLifetime.Settle ? FreeVramMb() : -1;
             if (_freeAfterLoad < 0 && free >= 0) _freeAfterLoad = free;
-            if (ModelLifetime.UnloadReason(s, game, now - _lastUse, now - _loadedAt, free, _freeAfterLoad) is { } reason)
+            if (ModelLifetime.UnloadReason(s, game, now - _lastUse, now - _loadedAt, free, _freeAfterLoad, Pinned) is { } reason)
             {
                 _log.Info("AI: unloading local models — " + reason);
                 Unload();
+                if (Pinned)
+                {
+                    Pinned = false;
+                    PinnedUnloaded?.Invoke(reason);
+                }
+                StateChanged?.Invoke();
             }
         }
         catch (Exception ex)

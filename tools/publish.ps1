@@ -22,6 +22,17 @@ if ((Test-Path $Target) -and (Get-ChildItem $Target -Force | Select-Object -Firs
     throw "$Target is not empty and has no Glossa.exe; not touching it."
 }
 
+# The companions' art: packed and encrypted from the author's catalog into the secrets folder (outside the
+# repository, see Directory.Build.props); the build puts companions.pack beside the exe. No secrets - no companions.
+$secrets = if ($env:GLOSSA_SECRETS) { $env:GLOSSA_SECRETS } else { Join-Path (Split-Path $root) 'GlossaSecrets' }
+if (Test-Path (Join-Path $secrets 'keys.json')) {
+    Push-Location $root
+    try { dotnet run --project (Join-Path $root 'src\Glossa.Cli') -c Release -v quiet -- companions pack }
+    finally { Pop-Location }
+    if ($LASTEXITCODE) { throw "companions pack failed ($LASTEXITCODE)" }
+} else {
+    Write-Host 'No secrets folder: this build has no companions.'
+}
 Write-Host 'Building...'
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 dotnet publish (Join-Path $root 'src\Glossa.App\Glossa.App.csproj') -c Release -o $stage --nologo -v quiet

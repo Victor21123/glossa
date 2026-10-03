@@ -96,6 +96,9 @@ public partial class App : Application
             Shutdown();
             return;
         }
+#if DEBUG
+        // Snapshots of the home page and of every companion: a debug build only. In a release they would draw the
+        // companions out of the encrypted pack for anyone - spoilers (2026-10-03).
         var renderMain = Array.IndexOf(e.Args, "--render-main");
         if (renderMain >= 0 && renderMain + 1 < e.Args.Length)
         {
@@ -104,6 +107,15 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        var renderCompanions = Array.IndexOf(e.Args, "--render-companions");
+        if (renderCompanions >= 0 && renderCompanions + 1 < e.Args.Length)
+        {
+            _theme.Install(this, "dark");
+            CardSnapshots.RenderCompanions(e.Args[renderCompanions + 1], _theme);
+            Shutdown();
+            return;
+        }
+#endif
         // --selftest <cases.json> <out folder> [count]: runs beside the everyday copy and touches nothing of the user's.
         var selftestAt = Array.IndexOf(e.Args, "--selftest");
         (string Cases, string Out, int Count)? selftest = selftestAt >= 0 && selftestAt + 2 < e.Args.Length
@@ -167,6 +179,9 @@ public partial class App : Application
         _keys = new KeyStore(DataPaths.Keys);
         _speech = new Speech.SpeechService(DataPaths.Audio, () => _settings.Speech);
         _router = new AiRouter(() => _settings, _llama, _localHttp, _remoteHttp, name => _keys.Get(name), log);
+        // A model loaded by hand left for a game short of video memory: said once, it loads again at the next lookup.
+        _router.PinnedUnloaded += _ => Dispatcher.BeginInvoke(() => ShowBalloon(NoticeKind.Nothing, null, 8000, "Glossa",
+            "Модель выгружена: игре не хватает видеопамяти. Загрузится при следующем поиске.", WinForms.ToolTipIcon.Info));
         _eyes = new EyesService(() => _settings, _llama, _localHttp, Interop.Native.FreeRamMb, AiRouter.FreeVramMb, log);
         _router.Eyes = _eyes;
         _eyes.MovedOnCard += _router.Rebaseline;
@@ -175,6 +190,11 @@ public partial class App : Application
             _dictionaries, () => _levels, ReloadDictionaries, _localHttp, _remoteHttp, _directHttp, _theme, log);
         _games = _services.Games = new Games.GameRegistry(() => _settings, s => _store!.Save(s), log);
         _services.Eyes = _eyes;
+        // The companions: only the encrypted pack beside the program, opened with this build's key (no folder of
+        // pictures is read, so none can be swapped in). Not in the selftest - it runs on the user's library and must
+        // not write to it, a first roll included.
+        if (selftest is null)
+            _services.Companions = AppServices.NewKeeper(_library, log);
 
         var vm = new LookupViewModel();
         _popup = new LookupPopup(vm);
@@ -516,7 +536,14 @@ public partial class App : Application
             var plan = Glossa.Core.Study.SessionBuilder.Build(_library.List(), _library.ReviewStates(), answered, study.Limits(), study.Config(), clock, now);
             if (Glossa.Core.Study.StudyReminders.Due(local, times, _reminderShown, answered.Count > 0, plan.Cards.Count) is null) return;
             _reminderShown = local;
-            ShowBalloon(NoticeKind.Study, null, 8000, "Glossa", Glossa.Core.Study.StudyReminders.Text(plan.Cards.Count), WinForms.ToolTipIcon.Info);
+            // In the companion's voice when there is one (user, 2026-10-03): its name over its line. Only the companion
+            // already met - a reminder never rolls one.
+            var cards = plan.Cards.Count;
+            var companion = _services?.Companions?.Active(now) is { } bond ? _services.Companions.Catalog.Find(bond.CompanionId) : null;
+            var line = companion is null ? null
+                : Glossa.Core.Companions.CompanionSpeech.Say(companion, Glossa.Core.Companions.SpeechEvents.StudyDue, Random.Shared, null, cards);
+            ShowBalloon(NoticeKind.Study, null, 8000, line is null ? "Glossa" : companion!.Name,
+                line ?? Glossa.Core.Study.StudyReminders.Text(cards), WinForms.ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
@@ -616,6 +643,7 @@ public partial class App : Application
             menu.UpdateRequested += () => _services!.OpenReleasePage(_updates?.Pending?.Url);
             menu.ExitRequested += Shutdown;
             menu.LookupToggled += SetLookup;
+            menu.AiToggled += ToggleModel;
             menu.ModeChanged += mode =>
             {
                 _settings.LocalAi.Mode = mode;
@@ -640,8 +668,47 @@ public partial class App : Application
             : !s.LocalAi.HasRuntime() ? "ИИ: движок llama.cpp не скачан"
             : "ИИ выгружена, загрузится при поиске";
         var mode = s.LocalAi.Mode;
+        var canLoad = s.DictionaryEngine == "local" && mode != "off" && s.LocalAi.HasModel(s.LocalAi.Profile) && s.LocalAi.HasRuntime();
         return new TrayState(status, loaded, mode, s.Hotkey, _lookupOn, s.Purpose == "translate",
-            _updates?.Pending is { } pending ? UpdateTexts.TrayItem(pending.Version) : null);
+            _updates?.Pending is { } pending ? UpdateTexts.TrayItem(pending.Version) : null, canLoad,
+            _router?.Loading == true || _router?.UnloadPending == true);
+    }
+
+    /// <summary>The tray's "Загрузить модель в фон" / "Выгрузить модель" (2026-10-03); the outcome in a notice.</summary>
+    private async void ToggleModel()
+    {
+        if (_router is not { } router || router.Loading || router.UnloadPending) return;
+        var unload = router.Current?.Dictionary is not null;
+        string text;
+        var icon = WinForms.ToolTipIcon.Info;
+        try
+        {
+            if (unload)
+            {
+                if (router.UnloadNow()) return;
+                text = "Модель занята поиском - выгрузится, как только он закончится.";
+            }
+            else
+            {
+                await router.PreloadAsync(CancellationToken.None);
+                text = "Модель загружена и держится в фоне - Alt+Q не ждёт загрузки.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn($"AI: {(unload ? "unload" : "load")} by hand failed: {ex.Message}");
+            text = ex is Glossa.Core.Llm.LlmException ? ex.Message
+                : unload ? "Модель не выгрузилась - подробности в журнале." : "Модель не загрузилась - подробности в журнале.";
+            icon = WinForms.ToolTipIcon.Warning;
+        }
+        try
+        {
+            ShowBalloon(NoticeKind.Nothing, null, icon == WinForms.ToolTipIcon.Info ? 5000 : 8000, "Glossa", text, icon);
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("AI notice", ex);
+        }
     }
 
     /// <summary>«Поиск по Alt+Q» in the tray: hands the combination back to a game that needs it, until switched on again.</summary>
